@@ -3,3 +3,7 @@ SGDepth full 640x192
 
 DexiNed edges
 - https://drive.google.com/drive/folders/1fLBpOrSXC2VOWUvDtNGyrHcuB2IB-4_D
+
+Halftone
+- https://github.com/philgyford/python-halftone
+
