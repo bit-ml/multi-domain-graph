@@ -1,7 +1,5 @@
 # use SGDepth code for depth expert - https://github.com/ifnspaml/SGDepth
 
-import argparse
-
 import torch
 
 from experts.depth.arguments import InferenceEvaluationArguments
@@ -16,6 +14,7 @@ class DepthModel():
         opt.inference_resize_height = 192
         opt.inference_resize_width = 640
         self.model = Inference(opt)
+        self.model.eval()
 
     def apply_expert(self, rgb_frames):
         depth_maps = []

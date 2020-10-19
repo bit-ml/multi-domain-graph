@@ -2,11 +2,13 @@
 
 # print(sys.path)
 from experts.depth_expert import DepthModel
+from experts.edges_expert import EdgesModel
 
 
 class Experts:
     def __init__(self):
-        self.experts = [DepthModel()]
+        # self.experts = [DepthModel(), EdgesModel()]
+        self.experts = [EdgesModel()]
 
     def rgb_inference(self, rgb_frames):
         output_maps = []
