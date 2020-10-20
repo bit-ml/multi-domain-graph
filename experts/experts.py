@@ -4,13 +4,14 @@
 from experts.depth_expert import DepthModel
 from experts.edges_expert import EdgesModel
 from experts.halftone_expert import HalftoneModel
+from experts.normals_expert import SurfaceNormalsModel
 from experts.tracking1_expert import Tracking1Model
 
 
 class Experts:
     def __init__(self):
-        # self.experts = [DepthModel(), EdgesModel(), HalftoneModel(), Tracking1Model()]
-        self.experts = [Tracking1Model()]
+        # self.experts = [DepthModel(), EdgesModel(), HalftoneModel(), Tracking1Model(), SurfaceNormalsModel()]
+        self.experts = [SurfaceNormalsModel()]
 
     def rgb_inference(self, rgb_frames):
         output_maps = []

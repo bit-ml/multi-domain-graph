@@ -10,4 +10,6 @@ Halftone
 Tracking - PrDIMP-18/50
 - https://github.com/visionml/pytracking
 
+Surface Normals 2D
+- https://github.com/EPFL-VILAB/XTConsistency
 
