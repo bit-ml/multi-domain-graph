@@ -7,8 +7,11 @@ DexiNed edges
 Halftone
 - https://github.com/philgyford/python-halftone
 
-RAFT 
+Optical Flow - RAFT 
 - https://www.dropbox.com/s/4j4z58wuv8o0mfz/models.zip
+
+Optical Flow - LiteFlowNet 
+- http://content.sniklaus.com/github/pytorch-liteflownet/network-default.pytorch
 
 Tracking - PrDIMP-18/50
 - https://github.com/visionml/pytracking

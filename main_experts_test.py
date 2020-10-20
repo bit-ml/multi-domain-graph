@@ -6,6 +6,7 @@ import torch
 import torch.utils.data as data
 
 import experts.raft_of_expert
+import experts.liteflownet_of_expert
 
 import utils.visualize_of
 
@@ -16,6 +17,10 @@ class MultiDomainDataset(data.Dataset):
         # RAFT OF 
         #self.raft_of = raft_of_test.RaftTest('experts/raft_optical_flow/models/raft-things.pth')
         self.raft_of = experts.raft_of_expert.RaftTest('experts/raft_optical_flow/models/raft-kitti.pth')
+
+         # LiteFlowNet OF 
+        self.lite_of = experts.liteflownet_of_expert.LiteFlowNetTest('experts/liteflownet_optical_flow/models/liteflownet-default')
+
        
         self.samples = []
         video_names = os.listdir(videos_path)
@@ -43,25 +48,28 @@ class MultiDomainDataset(data.Dataset):
         frame_2_rgb = cv2.cvtColor(frame_2, cv2.COLOR_BGR2RGB)
 
         raft_of = self.raft_of.apply(frame_1_rgb, frame_2_rgb)
+        lite_of = self.lite_of.apply(frame_1_rgb, frame_2_rgb)
 
         frame_1 = torch.from_numpy(frame_1).permute(2, 0, 1).float().cuda()
 
-        return frame_1, raft_of
+        return frame_1, raft_of, lite_of
 
     def __len__(self):
         return len(self.samples)    
 
-def get_sample(img, raft_of):
+def get_sample(img, raft_of, lite_of):
     img = img.permute(1,2,0).numpy()
     raft_of = raft_of.permute(1,2,0).numpy()
     raft_of = utils.visualize_of.flow_to_image(raft_of, clip_flow=None, convert_to_bgr=True)
-    img = np.concatenate((img, raft_of), 1)
+    lite_of = lite_of.permute(1,2,0).numpy()
+    lite_of = utils.visualize_of.flow_to_image(lite_of, clip_flow=None, convert_to_bgr=True)
+    img = np.concatenate((img, raft_of, lite_of), 1)
     return img
 
-def save_batch(imgs, raft_ofs, idx, out_path):
+def save_batch(imgs, raft_ofs, lite_ofs, idx, out_path):
 
     for i in range(imgs.shape[0]):
-        img = get_sample(imgs[i].cpu(), raft_ofs[i].cpu())
+        img = get_sample(imgs[i].cpu(), raft_ofs[i].cpu(), lite_ofs[i].cpu())
         if i==0:
             batch_img = img
         else:
@@ -81,9 +89,9 @@ if __name__=="__main__":
     os.mkdir(out_path)
 
     idx = 0
-    for imgs, raft_ofs in data_loader:   
+    for imgs, raft_ofs, lite_ofs in data_loader:   
         
-        save_batch(imgs, raft_ofs, idx, out_path)
+        save_batch(imgs, raft_ofs, lite_ofs, idx, out_path)
         idx = idx+1
 
 
