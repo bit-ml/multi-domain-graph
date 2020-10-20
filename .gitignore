@@ -1,4 +1,7 @@
 
 *.pyc
 *.pth
+*.DS_Store
 experts/models/edges_dexined23.h5
+experts/models/tracking_prdimp50.pth.tar
+experts/models/tracking_prdimp18.pth.tar

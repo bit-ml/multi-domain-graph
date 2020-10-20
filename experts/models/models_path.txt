@@ -9,3 +9,6 @@ Halftone
 
 RAFT 
 - https://www.dropbox.com/s/4j4z58wuv8o0mfz/models.zip
+
+Tracking - PrDIMP-18/50
+- https://github.com/visionml/pytracking
