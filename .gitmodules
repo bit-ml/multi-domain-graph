@@ -1,0 +1,3 @@
+[submodule "experts/tracking/pytracking"]
+	path = experts/tracking/pytracking
+	url = https://github.com/visionml/pytracking

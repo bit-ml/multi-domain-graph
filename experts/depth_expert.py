@@ -10,7 +10,8 @@ from experts.depth.inference import Inference
 class DepthModel():
     def __init__(self):
         opt = InferenceEvaluationArguments().parse()
-        opt.model_path = "experts/models/depth.pth"
+        opt.model_path = "experts/models/depth_sgdepth.pth"
+        # the model is trained for this inference size!!
         opt.inference_resize_height = 192
         opt.inference_resize_width = 640
         self.model = Inference(opt)

@@ -7,3 +7,7 @@ DexiNed edges
 Halftone
 - https://github.com/philgyford/python-halftone
 
+Tracking - PrDIMP-18/50
+- https://github.com/visionml/pytracking
+
+
