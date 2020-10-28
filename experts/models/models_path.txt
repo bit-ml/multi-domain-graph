@@ -15,3 +15,6 @@ Optical Flow - LiteFlowNet
 
 Tracking - PrDIMP-18/50
 - https://github.com/visionml/pytracking
+
+Video Multi Object Segmentation - VMOS: STM 
+- https://www.dropbox.com/s/mtfxdr93xc3q55i/STM_weights.pth?dl=1
