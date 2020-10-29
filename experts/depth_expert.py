@@ -5,6 +5,8 @@ import torch
 from experts.depth.arguments import InferenceEvaluationArguments
 from experts.depth.inference import Inference
 
+W, H = 256, 256
+
 
 # class DepthModel(GeneralExpert):
 class DepthModel():
@@ -12,10 +14,13 @@ class DepthModel():
         opt = InferenceEvaluationArguments().parse()
         opt.model_path = "experts/models/depth_sgdepth.pth"
         # the model is trained for this inference size!!
-        opt.inference_resize_height = 192
-        opt.inference_resize_width = 640
+        opt.inference_resize_height = H
+        opt.inference_resize_width = W
         self.model = Inference(opt)
-        self.model.eval()
+        self.model.model.eval()
+        self.domain_name = "depth"
+        self.n_maps = 1
+        self.str_id = "sgdepth"
 
     def apply_expert(self, rgb_frames):
         depth_maps = []

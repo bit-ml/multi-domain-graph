@@ -17,6 +17,10 @@ class Tracking1Model(TrackingModel):
         # checkpoint .pth should be in pytracking/networks folder
         # self.model = Tracker(tracker_name, tracker_param)
         super().__init__(tracker_name, tracker_param)
+        self.domain_name = "tracking"
+        self.n_maps = 1
+        self.str_id = "basic_tracking1"
+
 
     def apply_expert(self, rgb_frames):
         output_boxes = []

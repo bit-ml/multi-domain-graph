@@ -12,6 +12,8 @@ import experts.vmos_stm_expert
 import utils.visualize_of
 import utils.visualize_vmos
 
+
+
 class MultiDomainDataset(data.Dataset):
     def __init__(self, videos_path, annotations_path):
         super(MultiDomainDataset, self).__init__()
@@ -87,6 +89,28 @@ def save_batch(imgs, raft_ofs, lite_ofs, vmos_stms, idx, out_path):
             batch_img = np.concatenate((batch_img, img), 0)
 
     cv2.imwrite(os.path.join(out_path, 'batch_%d.png'%idx), np.uint8(batch_img))
+
+
+# Elena
+def main_2D_experts_and_tracking():
+    import glob
+    from PIL import Image
+    from experts.experts import Experts
+
+    all_experts = Experts()
+
+    image_path = "test_img.jpg"
+    rgb_frames = [Image.open(image_path)]
+
+    # videopath = "test_video"
+    # rgb_frames = [
+    #     Image.open(image_path)
+    #     for image_path in glob.glob("%s/*.jpg" % videopath)
+    # ]
+
+    output_maps = all_experts.rgb_inference(rgb_frames)
+    return output_maps
+
 
 if __name__=="__main__":
     videos_path = r'/root/test_videos'
