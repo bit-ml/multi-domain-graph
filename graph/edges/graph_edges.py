@@ -1,25 +1,56 @@
+import glob
 import logging
+import os
+import pathlib
 
+import numpy as np
 import torch
 from graph.edges.dataset2d import Domain2DDataset
 from graph.edges.unet.unet_model import UNet
+from PIL import Image
 from torch import nn
 from torch.optim import RMSprop
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from utils.utils import DummySummaryWriter
 
-RGBS_PATH = "/data/tracking-vot/GOT-10k/"
-TRAIN_RGBS_PATH = "%s/train/" % RGBS_PATH
-VALID_RGBS_PATH = "%s/val" % RGBS_PATH
+RGBS_PATH = "/data/tracking-vot/"
+EXPERTS_OUTPUT_PATH = "/data/experts/"
+
+DATASET_PATH = "GOT-10k/"
+TRAIN_PATH = "%s/train/" % (DATASET_PATH)
+VALID_PATH = "%s/val/" % (DATASET_PATH)
+
+
+def generate_experts_output(experts):
+    pattern = "%s/*/*333.jpg"
+    train_dir = "%s/%s" % (DATASET_PATH, TRAIN_PATH)
+    valid_dir = "%s/%s" % (DATASET_PATH, VALID_PATH)
+    for rgbs_dir_path in [train_dir, valid_dir]:
+        rgb_paths = sorted(glob.glob(pattern % rgbs_dir_path))
+        for rgb_path in rgb_paths:
+            img = Image.open(rgb_path)
+            for expert in experts:
+                fname = rgb_path.replace(
+                    "/data/tracking-vot/",
+                    "%s/%s/" % (EXPERTS_OUTPUT_PATH, expert.str_id)).replace(
+                        ".jpg", ".npy")
+                save_folder = os.path.dirname(fname)
+                if not os.path.exists(save_folder):
+                    pathlib.Path(save_folder).mkdir(parents=True,
+                                                    exist_ok=True)
+                if not os.path.exists(fname):
+                    e_out = expert.apply_expert_one_frame(img)
+                    np.save(fname, e_out)
+        print("Done:", rgbs_dir_path, "pattern:", pattern)
 
 
 class Edge:
     def __init__(self, expert1, expert2, device):
         super(Edge, self).__init__()
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=10, n_workers=0)
+        self.init_loaders(bs=50, n_workers=4)
 
         self.lr = 0.001
         self.optimizer = RMSprop(self.net.parameters(),
@@ -49,11 +80,11 @@ class Edge:
         ''')
 
     def init_loaders(self, bs, n_workers):
-        train_rgbs_path = TRAIN_RGBS_PATH
-        valid_rgbs_path = VALID_RGBS_PATH
         experts = [self.expert1, self.expert2]
-        train_ds = Domain2DDataset(train_rgbs_path, experts)
-        valid_ds = Domain2DDataset(valid_rgbs_path, experts)
+        train_ds = Domain2DDataset(RGBS_PATH, EXPERTS_OUTPUT_PATH, TRAIN_PATH,
+                                   experts)
+        valid_ds = Domain2DDataset(RGBS_PATH, EXPERTS_OUTPUT_PATH, VALID_PATH,
+                                   experts)
 
         self.train_loader = DataLoader(train_ds,
                                        batch_size=bs,
@@ -80,7 +111,7 @@ class Edge:
             domain2_pred = self.net(domain1)
             loss = self.criterion(domain2_pred, domain2_gt)
             train_loss += loss.item()
-            print("-----train_loss", train_loss, domain2_pred.shape)
+            # print("-----train_loss", train_loss, domain2_pred.shape)
             self.writer.add_scalar('Loss/train', loss.item(), self.global_step)
 
             # Optimizer
@@ -90,6 +121,8 @@ class Edge:
             self.optimizer.step()
 
         return train_loss / len(self.train_loader)
+    def __str__(self):
+        return 'From: %s To: %s' % (self.expert1.domain_name, self.expert2.domain_name)
 
     def eval_step(self, device):
         """Evaluation without the densecrf with the dice coefficient"""
@@ -109,7 +142,7 @@ class Edge:
             loss = self.criterion(domain2_pred, domain2_gt)
 
             eval_loss += loss.item()
-            print("-----eval_loss", eval_loss, domain2_pred.shape)
+            # print("-----eval_loss", eval_loss, domain2_pred.shape)
 
         return eval_loss / len(self.valid_loader)
 
@@ -117,8 +150,8 @@ class Edge:
         for epoch in range(epochs):
             train_loss = self.train_step(device)
             val_loss = self.eval_step(device)
-            print("train_loss", train_loss)
-            print("val_loss", val_loss)
+            print("train_loss %.2f" % train_loss)
+            print("val_loss %.2f" % val_loss)
 
             self.global_step += 1
 

@@ -13,4 +13,5 @@ class MultiDomainGraph:
             for expert_j in all_experts.methods:
                 if expert_i != expert_j:
                     new_edge = Edge(expert_i, expert_j, device)
+                    print("Add edge:", new_edge)
                     self.edges.append(new_edge)
