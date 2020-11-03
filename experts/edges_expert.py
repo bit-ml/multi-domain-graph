@@ -11,15 +11,16 @@ W, H = 256, 256
 
 
 class EdgesModel():
-    def __init__(self):
-        checkpoint_path = "experts/models/edges_dexined23.h5"
-        device = "gpu" if torch.cuda.is_available() else "cpu"
-        rgbn_mean = np.array([103.939, 116.779, 123.68,
-                              137.86])[None, None, None, :]
-        input_shape = (1, H, W, 3)
-        self.model = DexiNed(rgb_mean=rgbn_mean)
-        self.model.build(input_shape=input_shape)
-        self.model.load_weights(checkpoint_path)
+    def __init__(self, full_expert=True):
+        if full_expert:
+            checkpoint_path = "experts/models/edges_dexined23.h5"
+            device = "gpu" if torch.cuda.is_available() else "cpu"
+            rgbn_mean = np.array([103.939, 116.779, 123.68,
+                                  137.86])[None, None, None, :]
+            input_shape = (1, H, W, 3)
+            self.model = DexiNed(rgb_mean=rgbn_mean)
+            self.model.build(input_shape=input_shape)
+            self.model.load_weights(checkpoint_path)
         self.domain_name = "edges"
         self.n_maps = 1
         self.str_id = "dexined"
@@ -40,3 +41,11 @@ class EdgesModel():
 
         edge_maps = np.concatenate(edge_maps, axis=0)
         return torch.from_numpy(edge_maps)
+
+    def apply_expert_one_frame(self, rgb_frame):
+        resized_rgb_frame = cv2.resize(np.array(rgb_frame),
+                                       (W, H)).astype(np.float32)
+        preds = self.model(resized_rgb_frame, training=False)
+        edge_map = tf.sigmoid(preds).numpy()[:, :, :, 0]
+
+        return edge_map

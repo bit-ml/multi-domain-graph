@@ -9,7 +9,8 @@ W, H = 256, 256
 
 
 class HalftoneModel():
-    def __init__(self):
+    def __init__(self, full_expert=True):
+        # if full_expert:
         # self.model = Halftone()
         self.domain_name = "halftone"
         self.n_maps = 3
@@ -39,4 +40,4 @@ class HalftoneModel():
     def apply_expert_one_frame(self, rgb_frame):
         resized_rgb_frame = rgb_frame.resize((W, H))
         halftone_map = Halftone(resized_rgb_frame).make()
-        return np.array(halftone_map).transpose(2, 0, 1)
+        return np.array(halftone_map).transpose(2, 0, 1)/255.

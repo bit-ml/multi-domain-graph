@@ -8,6 +8,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "tracking/pytracking"))
 
 from experts.tracking_expert_iface import TrackingModel
 
+W, H = 256, 256
+
 
 class Tracking1Model(TrackingModel):
     def __init__(self):
@@ -19,16 +21,16 @@ class Tracking1Model(TrackingModel):
         super().__init__(tracker_name, tracker_param)
         self.domain_name = "tracking"
         self.n_maps = 1
-        self.str_id = "basic_tracking1"
+        self.str_id = "tracking_prdimp18"
 
-
-    def apply_expert(self, rgb_frames):
+    def apply_expert(self, rgb_frames, start_bbox=(80, 60, 160, 250)):
+        '''
+        x, y, h, w = start_bbox
+        '''
         output_boxes = []
         show_video = False
 
         # init bbox
-        W, H = 400, 400
-        start_bbox = (80, 60, 160, 250)
         output_boxes.append(start_bbox)
 
         # init tracker
@@ -58,11 +60,18 @@ class Tracking1Model(TrackingModel):
                 cv2.imshow(display_name, frame_disp)
                 cv2.waitKey(300)
 
-        # save output
-        tracked_bb = np.array(output_boxes).astype(int)
-        bbox_file = "tracking_test.txt"
-        np.savetxt(bbox_file, tracked_bb, delimiter='\t', fmt='%d')
+        # # save output
+        # tracked_bb = np.array(output_boxes).astype(int)
+        # bbox_file = "tracking_test.txt"
+        # np.savetxt(bbox_file, tracked_bb, delimiter='\t', fmt='%d')
 
         if show_video:
             cv2.destroyAllWindows()
         return output_boxes
+
+    def apply_expert_for_last_map(self, rgb_frames, start_bbox):
+        bboxes = self.apply_expert(rgb_frames, start_bbox)
+        out_map = np.zeros((H, W))
+        x, y, bbox_h, bbox_w = bboxes[-1]
+        out_map[y:y + bbox_h, x:x + bbox_w] = 1.
+        return out_map

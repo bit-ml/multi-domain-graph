@@ -1,8 +1,23 @@
 import glob
+import os
+import pathlib
+import time
 
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
+
+
+def load_with_cache(cache_file, glob_path):
+    if not os.path.exists(cache_file):
+        all_paths = sorted(glob.glob(glob_path))
+        save_folder = os.path.dirname(cache_file)
+        if not os.path.exists(save_folder):
+            pathlib.Path(save_folder).mkdir(parents=True, exist_ok=True)
+        np.save(cache_file, all_paths)
+    else:
+        all_paths = np.load(cache_file)
+    return all_paths
 
 
 class Domain2DDataset(Dataset):
@@ -10,17 +25,29 @@ class Domain2DDataset(Dataset):
         super(Domain2DDataset, self).__init__()
         self.experts = experts
 
+        pattern = "/*/*333"
+        s = time.time()
+
         # load all rgbs paths
-        self.rgb_paths = sorted(
-            glob.glob("%s/%s*/*333.jpg" % (rgbs_path, dataset_path)))
+        cache_rgb = "my_cache/rgbs_paths_%s.npy" % pattern[-3:]
+        glob_path_rgb = "%s/%s/%s.jpg" % (rgbs_path, dataset_path, pattern)
+        self.rgb_paths = load_with_cache(cache_rgb, glob_path_rgb)
 
-        self.e1_output_path = sorted(
-            glob.glob("%s/%s/%s/*/*333.npy" %
-                      (experts_path, self.experts[0].str_id, dataset_path)))
-        self.e2_output_path = sorted(
-            glob.glob("%s/%s/%s/*/*333.npy" %
-                      (experts_path, self.experts[1].str_id, dataset_path)))
+        # load experts paths
+        cache_e1 = "my_cache/%s_%s.npy" % (self.experts[0].str_id,
+                                           pattern[-3:])
+        glob_path_e1 = "%s/%s/%s/%s.npy" % (
+            experts_path, self.experts[0].str_id, dataset_path, pattern)
+        self.e1_output_path = load_with_cache(cache_e1, glob_path_e1)
 
+        cache_e2 = "my_cache/%s_%s.npy" % (self.experts[1].str_id,
+                                           pattern[-3:])
+        glob_path_e2 = "%s/%s/%s/%s.npy" % (
+            experts_path, self.experts[1].str_id, dataset_path, pattern)
+        self.e2_output_path = load_with_cache(cache_e2, glob_path_e2)
+        e = time.time()
+
+        # print("glob time:", e - s)
         print("Dataset size", len(self.rgb_paths))
         assert (len(self.rgb_paths) == len(self.e1_output_path) == len(
             self.e2_output_path))
