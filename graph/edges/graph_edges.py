@@ -7,13 +7,14 @@ from datetime import datetime
 import numpy as np
 import torch
 from graph.edges.dataset2d import Domain2DDataset
-from graph.edges.unet.unet_model import UNet
+from graph.edges.unet.unet_model import UNetMedium, UNetSmall
 from PIL import Image
 from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torchsummary import summary
 from tqdm import tqdm
 from utils.utils import DummySummaryWriter
 
@@ -26,12 +27,15 @@ VALID_PATH = "%s/val/" % (DATASET_PATH)
 
 
 def generate_experts_output(experts):
-    pattern = "%s/*/*333.jpg"  # train/val:
+    no_generated = 100
+    pattern = "%s/*/*00001.jpg"  # train/val:
+    # pattern = "%s/*/*333.jpg"  # train/val:
     # pattern = "%s/*/*0050.jpg"  # train/val:
     # pattern = "%s/*/*0111.jpg"  # train/val:
     train_dir = "%s/%s" % (RGBS_PATH, TRAIN_PATH)
     valid_dir = "%s/%s" % (RGBS_PATH, VALID_PATH)
     for rgbs_dir_path in [train_dir, valid_dir]:
+        count = 0
         rgb_paths = sorted(glob.glob(pattern % rgbs_dir_path))
         for rgb_path in tqdm(rgb_paths):
             img = Image.open(rgb_path)
@@ -48,23 +52,27 @@ def generate_experts_output(experts):
                     # e_out shape: expert.n_maps x 256 x 256
                     e_out = expert.apply_expert_one_frame(img)
                     np.save(fname, e_out)
+
+                count += 1
+            if count > no_generated * len(experts):
+                break
         print("Done:", rgbs_dir_path, "pattern:", pattern, "no files",
               "rgb_paths:", len(rgb_paths))
 
 
 def generate_experts_output_with_time(experts):
-    pass
+    no_generated = 100
 
-
-def generate_experts_output_with_time(experts):
+    ends_with = "0001.jpg"  # train/val:
     # ends_with = "1333.jpg"  # train/val:
-    ends_with = "0333.jpg"  # train/val:
+    # ends_with = "0333.jpg"  # train/val:
     # ends_with = "0050.jpg"  # train/val:
     # ends_with = "0111.jpg"  # train/val:
     train_dir = "%s/%s" % (RGBS_PATH, TRAIN_PATH)
     valid_dir = "%s/%s" % (RGBS_PATH, VALID_PATH)
-    for rgbs_dir_path in [valid_dir]:
-        all_dirs = os.listdir(rgbs_dir_path)
+    for rgbs_dir_path in [train_dir, valid_dir]:
+        all_dirs = sorted(os.listdir(rgbs_dir_path))
+        count = 0
 
         for crt_video_dir in tqdm(all_dirs):
             if len(
@@ -75,7 +83,8 @@ def generate_experts_output_with_time(experts):
             # skip already generated outputs:
             already_gen = True
             for expert in experts:
-                pattern = "%s/%s/*%s" % (rgbs_dir_path, crt_video_dir, ends_with)
+                pattern = "%s/%s/*%s" % (rgbs_dir_path, crt_video_dir,
+                                         ends_with)
                 fpaths = glob.glob(pattern)
                 for path in fpaths:
                     path = path.replace(
@@ -86,6 +95,7 @@ def generate_experts_output_with_time(experts):
                     if not os.path.exists(npy_path):
                         already_gen = False
             if already_gen:
+                count += 1
                 continue
 
             all_imgs = sorted(
@@ -95,6 +105,7 @@ def generate_experts_output_with_time(experts):
                 img = Image.open(rgb_path)
                 rgb_frames.append(img)
 
+                # needs clear pattern, without *
                 if rgb_path.endswith(ends_with):
                     break
 
@@ -122,8 +133,11 @@ def generate_experts_output_with_time(experts):
                     e_out = expert.apply_expert_for_last_map(
                         rgb_frames, start_bbox)
 
-                    # save just the last frame
-                    np.save(fname, e_out[-1])
+                    np.save(fname, e_out)
+                count += 1
+
+            if count > no_generated * len(experts):
+                break
         print("Done:", rgbs_dir_path, "ends_with:", ends_with)
 
 
@@ -133,33 +147,37 @@ class Edge:
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=20, n_workers=4)
 
-        self.lr = 5e-5
+        self.lr = 1e-4
         self.optimizer = AdamW(self.net.parameters(),
                                lr=self.lr,
                                weight_decay=0)
-        self.scheduler = ReduceLROnPlateau(self.optimizer, patience=5)
-        self.criterion = nn.BCEWithLogitsLoss()
-        # self.criterion = nn.MSELoss()
+        self.scheduler = ReduceLROnPlateau(self.optimizer,
+                                           patience=2,
+                                           threshold=0.01)
+        self.criterion = nn.MSELoss()
         self.global_step = 0
 
-        # self.writer = DummySummaryWriter()
+        self.writer = DummySummaryWriter()
         self.writer = SummaryWriter(
-            log_dir=f'runs/basic_%s_%s_%s' %
+            log_dir=f'runs/basic_mse_%s_%s_%s' %
             (expert1.str_id, expert2.str_id, datetime.now()),
             flush_secs=30)
+
+        trainable_params = sum(p.numel() for p in self.net.parameters()
+                               if p.requires_grad)
+        total_params = sum(p.numel() for p in self.net.parameters())
+
+        self.writer.add_text("trainable_params", str(trainable_params))
+        self.writer.add_text("total_params", str(total_params))
+        self.writer.add_text("net class", str(self.net.__class__))
 
     def init_edge(self, expert1, expert2, device):
         self.expert1 = expert1
         self.expert2 = expert2
         self.name = "%s -> %s" % (expert1.domain_name, expert2.domain_name)
-        self.net = UNet(n_channels=self.expert1.n_maps,
-                        n_classes=self.expert2.n_maps,
-                        bilinear=True).to(device)
-
-        logging.info(f'''Edge Initialized:
-            From: {self.expert1.domain_name}
-            To:   {self.expert2.domain_name}
-        ''')
+        self.net = UNetSmall(n_channels=self.expert1.n_maps,
+                             n_classes=self.expert2.n_maps,
+                             bilinear=True).to(device)
 
     def init_loaders(self, bs, n_workers):
         experts = [self.expert1, self.expert2]

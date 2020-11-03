@@ -25,30 +25,32 @@ class Domain2DDataset(Dataset):
         super(Domain2DDataset, self).__init__()
         self.experts = experts
 
-        pattern = "/*/*333"
+        pattern = "/*/*00001"
+        first_k = 5
         s = time.time()
 
         # load all rgbs paths
         cache_rgb = "my_cache/rgbs_paths_%s.npy" % pattern[-3:]
         glob_path_rgb = "%s/%s/%s.jpg" % (rgbs_path, dataset_path, pattern)
-        self.rgb_paths = load_with_cache(cache_rgb, glob_path_rgb)
+        self.rgb_paths = load_with_cache(cache_rgb, glob_path_rgb)[:first_k]
 
         # load experts paths
         cache_e1 = "my_cache/%s_%s.npy" % (self.experts[0].str_id,
                                            pattern[-3:])
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, self.experts[0].str_id, dataset_path, pattern)
-        self.e1_output_path = load_with_cache(cache_e1, glob_path_e1)
+        self.e1_output_path = load_with_cache(cache_e1, glob_path_e1)[:first_k]
 
         cache_e2 = "my_cache/%s_%s.npy" % (self.experts[1].str_id,
                                            pattern[-3:])
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
             experts_path, self.experts[1].str_id, dataset_path, pattern)
-        self.e2_output_path = load_with_cache(cache_e2, glob_path_e2)
+        self.e2_output_path = load_with_cache(cache_e2, glob_path_e2)[:first_k]
         e = time.time()
 
         # print("glob time:", e - s)
-        print("Dataset size", len(self.rgb_paths))
+        print("Dataset size", len(self.rgb_paths), len(self.e1_output_path),
+              len(self.e2_output_path))
         assert (len(self.rgb_paths) == len(self.e1_output_path) == len(
             self.e2_output_path))
         # print(self.rgb_paths[0])
