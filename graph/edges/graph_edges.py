@@ -7,7 +7,7 @@ from datetime import datetime
 import numpy as np
 import torch
 from graph.edges.dataset2d import Domain2DDataset
-from graph.edges.unet.unet_model import UNetMedium, UNetSmall
+from graph.edges.unet.unet_model import UNetGood, UNetMedium, UNetSmall
 from PIL import Image
 from torch import nn
 from torch.optim import AdamW
@@ -25,9 +25,10 @@ DATASET_PATH = "GOT-10k/"
 TRAIN_PATH = "%s/train/" % (DATASET_PATH)
 VALID_PATH = "%s/val/" % (DATASET_PATH)
 
+no_generated = 3000
+
 
 def generate_experts_output(experts):
-    no_generated = 100
     pattern = "%s/*/*00001.jpg"  # train/val:
     # pattern = "%s/*/*333.jpg"  # train/val:
     # pattern = "%s/*/*0050.jpg"  # train/val:
@@ -61,8 +62,6 @@ def generate_experts_output(experts):
 
 
 def generate_experts_output_with_time(experts):
-    no_generated = 100
-
     ends_with = "0001.jpg"  # train/val:
     # ends_with = "1333.jpg"  # train/val:
     # ends_with = "0333.jpg"  # train/val:
@@ -145,15 +144,17 @@ class Edge:
     def __init__(self, expert1, expert2, device):
         super(Edge, self).__init__()
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=20, n_workers=4)
+        self.init_loaders(bs=40, n_workers=4)
 
-        self.lr = 1e-4
+        self.lr = 5e-4
         self.optimizer = AdamW(self.net.parameters(),
                                lr=self.lr,
-                               weight_decay=0)
+                               weight_decay=0.01)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
                                            patience=2,
-                                           threshold=0.01)
+                                           factor=0.5,
+                                           threshold=0.01,
+                                           min_lr=5e-5)
         self.criterion = nn.MSELoss()
         self.global_step = 0
 
@@ -175,9 +176,9 @@ class Edge:
         self.expert1 = expert1
         self.expert2 = expert2
         self.name = "%s -> %s" % (expert1.domain_name, expert2.domain_name)
-        self.net = UNetSmall(n_channels=self.expert1.n_maps,
-                             n_classes=self.expert2.n_maps,
-                             bilinear=True).to(device)
+        self.net = UNetGood(n_channels=self.expert1.n_maps,
+                            n_classes=self.expert2.n_maps,
+                            bilinear=True).to(device)
 
     def init_loaders(self, bs, n_workers):
         experts = [self.expert1, self.expert2]
