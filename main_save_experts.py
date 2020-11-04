@@ -10,6 +10,8 @@ import torch.utils.data as data
 
 import experts.raft_of_expert 
 import experts.liteflownet_of_expert
+import experts.sseg_fcn_expert
+import experts.sseg_deeplabv3_expert
 
 import utils.visualize_of
 import utils.visualize_vmos 
@@ -30,7 +32,7 @@ usage_str = 'usage: python main_save_experts.py input_path output_path enable_do
 #    expi                   - name of the i'th expert 
 #                           - should be one of the VALID_EXPERTS_NAME
 
-VALID_EXPERTS_NAME = ['of_fwd_raft', 'of_bwd_raft', 'of_fwd_liteflownet', 'of_bwd_liteflownet']
+VALID_EXPERTS_NAME = ['of_fwd_raft', 'of_bwd_raft', 'of_fwd_liteflownet', 'of_bwd_liteflownet', 'sseg_fcn', 'sseg_deeplabv3']
 INPUT_PATH = r'/root/test_videos'
 OUTPUT_PATH = r'/root/experts'
 ENABLE_DOUBLE_CHECK = 1
@@ -61,7 +63,6 @@ def check_arguments_and_init_paths(argv):
     if not argv[5]=='0':
         WORKING_W = np.int32(argv[5])
 
-
     if not os.path.exists(INPUT_PATH) or len(os.listdir(INPUT_PATH))==0:
         status = 0
         status_code = 'Invalid input path'
@@ -69,9 +70,6 @@ def check_arguments_and_init_paths(argv):
 
     if not os.path.exists(OUTPUT_PATH):
         os.mkdir(OUTPUT_PATH)
-
-    import pdb 
-    pdb.set_trace()
     
     potential_experts = argv[6:]
     if argv[6]=='all':
@@ -128,10 +126,12 @@ def get_expert(exp_name):
         return experts.liteflownet_of_expert.LiteFlowNetTest('experts/liteflownet_optical_flow/models/liteflownet-default', 1)
     elif exp_name=='of_bwd_liteflownet':
         return experts.liteflownet_of_expert.LiteFlowNetTest('experts/liteflownet_optical_flow/models/liteflownet-default', 0)
+    elif exp_name=='sseg_fcn':
+        return experts.sseg_fcn_expert.FCNTest()
+    elif exp_name=='sseg_deeplabv3':
+        return experts.sseg_deeplabv3_expert.DeepLabv3Test()
 
 def process_videos():
-    import pdb 
-    pdb.set_trace()
     videos_name = os.listdir(INPUT_PATH)
     videos_name.sort()
     n_videos = len(videos_name)

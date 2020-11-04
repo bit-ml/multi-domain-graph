@@ -111,6 +111,7 @@ def visualize_experts():
             exp_results = []
             for exp_name in experts_name:
                 exp_results.append(np.load(os.path.join(INPUT_PATH, exp_name, video_name, '%08d.npy'%frame_idx)))
+           
             img = build_display_img(frames[frame_idx], exp_results)
 
             cv2.imwrite(os.path.join(vid_out_path, '%08d.png'%frame_idx), np.uint8(img))
