@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from scipy.stats import pearsonr
 
 from experts.experts import Experts
 from graph.edges.graph_edges import (generate_experts_output,
@@ -20,8 +21,15 @@ def ensemble_vs_edge(metrics, edge_idx):
     edge_values = metrics[edge_idx]
     diff_array = ensemble_values - edge_values
 
+    # v1, with std
     std = np.std(diff_array)
     is_outlier = std > 0.01
+    print(edge_idx, "std", std)
+
+    # v2, with pearson
+    r_corr, p_value = pearsonr(ensemble_values, diff_array)
+    is_outlier = abs(r_corr) < 0.5
+    print(edge_idx, "r_corr", r_corr)
 
     return is_outlier
 
