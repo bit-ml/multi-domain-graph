@@ -25,7 +25,7 @@ DATASET_PATH = "GOT-10k/"
 TRAIN_PATH = "%s/train/" % (DATASET_PATH)
 VALID_PATH = "%s/val/" % (DATASET_PATH)
 
-no_generated = 3000
+no_generated = 1000
 
 
 def generate_experts_output(experts):
@@ -141,28 +141,33 @@ def generate_experts_output_with_time(experts):
 
 
 class Edge:
-    def __init__(self, expert1, expert2, device):
+    def __init__(self, expert1, expert2, device, silent):
         super(Edge, self).__init__()
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=40, n_workers=4)
+        self.init_loaders(bs=5, n_workers=4)
 
         self.lr = 5e-4
         self.optimizer = AdamW(self.net.parameters(),
                                lr=self.lr,
-                               weight_decay=0.01)
+                               weight_decay=0.001)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
                                            patience=10,
                                            factor=0.5,
                                            threshold=0.005,
                                            min_lr=5e-5)
         self.criterion = nn.MSELoss()
-        self.global_step = 0
+        self.criterion_detailed_eval = nn.MSELoss(reduction='none')
 
-        self.writer = DummySummaryWriter()
-        self.writer = SummaryWriter(
-            log_dir=f'runs/basic_mse_%s_%s_%s' %
-            (expert1.str_id, expert2.str_id, datetime.now()),
-            flush_secs=30)
+        self.global_step = 0
+        self.ill_posed = False
+
+        if silent:
+            self.writer = DummySummaryWriter()
+        else:
+            self.writer = SummaryWriter(
+                log_dir=f'runs/basic_mse_%s_%s_%s' %
+                (expert1.str_id, expert2.str_id, datetime.now()),
+                flush_secs=30)
 
         trainable_params = sum(p.numel() for p in self.net.parameters()
                                if p.requires_grad)
@@ -233,8 +238,26 @@ class Edge:
         return 'From: %s To: %s' % (self.expert1.domain_name,
                                     self.expert2.domain_name)
 
+    def eval_detailed(self, device):
+        self.net.eval()
+        eval_loss = []
+
+        for batch in self.valid_loader:
+            domain1, domain2_gt = batch
+            assert domain1.shape[1] == self.net.n_channels
+            assert domain2_gt.shape[1] == self.net.n_classes
+
+            domain1 = domain1.to(device=device, dtype=torch.float32)
+            domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+
+            with torch.no_grad():
+                domain2_pred = self.net(domain1)
+            loss = self.criterion_detailed_eval(domain2_pred, domain2_gt)
+            eval_loss += loss.view(domain2_pred.shape[0], -1).mean(axis=1).data.cpu()
+
+        return eval_loss
+
     def eval_step(self, device):
-        """Evaluation without the densecrf with the dice coefficient"""
         self.net.eval()
         eval_loss = 0
 

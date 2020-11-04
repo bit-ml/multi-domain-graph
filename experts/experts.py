@@ -14,12 +14,12 @@ class Experts:
         # self.methods = [DepthModel(), EdgesModel(), HalftoneModel(), Tracking1Model(), SurfaceNormalsModel()]
         # self.methods = [SurfaceNormalsModel(), HalftoneModel()]
         self.methods = [
-            # RGBModel(full_experts),
+            RGBModel(full_experts),
             DepthModel(full_experts),
             EdgesModel(full_experts),
-            SurfaceNormalsModel(full_experts),
-            HalftoneModel(full_experts),
-            Tracking1Model(full_experts)
+            # SurfaceNormalsModel(full_experts),
+            # HalftoneModel(full_experts),
+            # Tracking1Model(full_experts)
         ]
 
     def rgb_inference(self, rgb_frames):
