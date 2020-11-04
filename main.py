@@ -29,20 +29,20 @@ def train_2D_tasks(space_graph):
 
 
 def main():
-    # from experts.rgb_expert import RGBModel
-    # from experts.tracking1_expert import Tracking1Model
+    from experts.rgb_expert import RGBModel
+    from experts.tracking1_expert import Tracking1Model
 
     # all_experts_gen = Experts(full_experts=True)
     # generate_experts_output(all_experts_gen.methods)
-    # # # generate_experts_output([RGBModel(full_expert=True)])
-    # generate_experts_output_with_time([Tracking1Model(full_expert=True)])
+    # # generate_experts_output([RGBModel(full_expert=True)])
+    generate_experts_output_with_time([Tracking1Model(full_expert=True)])
 
-    graph = build_space_graph()
-    for i in range(7):
-        print(("Train all. Epoch:", i))
-        train_2D_tasks(graph)
+    # graph = build_space_graph()
+    # for i in range(7):
+    #     print(("Train all. Epoch:", i))
+    #     train_2D_tasks(graph)
 
-        # drop_connections(graph)
+    #     # drop_connections(graph)
 
 
 if __name__ == "__main__":

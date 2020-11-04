@@ -151,9 +151,9 @@ class Edge:
                                lr=self.lr,
                                weight_decay=0.01)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
-                                           patience=2,
+                                           patience=10,
                                            factor=0.5,
-                                           threshold=0.01,
+                                           threshold=0.005,
                                            min_lr=5e-5)
         self.criterion = nn.MSELoss()
         self.global_step = 0

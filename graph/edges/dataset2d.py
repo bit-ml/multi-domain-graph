@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
-first_k = 1000
+first_k = 2000
 
 
 def load_with_cache(cache_file, glob_path):
