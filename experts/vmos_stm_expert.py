@@ -25,6 +25,8 @@ import tqdm
 from experts.vmos_stm.dataset import Generic_Test
 from experts.vmos_stm.model import STM
 
+import experts.sseg_fcn_expert
+
 def Run_video(Fs, Ms, num_frames, num_objects, model, Mem_every=None, Mem_number=None):
     # initialize storage tensors
     if Mem_every:
@@ -37,7 +39,8 @@ def Run_video(Fs, Ms, num_frames, num_objects, model, Mem_every=None, Mem_number
     Es = torch.zeros_like(Ms)
     Es[:,:,0] = Ms[:,:,0]
 
-    for t in tqdm.tqdm(range(1, num_frames)):
+    #for t in tqdm.tqdm(range(1, num_frames)):
+    for t in range(1, num_frames):
         # memorize
         with torch.no_grad():
             prev_key, prev_value = model(Fs[:,:,t-1], Es[:,:,t-1], torch.tensor([num_objects])) 
@@ -62,7 +65,7 @@ def Run_video(Fs, Ms, num_frames, num_objects, model, Mem_every=None, Mem_number
 
 class STMTest:
 
-    def __init__(self, model_path):
+    def __init__(self, model_path, single_object, max_nr_classes):
 
         model = nn.DataParallel(STM())
         model.cuda()
@@ -70,9 +73,21 @@ class STMTest:
         model.load_state_dict(torch.load(model_path))
 
         self.model = model
+        self.single_object = single_object
+        self.max_nr_classes = max_nr_classes
 
-    def apply(self, frames, first_frame_annotation, single_object):
+        self.sseg_model = experts.sseg_fcn_expert.FCNTest()
 
+    def apply_per_video(self, frames):
+        first_frame_annotation = self.sseg_model.apply(frames[0]).cpu().numpy()
+
+        first_frame_annotation[first_frame_annotation>=0.5] = 1
+        first_frame_annotation[first_frame_annotation<0.5] = 0
+        #first_frame_annotation = first_frame_annotation.permute(1,2,0)
+        #first_frame_annotation = first_frame_annotation.numpy()
+
+        obj_masks = first_frame_annotation
+        '''
         mask = first_frame_annotation
         unique_colors = np.unique(mask.reshape(-1, mask.shape[-1]), axis=0, return_counts = True)[0]
         n_unique_colors = unique_colors.shape[0]
@@ -80,8 +95,8 @@ class STMTest:
         for color_idx in range(n_unique_colors):
             positions = np.where((mask[:,:,0] == unique_colors[color_idx, 0]) & (mask[:,:,1] == unique_colors[color_idx, 1]) & (mask[:,:,2] == unique_colors[color_idx, 2]))
             obj_masks[positions[0], positions[1], color_idx] = 1
-        
-        testset = Generic_Test(frames, obj_masks, single_object)
+        '''
+        testset = Generic_Test(frames, obj_masks, self.single_object, self.max_nr_classes)
         testloader = data.DataLoader(testset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
 
         for seq, V in enumerate(testloader):
@@ -91,20 +106,18 @@ class STMTest:
             #print('[{}]: num_frames: {}, num_objects: {}'.format(seq_name, num_frames, num_objects[0][0]))
     
             pred, Es = Run_video(Fs, Ms, num_frames, num_objects, self.model, Mem_every=5, Mem_number=None)
-            #import pdb 
-            #pdb.set_trace()
+            
             predictions = []
             for f in range(num_frames):
                 c_pred = pred[f]
-                f_pred = np.zeros((c_pred.shape[0], c_pred.shape[1], 13))#num_objects+1))
+                f_pred = np.zeros((21, c_pred.shape[0], c_pred.shape[1]))#num_objects+1))
                 for idx in range(num_objects+1):
                     if idx == 0:
                         continue
                     [ys, xs] = np.where(c_pred == idx)
-                    f_pred[ys, xs, idx] = 1
+                    f_pred[idx,ys, xs] = 1
                 predictions.append(f_pred)
             return predictions
-
 
 if __name__=="__main__":
 

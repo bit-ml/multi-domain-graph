@@ -21,7 +21,7 @@ def get_single_channel_mask(obj_masks):
 
 class Generic_Test(data.Dataset):
 
-    def __init__(self, frames, first_frame_annotation, single_object):
+    def __init__(self, frames, first_frame_annotation, single_object, max_nr_classes):
         self.videos = []
         self.num_frames = {}
         self.num_objects = {}
@@ -39,7 +39,7 @@ class Generic_Test(data.Dataset):
         self.shape['test_video'] = np.shape(_mask)
         self.size_480p['test_video'] = np.shape(_mask)
 
-        self.K = 11
+        self.K = max_nr_classes
         self.single_object = single_object
     
     def __len__(self):

@@ -87,7 +87,10 @@ def build_display_img(frame, exp_results):
         img = np.reshape(exp_res, (exp_res.shape[0]*exp_res.shape[1], exp_res.shape[2]))
         min_val = np.min(img)
         max_val = np.max(img)
-        img = (img-min_val)/(max_val-min_val)
+        d = max_val - min_val
+        if d<0.00000001:
+            d = 1
+        img = (img-min_val)/d
         img = img * 255
         if max_nr_channels>exp_res.shape[0]:
             img = np.concatenate((img, np.zeros(( (max_nr_channels-exp_res.shape[0])*exp_res.shape[1], exp_res.shape[2]))),0) 
@@ -111,7 +114,8 @@ def visualize_experts():
             exp_results = []
             for exp_name in experts_name:
                 exp_results.append(np.load(os.path.join(INPUT_PATH, exp_name, video_name, '%08d.npy'%frame_idx)))
-           
+            #import pdb 
+            #pdb.set_trace()
             img = build_display_img(frames[frame_idx], exp_results)
 
             cv2.imwrite(os.path.join(vid_out_path, '%08d.png'%frame_idx), np.uint8(img))

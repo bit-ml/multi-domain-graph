@@ -21,8 +21,6 @@ import sys
 
 from experts.vmos_stm.helpers import *
  
-print('Space-time Memory Networks: initialized.')
- 
 class ResBlock(nn.Module):
     def __init__(self, indim, outdim=None, stride=1):
         super(ResBlock, self).__init__()
@@ -216,7 +214,8 @@ class STM(nn.Module):
             B_list['m'].append(masks[:,o])
             B_list['o'].append( (torch.sum(masks[:,1:o], dim=1) + \
                 torch.sum(masks[:,o+1:num_objects+1], dim=1)).clamp(0,1) )
-
+        #import pdb
+        #pdb.set_trace()
         # make Batch
         B_ = {}
         for arg in B_list.keys():

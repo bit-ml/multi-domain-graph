@@ -12,6 +12,7 @@ import experts.raft_of_expert
 import experts.liteflownet_of_expert
 import experts.sseg_fcn_expert
 import experts.sseg_deeplabv3_expert
+import experts.vmos_stm_expert
 
 import utils.visualize_of
 import utils.visualize_vmos 
@@ -32,7 +33,7 @@ usage_str = 'usage: python main_save_experts.py input_path output_path enable_do
 #    expi                   - name of the i'th expert 
 #                           - should be one of the VALID_EXPERTS_NAME
 
-VALID_EXPERTS_NAME = ['of_fwd_raft', 'of_bwd_raft', 'of_fwd_liteflownet', 'of_bwd_liteflownet', 'sseg_fcn', 'sseg_deeplabv3']
+VALID_EXPERTS_NAME = ['of_fwd_raft', 'of_bwd_raft', 'of_fwd_liteflownet', 'of_bwd_liteflownet', 'sseg_fcn', 'sseg_deeplabv3', 'vmos_stm']
 INPUT_PATH = r'/root/test_videos'
 OUTPUT_PATH = r'/root/experts'
 ENABLE_DOUBLE_CHECK = 1
@@ -47,7 +48,7 @@ def check_arguments_and_init_paths(argv):
     global EXPERTS_NAME
     global WORKING_H
     global WORKING_W
-
+    
     if len(argv)<7:
         status=0
         status_code = 'Incorrect usage'
@@ -130,6 +131,8 @@ def get_expert(exp_name):
         return experts.sseg_fcn_expert.FCNTest()
     elif exp_name=='sseg_deeplabv3':
         return experts.sseg_deeplabv3_expert.DeepLabv3Test()
+    elif exp_name=='vmos_stm':
+        return experts.vmos_stm_expert.STMTest('experts/vmos_stm/STM_weights.pth', 0, 21) 
 
 def process_videos():
     videos_name = os.listdir(INPUT_PATH)
@@ -151,7 +154,7 @@ def process_videos():
 if __name__ == "__main__":
     status, status_code = check_arguments_and_init_paths(sys.argv)
     if status == 0 :
-        sys.exit(status_code + usage_str)
+        sys.exit(status_code +'\n'+ usage_str)
     
     process_videos()
     #value = input("do you want to continue? [y/n]")
