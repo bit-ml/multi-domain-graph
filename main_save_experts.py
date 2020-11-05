@@ -34,8 +34,8 @@ usage_str = 'usage: python main_save_experts.py input_path output_path enable_do
 #                           - should be one of the VALID_EXPERTS_NAME
 
 VALID_EXPERTS_NAME = ['of_fwd_raft', 'of_bwd_raft', 'of_fwd_liteflownet', 'of_bwd_liteflownet', 'sseg_fcn', 'sseg_deeplabv3', 'vmos_stm']
-INPUT_PATH = r'/root/test_videos'
-OUTPUT_PATH = r'/root/experts'
+INPUT_PATH = r'/tracking-vot/GOT-10k/train'
+OUTPUT_PATH = r'/experts-output'
 ENABLE_DOUBLE_CHECK = 1
 EXPERTS_NAME = []
 WORKING_H = 256
@@ -108,15 +108,20 @@ def check_arguments_and_init_paths(argv):
     return status, status_code
 
 def get_rgb_video_frames(vid_in_path):
-    filenames = os.listdir(vid_in_path)
-    filenames.sort()
+    import glob
+    filepaths = glob.glob(os.path.join(vid_in_path, '*.jpg'))
+    #filenames = os.listdir(vid_in_path)
+    filepaths.sort()
     frames = []
-    for filename in filenames:
-        img = cv2.imread(os.path.join(vid_in_path, filename))
+    out_filenames = []
+    for filepath in filepaths:
+        img = cv2.imread(filepath)
         img = cv2.resize(img, (WORKING_W, WORKING_H), cv2.INTER_CUBIC)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         frames.append(img)
-    return frames
+        base, tail = os.path.split(filepath)
+        out_filenames.append(tail.replace('.jpg', '.npy'))
+    return frames, out_filenames
 
 def get_expert(exp_name):
     if exp_name=='of_fwd_raft':
@@ -135,12 +140,19 @@ def get_expert(exp_name):
         return experts.vmos_stm_expert.STMTest('experts/vmos_stm/STM_weights.pth', 0, 21) 
 
 def process_videos():
-    videos_name = os.listdir(INPUT_PATH)
+    videos_list_path = os.path.join(INPUT_PATH, 'list.txt')
+    file = open(videos_list_path, 'r')
+    videos_name = file.readlines()
     videos_name.sort()
+    file.close()
+    videos_name = [video_name.strip() for video_name in videos_name]
+    videos_name = videos_name[0:3298]
+    #videos_name = os.listdir(INPUT_PATH)
+    #videos_name.sort()
     n_videos = len(videos_name)
     for video_name in videos_name:
         vid_in_path = os.path.join(INPUT_PATH, video_name)
-        frames = get_rgb_video_frames(vid_in_path)
+        frames, out_filenames = get_rgb_video_frames(vid_in_path)
 
         for exp_name in EXPERTS_NAME:
             expert = get_expert(exp_name)
@@ -148,8 +160,10 @@ def process_videos():
 
             vid_out_path = os.path.join(OUTPUT_PATH, exp_name, video_name)
             os.mkdir(vid_out_path)
-            for i in range(len(results)):
-                np.save(os.path.join(vid_out_path, '%08d.npy'%i), results[i])
+            #for i in range(len(results)):
+            #    np.save(os.path.join(vid_out_path, out_filenames[i]), results[i])
+            for i in range(3):
+                np.save(os.path.join(vid_out_path, out_filenames[i]), results[i])
 
 if __name__ == "__main__":
     status, status_code = check_arguments_and_init_paths(sys.argv)

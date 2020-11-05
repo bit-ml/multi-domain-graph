@@ -26,7 +26,7 @@ import utils.visualize_vmos
 
 INPUT_PATH = r'/root/experts'
 OUTPUT_PATH = r'/root/experts_vis'
-VIDEOS_ORIG_PATH = r'/root/test_videos'
+VIDEOS_ORIG_PATH = r'/tracking-vot/GOT-10k/train'
 WORKING_H = 256
 WORKING_W = 256
 
@@ -67,11 +67,13 @@ def check_arguments_and_init_paths(argv):
     return status, status_code
 
 def get_rgb_video_frames(vid_in_path):
-    filenames = os.listdir(vid_in_path)
-    filenames.sort()
+    import glob
+    filepaths = glob.glob(os.path.join(vid_in_path, '*.jpg'))
+    #filenames = os.listdir(vid_in_path)
+    filepaths.sort()
     frames = []
-    for filename in filenames:
-        img = cv2.imread(os.path.join(vid_in_path, filename))
+    for filepath in filepaths:
+        img = cv2.imread(filepath)
         img = cv2.resize(img, (WORKING_W, WORKING_H), cv2.INTER_CUBIC)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         frames.append(img)
