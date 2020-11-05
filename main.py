@@ -24,12 +24,12 @@ def ensemble_vs_edge(metrics, edge_idx):
     # v1, with std
     std = np.std(diff_array)
     is_outlier = std > 0.01
-    print(edge_idx, "std", std)
+    print("[Edge_idx %d] std %.2f" % (edge_idx, std))
 
     # v2, with pearson
     r_corr, p_value = pearsonr(ensemble_values, diff_array)
     is_outlier = abs(r_corr) < 0.5
-    print(edge_idx, "r_corr", r_corr)
+    print("[Edge_idx %d] r_corr %.2f" % (edge_idx, r_corr))
 
     return is_outlier
 
@@ -37,8 +37,8 @@ def ensemble_vs_edge(metrics, edge_idx):
 def evaluate_all_edges(ending_edges):
     metrics = []
     for edge in ending_edges:
-        edge_loss = edge.eval_detailed(device)
-        metrics.append(np.array(edge_loss))
+        edge_l2_loss, edge_l1_loss = edge.eval_detailed(device)
+        metrics.append(np.array(edge_l1_loss))
 
     return np.array(metrics)
 
@@ -84,10 +84,10 @@ def main():
     # # generate_experts_output([RGBModel(full_expert=True)])
     # generate_experts_output_with_time([Tracking1Model(full_expert=True)])
 
-    graph = build_space_graph(silent=True)
-    for i in range(1):
+    graph = build_space_graph(silent=False)
+    for i in range(10):
         print(("Train 1hop. Epoch:", i))
-        train_1hop_2Dtasks(graph, epochs=2)
+        train_1hop_2Dtasks(graph, epochs=20)
 
     drop_connections(graph)
 

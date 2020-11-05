@@ -144,7 +144,7 @@ class Edge:
     def __init__(self, expert1, expert2, device, silent):
         super(Edge, self).__init__()
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=5, n_workers=4)
+        self.init_loaders(bs=40, n_workers=4)
 
         self.lr = 5e-4
         self.optimizer = AdamW(self.net.parameters(),
@@ -155,8 +155,11 @@ class Edge:
                                            factor=0.5,
                                            threshold=0.005,
                                            min_lr=5e-5)
-        self.criterion = nn.MSELoss()
-        self.criterion_detailed_eval = nn.MSELoss(reduction='none')
+        self.l2 = nn.MSELoss()
+        self.l1 = nn.L1Loss()
+
+        self.l2_detailed_eval = nn.MSELoss(reduction='none')
+        self.l1_detailed_eval = nn.L1Loss(reduction='none')
 
         self.global_step = 0
         self.ill_posed = False
@@ -204,7 +207,8 @@ class Edge:
     def train_step(self, device):
         self.net.train()
 
-        train_loss = 0
+        train_l1_loss = 0
+        train_l2_loss = 0
 
         for batch in self.train_loader:
             domain1, domain2_gt = batch
@@ -215,14 +219,16 @@ class Edge:
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
 
             domain2_pred = self.net(domain1)
-            loss = self.criterion(domain2_pred, domain2_gt)
-            train_loss += loss.item()
+            l2_loss = self.l2(domain2_pred, domain2_gt)
+            train_l2_loss += l2_loss.item()
+
+            train_l1_loss += self.l1(domain2_pred, domain2_gt).item()
             # print("-----train_loss", train_loss, domain2_pred.shape)
 
             # Optimizer
             self.optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_value_(self.net.parameters(), 0.1)
+            l2_loss.backward()
+            # nn.utils.clip_grad_value_(self.net.parameters(), 0.1)
             self.optimizer.step()
 
         tag = 'Train/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
@@ -232,7 +238,9 @@ class Edge:
                                self.global_step)
         self.writer.add_images('%s/Output' % (tag), domain2_pred[:3],
                                self.global_step)
-        return train_loss / len(self.train_loader)
+        return train_l2_loss / len(
+            self.train_loader) * 100, train_l1_loss / len(
+                self.train_loader) * 100
 
     def __str__(self):
         return 'From: %s To: %s' % (self.expert1.domain_name,
@@ -240,7 +248,8 @@ class Edge:
 
     def eval_detailed(self, device):
         self.net.eval()
-        eval_loss = []
+        eval_l2_loss = []
+        eval_l1_loss = []
 
         for batch in self.valid_loader:
             domain1, domain2_gt = batch
@@ -252,14 +261,20 @@ class Edge:
 
             with torch.no_grad():
                 domain2_pred = self.net(domain1)
-            loss = self.criterion_detailed_eval(domain2_pred, domain2_gt)
-            eval_loss += loss.view(domain2_pred.shape[0], -1).mean(axis=1).data.cpu()
+            loss_l2 = self.l2_detailed_eval(domain2_pred, domain2_gt)
+            loss_l1 = self.l1_detailed_eval(domain2_pred, domain2_gt)
 
-        return eval_loss
+            eval_l2_loss += loss_l2.view(domain2_pred.shape[0],
+                                         -1).mean(axis=1).data.cpu()
+            eval_l1_loss += loss_l1.view(domain2_pred.shape[0],
+                                         -1).mean(axis=1).data.cpu()
+
+        return eval_l2_loss * 100, eval_l1_loss * 100
 
     def eval_step(self, device):
         self.net.eval()
-        eval_loss = 0
+        eval_l2_loss = 0
+        eval_l1_loss = 0
 
         for batch in self.valid_loader:
             domain1, domain2_gt = batch
@@ -271,9 +286,11 @@ class Edge:
 
             with torch.no_grad():
                 domain2_pred = self.net(domain1)
-            loss = self.criterion(domain2_pred, domain2_gt)
+            l2_loss = self.l2(domain2_pred, domain2_gt)
+            l1_loss = self.l1(domain2_pred, domain2_gt)
 
-            eval_loss += loss.item()
+            eval_l2_loss += l2_loss.item()
+            eval_l1_loss += l1_loss.item()
 
         tag = 'Valid/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
         self.writer.add_images('%s/Input' % tag, domain1[:3], self.global_step)
@@ -281,18 +298,25 @@ class Edge:
         self.writer.add_images('%s/Output' % tag, domain2_pred[:3],
                                self.global_step)
 
-        return eval_loss / len(self.valid_loader)
+        return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
+            self.valid_loader) * 100
 
     def train(self, epochs, device):
         for epoch in range(epochs):
-            train_loss = self.train_step(device)
-            self.writer.add_scalar('Train/Loss', train_loss, self.global_step)
+            train_l2_loss, train_l1_loss = self.train_step(device)
+            self.writer.add_scalar('Train/L2_Loss', train_l2_loss,
+                                   self.global_step)
+            self.writer.add_scalar('Train/L1_Loss', train_l1_loss,
+                                   self.global_step)
 
-            val_loss = self.eval_step(device)
-            self.writer.add_scalar('Valid/Loss', val_loss, self.global_step)
+            val_l2_loss, val_l1_loss = self.eval_step(device)
+            self.writer.add_scalar('Valid/L2_Loss', val_l2_loss,
+                                   self.global_step)
+            self.writer.add_scalar('Valid/L1_Loss', val_l1_loss,
+                                   self.global_step)
 
             # Scheduler
-            self.scheduler.step(val_loss)
+            self.scheduler.step(val_l2_loss)
             self.writer.add_scalar('Train/LR',
                                    self.optimizer.param_groups[0]['lr'],
                                    self.global_step)
