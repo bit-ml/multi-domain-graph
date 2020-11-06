@@ -15,6 +15,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
+# from torchvision import transforms
 from tqdm import tqdm
 from utils.utils import DummySummaryWriter
 
@@ -26,6 +27,31 @@ TRAIN_PATH = "%s/train/" % (DATASET_PATH)
 VALID_PATH = "%s/val/" % (DATASET_PATH)
 
 no_generated = 1000
+EPSILON = 1e-8
+
+
+def img_for_plot(img):
+    '''
+    img shape NCHW, ex: torch.Size([3, 1, 256, 256])
+    '''
+    n, c, _, _ = img.shape
+    img_view = img.view(n, c, -1)
+    min_img = img_view.min(axis=2)[0][:, :, None, None]
+    max_img = img_view.max(axis=2)[0][:, :, None, None]
+
+    return (img - min_img) / (max_img - min_img)
+    # return transforms.Normalize(mean=mean, std=std)(img)
+
+
+# def input_normaliz(img):
+#     '''
+#     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
+#     '''
+#     n, c, _, _ = img.shape
+#     img_view = img.view(n, c, -1)
+#     mean = img_view.mean(axis=2)[:, :, None, None]
+#     std = img_view.std(axis=2)[:, :, None, None]
+#     return (img - mean) / (std + EPSILON)
 
 
 def generate_experts_output(experts):
@@ -168,7 +194,7 @@ class Edge:
             self.writer = DummySummaryWriter()
         else:
             self.writer = SummaryWriter(
-                log_dir=f'runs/basic_mse_%s_%s_%s' %
+                log_dir=f'runs/with_of_fwd_raft_%s_%s_%s' %
                 (expert1.str_id, expert2.str_id, datetime.now()),
                 flush_secs=30)
 
@@ -232,11 +258,20 @@ class Edge:
             self.optimizer.step()
 
         tag = 'Train/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
-        self.writer.add_images('%s/Input' % (tag), domain1[:3],
+        if domain1.shape[1] == 2:
+            domain1 = domain1[:, 0:1]
+        self.writer.add_images('%s/Input' % (tag), img_for_plot(domain1[:3]),
                                self.global_step)
-        self.writer.add_images('%s/GT' % (tag), domain2_gt[:3],
+
+        if domain2_gt.shape[1] == 2:
+            domain2_gt = domain2_gt[:, 0:1]
+        self.writer.add_images('%s/GT' % (tag), img_for_plot(domain2_gt[:3]),
                                self.global_step)
-        self.writer.add_images('%s/Output' % (tag), domain2_pred[:3],
+
+        if domain2_pred.shape[1] == 2:
+            domain2_pred = domain2_pred[:, 0:1]
+        self.writer.add_images('%s/Output' % (tag),
+                               img_for_plot(domain2_pred[:3]),
                                self.global_step)
         return train_l2_loss / len(
             self.train_loader) * 100, train_l1_loss / len(
@@ -293,9 +328,22 @@ class Edge:
             eval_l1_loss += l1_loss.item()
 
         tag = 'Valid/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
-        self.writer.add_images('%s/Input' % tag, domain1[:3], self.global_step)
-        self.writer.add_images('%s/GT' % tag, domain2_gt[:3], self.global_step)
-        self.writer.add_images('%s/Output' % tag, domain2_pred[:3],
+
+        if domain1.shape[1] == 2:
+            domain1 = domain1[:, 0:1]
+        self.writer.add_images('%s/Input' % tag, img_for_plot(domain1[:3]),
+                               self.global_step)
+        if domain2_gt.shape[1] == 2:
+            domain2_gt = domain2_gt[:, 0:1]
+
+        self.writer.add_images('%s/GT' % tag, img_for_plot(domain2_gt[:3]),
+                               self.global_step)
+
+        if domain2_pred.shape[1] == 2:
+            domain2_pred = domain2_pred[:, 0:1]
+
+        self.writer.add_images('%s/Output' % tag,
+                               img_for_plot(domain2_pred[:3]),
                                self.global_step)
 
         return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
