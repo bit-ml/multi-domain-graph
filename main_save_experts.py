@@ -25,6 +25,10 @@ usage_str = 'usage: python main_save_experts.py input_path output_path enable_do
 #    path2                  [a path / '-'] - experts main path
 #                                           - if '-' is provided, we use OUTPUT_PATH's default value
 #                           - info of one expert will be saved on path2/exp_name
+#    db_name                dataset name; if '' it will be ignored
+#                                       - if '-' is provided, we use DB_NAME's default value
+#    subset_name            subset name; if '' it will be ignored
+#                                       - if '-' is provided, we use SUBSET_NAME's default value
 #    enable_double_check    [0/1] - if enabled, in case one expert folder already exists, 
 #                                        the user will need to aknowledge if he wants to proceed or not 
 #                                 - should not be set to 1 if the process runs in background 
@@ -40,6 +44,8 @@ ENABLE_DOUBLE_CHECK = 1
 EXPERTS_NAME = []
 WORKING_H = 256
 WORKING_W = 256
+DB_NAME = 'GOT-10k'
+SUBSET_NAME = 'train'
 
 def check_arguments_and_init_paths(argv):
     global INPUT_PATH
@@ -48,8 +54,10 @@ def check_arguments_and_init_paths(argv):
     global EXPERTS_NAME
     global WORKING_H
     global WORKING_W
+    global DB_NAME
+    global SUBSET_NAME
     
-    if len(argv)<7:
+    if len(argv)<9:
         status=0
         status_code = 'Incorrect usage'
         return status, status_code
@@ -58,11 +66,15 @@ def check_arguments_and_init_paths(argv):
         INPUT_PATH = argv[1]
     if not argv[2]=='-':
         OUTPUT_PATH = argv[2]
-    ENABLE_DOUBLE_CHECK = np.int32(argv[3])
-    if not argv[4]=='0':
-        WORKING_H = np.int32(argv[4])
-    if not argv[5]=='0':
-        WORKING_W = np.int32(argv[5])
+    if not argv[3]=='-':
+        DB_NAME = argv[3]
+    if not argv[4]=='-':
+        SUBSET_NAME = argv[4]
+    ENABLE_DOUBLE_CHECK = np.int32(argv[5])
+    if not argv[6]=='0':
+        WORKING_H = np.int32(argv[6])
+    if not argv[7]=='0':
+        WORKING_W = np.int32(argv[7])
 
     if not os.path.exists(INPUT_PATH) or len(os.listdir(INPUT_PATH))==0:
         status = 0
@@ -72,8 +84,8 @@ def check_arguments_and_init_paths(argv):
     if not os.path.exists(OUTPUT_PATH):
         os.mkdir(OUTPUT_PATH)
     
-    potential_experts = argv[6:]
-    if argv[6]=='all':
+    potential_experts = argv[8:]
+    if argv[8]=='all':
         potential_experts = VALID_EXPERTS_NAME
 
     n_experts = len(potential_experts)#n_experts = len(argv) - 6
@@ -86,6 +98,12 @@ def check_arguments_and_init_paths(argv):
             status_code = 'Expert %s is not valid'%exp_name
             return status, status_code
         exp_out_path = os.path.join(OUTPUT_PATH, exp_name)
+
+        if not DB_NAME == '':
+            exp_out_path = os.path.join(exp_out_path, DB_NAME)
+        if not SUBSET_NAME =='':
+            exp_out_path = os.path.join(exp_out_path, SUBSET_NAME)
+        
         if ENABLE_DOUBLE_CHECK==1 and os.path.exists(exp_out_path) and len(os.listdir(exp_out_path)) > 0:
             value = input('Expert %s already exists. Proceed with deleating previous info?[y/n]'%exp_name)
             if value=='y':
@@ -99,9 +117,25 @@ def check_arguments_and_init_paths(argv):
 
     for exp_name in EXPERTS_NAME:
         exp_out_path = os.path.join(OUTPUT_PATH, exp_name)
-        if os.path.exists(exp_out_path):
-            shutil.rmtree(exp_out_path)
-        os.mkdir(exp_out_path)
+        if DB_NAME=='':
+            if os.path.exists(exp_out_path):
+                shutil.rmtree(exp_out_path)
+            os.mkdir(exp_out_path)
+        else:
+            if not os.path.exists(exp_out_path):
+                os.mkdir(exp_out_path)
+            exp_out_path = os.path.join(exp_out_path, DB_NAME)
+            if SUBSET_NAME=='':
+                if os.path.exists(exp_out_path):
+                    shutil.rmtree(exp_out_path)
+                os.mkdir(exp_out_path)
+            else:
+                if not os.path.exists(exp_out_path):
+                    os.mkdir(exp_out_path)
+                exp_out_path = os.path.join(exp_out_path, SUBSET_NAME)
+                if os.path.exists(exp_out_path):
+                    shutil.rmtree(exp_out_path)
+                os.mkdir(exp_out_path)
 
     status = 1
     status_code = ''
@@ -154,11 +188,20 @@ def process_videos():
         vid_in_path = os.path.join(INPUT_PATH, video_name)
         frames, out_filenames = get_rgb_video_frames(vid_in_path)
 
+        n_frames = len(frames)
+        n_frames = min(5, n_frames)
+        frames = frames[0:n_frames]
+
         for exp_name in EXPERTS_NAME:
             expert = get_expert(exp_name)
             results = expert.apply_per_video(frames)
 
-            vid_out_path = os.path.join(OUTPUT_PATH, exp_name, video_name)
+            exp_out_path = os.path.join(OUTPUT_PATH, exp_name)
+            if not DB_NAME=='':
+                exp_out_path = os.path.join(exp_out_path, DB_NAME)
+            if not SUBSET_NAME=='':
+                exp_out_path = os.path.join(exp_out_path, SUBSET_NAME)
+            vid_out_path = os.path.join(exp_out_path, video_name)
             os.mkdir(vid_out_path)
             #for i in range(len(results)):
             #    np.save(os.path.join(vid_out_path, out_filenames[i]), results[i])
