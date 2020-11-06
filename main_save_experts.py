@@ -38,14 +38,14 @@ usage_str = 'usage: python main_save_experts.py input_path output_path enable_do
 #                           - should be one of the VALID_EXPERTS_NAME
 
 VALID_EXPERTS_NAME = ['of_fwd_raft', 'of_bwd_raft', 'of_fwd_liteflownet', 'of_bwd_liteflownet', 'sseg_fcn', 'sseg_deeplabv3', 'vmos_stm']
-INPUT_PATH = r'/tracking-vot/GOT-10k/train'
+INPUT_PATH = r'/tracking-vot/GOT-10k/val'
 OUTPUT_PATH = r'/experts-output'
 ENABLE_DOUBLE_CHECK = 1
 EXPERTS_NAME = []
 WORKING_H = 256
 WORKING_W = 256
 DB_NAME = 'GOT-10k'
-SUBSET_NAME = 'train'
+SUBSET_NAME = 'val'
 
 def check_arguments_and_init_paths(argv):
     global INPUT_PATH
@@ -105,7 +105,7 @@ def check_arguments_and_init_paths(argv):
             exp_out_path = os.path.join(exp_out_path, SUBSET_NAME)
         
         if ENABLE_DOUBLE_CHECK==1 and os.path.exists(exp_out_path) and len(os.listdir(exp_out_path)) > 0:
-            value = input('Expert %s already exists. Proceed with deleating previous info?[y/n]'%exp_name)
+            value = input('Expert %s already exists. Proceed with deleating previous info (%s)?[y/n]'%(exp_name, exp_out_path))
             if value=='y':
                 EXPERTS_NAME.append(exp_name)
         else:
