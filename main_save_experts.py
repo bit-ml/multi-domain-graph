@@ -159,9 +159,9 @@ def get_rgb_video_frames(vid_in_path):
 
 def get_expert(exp_name):
     if exp_name=='of_fwd_raft':
-        return experts.raft_of_expert.RaftTest('experts/raft_optical_flow/models/raft-kitti.pth', 1)
+        return experts.raft_of_expert.RaftTest(full_expert=True, fwd=1)
     elif exp_name=='of_bwd_raft':
-        return experts.raft_of_expert.RaftTest('experts/raft_optical_flow/models/raft-kitti.pth', 0)
+        return experts.raft_of_expert.RaftTest(full_expert=True, fwd=0)
     elif exp_name=='of_fwd_liteflownet':
         return experts.liteflownet_of_expert.LiteFlowNetTest('experts/liteflownet_optical_flow/models/liteflownet-default', 1)
     elif exp_name=='of_bwd_liteflownet':
