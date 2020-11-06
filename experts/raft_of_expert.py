@@ -36,7 +36,7 @@ class RaftTest:
             self.model.to(DEVICE)
             self.model.eval()
 
-            self.fwd = fwd
+        self.fwd = fwd
         
         self.domain_name = "optical_flow"
         self.n_maps = 2

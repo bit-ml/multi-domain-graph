@@ -163,9 +163,9 @@ def get_expert(exp_name):
     elif exp_name=='of_bwd_raft':
         return experts.raft_of_expert.RaftTest(full_expert=True, fwd=0)
     elif exp_name=='of_fwd_liteflownet':
-        return experts.liteflownet_of_expert.LiteFlowNetTest('experts/liteflownet_optical_flow/models/liteflownet-default', 1)
+        return experts.liteflownet_of_expert.LiteFlowNetTest(full_expert=True, fwd=1)
     elif exp_name=='of_bwd_liteflownet':
-        return experts.liteflownet_of_expert.LiteFlowNetTest('experts/liteflownet_optical_flow/models/liteflownet-default', 0)
+        return experts.liteflownet_of_expert.LiteFlowNetTest(full_expert=True, fwd=0)
     elif exp_name=='sseg_fcn':
         return experts.sseg_fcn_expert.FCNTest()
     elif exp_name=='sseg_deeplabv3':

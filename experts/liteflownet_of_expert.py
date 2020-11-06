@@ -7,10 +7,20 @@ import sys
 
 import experts.liteflownet_optical_flow.run
 
+LITE_FLOW_NET_MODEL_PATH = r'experts/liteflownet_optical_flow/models/liteflownet-default'
+
 class LiteFlowNetTest:
-    def __init__(self, model_path, fwd):
-        self.netNetwork = experts.liteflownet_optical_flow.run.Network(model_path).cuda().eval()
+    def __init__(self, full_expert=True, fwd=1):
+        if full_expert:
+            self.netNetwork = experts.liteflownet_optical_flow.run.Network(LITE_FLOW_NET_MODEL_PATH).cuda().eval()
+
         self.fwd = fwd
+        self.domain_name = "optical_flow"
+        self.n_maps = 2
+        if fwd:
+            self.str_id = 'of_fwd_liteflownet'
+        else:
+            self.str_id = 'of_bwd_liteflownet'
 
     def aux(self, img1, img2):
         tenFirst = torch.FloatTensor(numpy.ascontiguousarray(img1[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))
