@@ -6,11 +6,15 @@ from torchvision import models
 
 class DeepLabv3Test:
 
-    def __init__(self):
-        self.model = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=True)
-        self.model.cuda()
-        self.model.eval()
-
+    def __init__(self, full_expert=True):
+        if full_expert:
+            self.model = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=True)
+            self.model.cuda()
+            self.model.eval()
+        self.domain_name = "semantic_segmentation"
+        self.n_maps = 21
+        self.str_id = 'sseg_deeplabv3'
+        
     def apply(self, frame):
         # frame should be RGB 
         imagenet_mean =torch.tensor([0.485, 0.456, 0.406])

@@ -167,9 +167,9 @@ def get_expert(exp_name):
     elif exp_name=='of_bwd_liteflownet':
         return experts.liteflownet_of_expert.LiteFlowNetTest(full_expert=True, fwd=0)
     elif exp_name=='sseg_fcn':
-        return experts.sseg_fcn_expert.FCNTest()
+        return experts.sseg_fcn_expert.FCNTest(full_expert=True)
     elif exp_name=='sseg_deeplabv3':
-        return experts.sseg_deeplabv3_expert.DeepLabv3Test()
+        return experts.sseg_deeplabv3_expert.DeepLabv3Test(full_expert=True)
     elif exp_name=='vmos_stm':
         return experts.vmos_stm_expert.STMTest('experts/vmos_stm/STM_weights.pth', 0, 21) 
 
