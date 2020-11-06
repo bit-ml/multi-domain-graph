@@ -59,6 +59,8 @@ class Domain2DDataset(Dataset):
         # print(self.e1_output_path[0])
         # print(self.e2_output_path[0])
 
+        # TODO: precompute+save mean & std when buliding cache
+
     def __getitem__(self, index):
         # rgb_path = self.rgb_paths[index]
         # img = Image.open(rgb_path)

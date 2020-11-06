@@ -5,6 +5,7 @@ from experts.depth_expert import DepthModel
 from experts.edges_expert import EdgesModel
 from experts.halftone_expert import HalftoneModel
 from experts.normals_expert import SurfaceNormalsModel
+from experts.of_expert import OFModel
 from experts.raft_of_expert import RaftTest
 from experts.rgb_expert import RGBModel
 from experts.tracking1_expert import Tracking1Model
@@ -15,13 +16,14 @@ class Experts:
         # self.methods = [DepthModel(), EdgesModel(), HalftoneModel(), Tracking1Model(), SurfaceNormalsModel()]
         # self.methods = [SurfaceNormalsModel(), HalftoneModel()]
         self.methods = [
-            RGBModel(full_experts),
             DepthModel(full_experts),
             EdgesModel(full_experts),
             SurfaceNormalsModel(full_experts),
-            HalftoneModel(full_experts),
+            OFModel(full_experts),
+            RGBModel(full_experts),
+            # # HalftoneModel(full_experts),
             Tracking1Model(full_experts),
-            RaftTest(full_experts)
+            # # RaftTest(full_experts)
         ]
 
     def rgb_inference(self, rgb_frames):

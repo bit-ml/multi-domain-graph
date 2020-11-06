@@ -62,9 +62,16 @@ def drop_connections(space_graph):
         break
 
 
-def train_2hop_2Dtasks(space_graph):
+def train_2hop_2Dtasks(space_graph, epochs):
     # use bool: edge.ill_posed
-    pass
+    '''
+    Like train_1hop_2Dtasks, but use ensembles as GT:
+    '''
+    for net_idx, net in enumerate(space_graph.edges):
+        print("[net_idx %2d] Train with 2-hop supervision" % (net_idx), net)
+        net.train_from_2hops_ensemble(graph=space_graph,
+                                      epochs=epochs,
+                                      device=device)
 
 
 def train_1hop_2Dtasks(space_graph, epochs):
@@ -79,23 +86,30 @@ def main():
     from experts.rgb_expert import RGBModel
     from experts.tracking1_expert import Tracking1Model
 
+    # TODO: muta asta
     # all_experts_gen = Experts(full_experts=True)
     # generate_experts_output(all_experts_gen.methods)
     # # generate_experts_output([RGBModel(full_expert=True)])
     # generate_experts_output_with_time([Tracking1Model(full_expert=True)])
-
+    # 1. Build graph
     graph = build_space_graph(silent=False)
-    for i in range(10):
+
+    # 2. Train 1hop
+    train_1hop_2Dtasks(graph, epochs=60)
+
+    for i in range(1):
         print(("Train 1hop. Epoch:", i))
-        train_1hop_2Dtasks(graph, epochs=20)
+        train_1hop_2Dtasks(graph, epochs=1)
 
-    drop_connections(graph)
+        # # Drop ill-posed connections
+        # drop_connections(graph)
 
-    # for i in range(10):
-    #     print(("Train 2hop. Epoch:", i))
-    #     train_2hop_2Dtasks(graph)
+        # 3. Train 2hop
+        print(("Train 2hop. Epoch:", i))
+        train_2hop_2Dtasks(graph, epochs=3)
 
-    # drop_connections(graph)
+        # # Drop ill-posed connections
+        # drop_connections(graph)
 
 
 if __name__ == "__main__":
