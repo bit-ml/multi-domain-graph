@@ -21,14 +21,20 @@ import utils.visualize_vmos
 #                                           - if '-' is provided, we use OUTPUT_PATH's default value
 #    path3                  [a path / '-'] - videos orig path
 #                                           - if '-' is provided, we use VIDEOS_ORIG_PATH's default value
+#    db_name                dataset name; if '' it will be ignored
+#                                       - if '-' is provided, we use DB_NAME's default value
+#    subset_name            subset name; if '' it will be ignored
+#                                       - if '-' is provided, we use SUBSET_NAME's default value
 #    working_h              [nr>0 / 0] - desired image height
 #    working_w              [nr>0 / 0] - desired image width
 
-INPUT_PATH = r'/root/experts'
+INPUT_PATH = r'/experts-output/'
 OUTPUT_PATH = r'/root/experts_vis'
 VIDEOS_ORIG_PATH = r'/tracking-vot/GOT-10k/train'
 WORKING_H = 256
 WORKING_W = 256
+DB_NAME = 'GOT-10k'
+SUBSET_NAME = 'train'
 
 def check_arguments_and_init_paths(argv):
     global INPUT_PATH
@@ -36,6 +42,8 @@ def check_arguments_and_init_paths(argv):
     global VIDEOS_ORIG_PATH
     global WORKING_H
     global WORKING_W
+    global DB_NAME
+    global SUBSET_NAME
   
     if not argv[1]=='-':
         INPUT_PATH = argv[1]
@@ -43,10 +51,15 @@ def check_arguments_and_init_paths(argv):
         OUTPUT_PATH = argv[2]
     if not argv[3]== '-':
         VIDEOS_ORIG_PATH = argv[3]
-    if not argv[4]=='0':
-        WORKING_H = np.int32(argv[4])
-    if not argv[5]=='0':
-        WORKING_W = np.int32(argv[5])
+    if not argv[4]=='-':
+        DB_NAME = argv[4]
+    if not argv[5]=='-':
+        SUBSET_NAME = argv[5]
+
+    if not argv[6]=='0':
+        WORKING_H = np.int32(argv[6])
+    if not argv[7]=='0':
+        WORKING_W = np.int32(argv[7])
 
     if os.path.exists(OUTPUT_PATH):
         shutil.rmtree(OUTPUT_PATH)
@@ -72,12 +85,15 @@ def get_rgb_video_frames(vid_in_path):
     #filenames = os.listdir(vid_in_path)
     filepaths.sort()
     frames = []
+    out_filenames = []
     for filepath in filepaths:
         img = cv2.imread(filepath)
         img = cv2.resize(img, (WORKING_W, WORKING_H), cv2.INTER_CUBIC)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         frames.append(img)
-    return frames
+        base, tail = os.path.split(filepath)
+        out_filenames.append(tail.replace('.jpg', '.npy'))
+    return frames, out_filenames
 
 def build_display_img(frame, exp_results):
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
@@ -108,14 +124,25 @@ def visualize_experts():
     videos_name.sort()
 
     for video_name in videos_name:
-        frames = get_rgb_video_frames(os.path.join(VIDEOS_ORIG_PATH, video_name))
+        frames, out_filenames = get_rgb_video_frames(os.path.join(VIDEOS_ORIG_PATH, video_name))
         vid_out_path = os.path.join(OUTPUT_PATH, video_name)
         os.mkdir(vid_out_path)
 
         for frame_idx in range(len(frames)):
             exp_results = []
             for exp_name in experts_name:
-                exp_results.append(np.load(os.path.join(INPUT_PATH, exp_name, video_name, '%08d.npy'%frame_idx)))
+                exp_res_path = os.path.join(INPUT_PATH, exp_name)
+                if not DB_NAME=='':
+                    exp_res_path = os.path.join(exp_res_path, DB_NAME)
+                if not SUBSET_NAME=='':
+                    exp_res_path = os.path.join(exp_res_path, SUBSET_NAME)
+
+                exp_res_path = os.path.join(exp_res_path, video_name, '%08d.npy'%frame_idx)
+                if os.path.exists(exp_res_path):
+                    exp_results.append(np.load(os.path.join(INPUT_PATH, exp_name, video_name, '%08d.npy'%frame_idx)))
+                else:
+                    exp_results.append(np.zeros(1, frames[frame_idx].shape[0], frames[frame_idx].shape[1]))
+                    
             #import pdb 
             #pdb.set_trace()
             img = build_display_img(frames[frame_idx], exp_results)

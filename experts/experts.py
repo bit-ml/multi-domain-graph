@@ -7,6 +7,7 @@ from experts.halftone_expert import HalftoneModel
 from experts.normals_expert import SurfaceNormalsModel
 from experts.rgb_expert import RGBModel
 from experts.tracking1_expert import Tracking1Model
+from experts.raft_of_experts import RaftTest
 
 
 class Experts:
@@ -19,7 +20,8 @@ class Experts:
             EdgesModel(full_experts),
             SurfaceNormalsModel(full_experts),
             HalftoneModel(full_experts),
-            Tracking1Model(full_experts)
+            Tracking1Model(full_experts),
+            RaftTest(full_experts)
         ]
 
     def rgb_inference(self, rgb_frames):
