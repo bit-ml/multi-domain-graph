@@ -17,9 +17,9 @@ class Experts:
             RGBModel(full_experts),
             DepthModel(full_experts),
             EdgesModel(full_experts),
-            # SurfaceNormalsModel(full_experts),
-            # HalftoneModel(full_experts),
-            # Tracking1Model(full_experts)
+            SurfaceNormalsModel(full_experts),
+            HalftoneModel(full_experts),
+            Tracking1Model(full_experts)
         ]
 
     def rgb_inference(self, rgb_frames):
