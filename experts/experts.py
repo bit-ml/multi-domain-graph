@@ -5,9 +5,9 @@ from experts.depth_expert import DepthModel
 from experts.edges_expert import EdgesModel
 from experts.halftone_expert import HalftoneModel
 from experts.normals_expert import SurfaceNormalsModel
+from experts.raft_of_expert import RaftTest
 from experts.rgb_expert import RGBModel
 from experts.tracking1_expert import Tracking1Model
-from experts.raft_of_experts import RaftTest
 
 
 class Experts:
