@@ -53,7 +53,7 @@ class LiteFlowNetTest:
         else:
             return self.aux(img2, img1)
 
-    def apply_per_video(self, frames):   
+    def apply_expert(self, frames):   
         flows = []
         if self.fwd==1:
             prev_img = frames[0]

@@ -41,7 +41,7 @@ class FCNTest:
 
         return result
 
-    def apply_per_video(self, frames):
+    def apply_expert(self, frames):
         # frame should be RGB 
         imagenet_mean =torch.tensor([0.485, 0.456, 0.406])
         imagenet_std = torch.tensor([0.229, 0.224, 0.225])

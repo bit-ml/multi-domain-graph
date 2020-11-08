@@ -194,7 +194,7 @@ def process_videos():
 
         for exp_name in EXPERTS_NAME:
             expert = get_expert(exp_name)
-            results = expert.apply_per_video(frames)
+            results = expert.apply_expert(frames)
 
             exp_out_path = os.path.join(OUTPUT_PATH, exp_name)
             if not DB_NAME=='':

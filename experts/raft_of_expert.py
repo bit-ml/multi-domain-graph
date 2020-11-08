@@ -61,7 +61,7 @@ class RaftTest:
 
         return flow_up[0,:,:,:]
 
-    def apply_per_video(self, frames):
+    def apply_expert(self, frames):
         flows = []
         if self.fwd==1:
             prev_img = frames[0]
