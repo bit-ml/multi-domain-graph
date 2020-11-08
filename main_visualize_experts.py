@@ -28,13 +28,13 @@ import utils.visualize_vmos
 #    working_h              [nr>0 / 0] - desired image height
 #    working_w              [nr>0 / 0] - desired image width
 
-INPUT_PATH = r'/experts-output/'
+INPUT_PATH = r'/data/experts-output/'
 OUTPUT_PATH = r'/root/experts_vis'
-VIDEOS_ORIG_PATH = r'/tracking-vot/GOT-10k/train'
+VIDEOS_ORIG_PATH = r'/data/tracking-vot'
 WORKING_H = 256
 WORKING_W = 256
 DB_NAME = 'GOT-10k'
-SUBSET_NAME = 'train'
+SUBSET_NAME = 'val'
 
 def check_arguments_and_init_paths(argv):
     global INPUT_PATH
@@ -120,11 +120,11 @@ def visualize_experts():
     #pdb.set_trace()
     experts_name = os.listdir(INPUT_PATH)
     experts_name.sort()
-    videos_name = os.listdir(os.path.join(INPUT_PATH, experts_name[0]))
+    videos_name = os.listdir(os.path.join(INPUT_PATH, experts_name[0], DB_NAME, SUBSET_NAME))
     videos_name.sort()
 
     for video_name in videos_name:
-        frames, out_filenames = get_rgb_video_frames(os.path.join(VIDEOS_ORIG_PATH, video_name))
+        frames, out_filenames = get_rgb_video_frames(os.path.join(VIDEOS_ORIG_PATH, DB_NAME, SUBSET_NAME, video_name))
         vid_out_path = os.path.join(OUTPUT_PATH, video_name)
         os.mkdir(vid_out_path)
 
@@ -138,10 +138,12 @@ def visualize_experts():
                     exp_res_path = os.path.join(exp_res_path, SUBSET_NAME)
 
                 exp_res_path = os.path.join(exp_res_path, video_name, '%08d.npy'%frame_idx)
+                #import pdb 
+                #pdb.set_trace()
                 if os.path.exists(exp_res_path):
-                    exp_results.append(np.load(os.path.join(INPUT_PATH, exp_name, video_name, '%08d.npy'%frame_idx)))
+                    exp_results.append(np.load(exp_res_path))
                 else:
-                    exp_results.append(np.zeros(1, frames[frame_idx].shape[0], frames[frame_idx].shape[1]))
+                    exp_results.append(np.zeros((1, frames[frame_idx].shape[0], frames[frame_idx].shape[1])))
                     
             #import pdb 
             #pdb.set_trace()
