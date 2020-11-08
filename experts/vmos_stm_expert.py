@@ -63,7 +63,7 @@ def Run_video(Fs, Ms, num_frames, num_objects, model, Mem_every=None, Mem_number
     pred = np.argmax(Es[0].cpu().numpy(), axis=0).astype(np.uint8)
     return pred, Es
 
-class STMTest:
+class STMModel:
 
     def __init__(self, model_path, single_object, max_nr_classes):
 

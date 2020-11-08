@@ -167,19 +167,19 @@ def get_rgb_video_frames(vid_in_path):
 
 def get_expert(exp_name):
     if exp_name=='of_fwd_raft':
-        return experts.raft_of_expert.RaftTest(full_expert=True, fwd=1)
+        return experts.raft_of_expert.RaftModel(full_expert=True, fwd=1)
     elif exp_name=='of_bwd_raft':
-        return experts.raft_of_expert.RaftTest(full_expert=True, fwd=0)
+        return experts.raft_of_expert.RaftModel(full_expert=True, fwd=0)
     elif exp_name=='of_fwd_liteflownet':
-        return experts.liteflownet_of_expert.LiteFlowNetTest(full_expert=True, fwd=1)
+        return experts.liteflownet_of_expert.LiteFlowNetModel(full_expert=True, fwd=1)
     elif exp_name=='of_bwd_liteflownet':
-        return experts.liteflownet_of_expert.LiteFlowNetTest(full_expert=True, fwd=0)
+        return experts.liteflownet_of_expert.LiteFlowNetModel(full_expert=True, fwd=0)
     elif exp_name=='sseg_fcn':
-        return experts.sseg_fcn_expert.FCNTest(full_expert=True)
+        return experts.sseg_fcn_expert.FCNModel(full_expert=True)
     elif exp_name=='sseg_deeplabv3':
-        return experts.sseg_deeplabv3_expert.DeepLabv3Test(full_expert=True)
+        return experts.sseg_deeplabv3_expert.DeepLabv3Model(full_expert=True)
     elif exp_name=='vmos_stm':
-        return experts.vmos_stm_expert.STMTest('experts/vmos_stm/STM_weights.pth', 0, 21) 
+        return experts.vmos_stm_expert.STMModel('experts/vmos_stm/STM_weights.pth', 0, 21) 
     elif exp_name=='halftone_gray_basic':
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=0)
     elif exp_name=='halftone_rgb_basic':

@@ -13,7 +13,7 @@ DEVICE = 'cuda'
 
 RAFT_MODEL_PATH = r'experts/raft_optical_flow/models/raft-kitti.pth'
 
-class RaftTest:
+class RaftModel:
 
     def __init__(self, full_expert = True, fwd = 1):
         if full_expert:

@@ -4,7 +4,7 @@ import torch
 import torchvision
 from torchvision import models 
 
-class DeepLabv3Test:
+class DeepLabv3Model:
 
     def __init__(self, full_expert=True):
         if full_expert:

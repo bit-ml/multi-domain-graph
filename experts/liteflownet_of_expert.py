@@ -9,7 +9,7 @@ import experts.liteflownet_optical_flow.run
 
 LITE_FLOW_NET_MODEL_PATH = r'experts/liteflownet_optical_flow/models/liteflownet-default'
 
-class LiteFlowNetTest:
+class LiteFlowNetModel:
     def __init__(self, full_expert=True, fwd=1):
         if full_expert:
             self.netNetwork = experts.liteflownet_optical_flow.run.Network(LITE_FLOW_NET_MODEL_PATH).cuda().eval()
