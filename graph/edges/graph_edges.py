@@ -20,7 +20,7 @@ from tqdm import tqdm
 from utils.utils import DummySummaryWriter
 
 RGBS_PATH = "/data/tracking-vot/"
-EXPERTS_OUTPUT_PATH = "/data/experts/"
+EXPERTS_OUTPUT_PATH = "/data/experts-output/"
 
 DATASET_PATH = "GOT-10k/"
 TRAIN_PATH = "%s/train/" % (DATASET_PATH)
@@ -194,7 +194,7 @@ class Edge:
             self.writer = DummySummaryWriter()
         else:
             self.writer = SummaryWriter(
-                log_dir=f'runs/v2_2hops_%s_%s_%s' %
+                log_dir=f'runs/ema_sel_%s_%s_%s' %
                 (expert1.str_id, expert2.str_id, datetime.now()),
                 flush_secs=30)
 
@@ -215,6 +215,7 @@ class Edge:
                             bilinear=True).to(device)
 
     def init_loaders(self, bs, n_workers):
+
         experts = [self.expert1, self.expert2]
         train_ds = Domain2DDataset(RGBS_PATH, EXPERTS_OUTPUT_PATH, TRAIN_PATH,
                                    experts)
@@ -307,6 +308,7 @@ class Edge:
 
         return eval_l2_loss * 100, eval_l1_loss * 100
 
+    
     def eval_step(self, device):
         self.net.eval()
         eval_l2_loss = 0

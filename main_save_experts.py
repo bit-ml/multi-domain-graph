@@ -44,7 +44,7 @@ VALID_EXPERTS_NAME = [\
     'sseg_fcn', 
     'sseg_deeplabv3', 
     'vmos_stm', 
-    'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_cmyk_basic']
+    'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_cmyk_basic', 'halftone_rot_gray_basic']
 
 INPUT_PATH = r'/data/tracking-vot/GOT-10k/train'
 OUTPUT_PATH = r'/data/experts-output'
@@ -186,7 +186,8 @@ def get_expert(exp_name):
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=1)
     elif exp_name=='halftone_cmyk_basic':
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=2)
-
+    elif exp_name=='halftone_rot_gray_basic':
+        return experts.halftone_expert.HalftoneModel(full_expert=True, style=3)
 def process_videos():
     videos_list_path = os.path.join(INPUT_PATH, 'list.txt')
     file = open(videos_list_path, 'r')

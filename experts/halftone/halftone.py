@@ -63,6 +63,13 @@ class Halftone(object):
             cmyk = self.gcr(self.im, 50)
             dots = self.halftone(self.im, cmyk, sample, scale, angles, antialias)
             new_img = Image.merge("CMYK", dots).convert('CMYK')
+        elif self.style==3:
+            # grayscale + rot
+            angles = angles[1:2]
+            gray_im = self.im.convert("L")
+            dots = self.halftone(self.im, gray_im, sample, scale, angles, antialias)
+            new_img = dots[0]
+
 
         '''
         if style == "grayscale":
@@ -113,7 +120,7 @@ class Halftone(object):
         # Because drawing isn't aliased, so drawing big and scaling back down
         # is the only way to get antialiasing from PIL/Pillow.
         antialias_scale = 4
-
+       
         if antialias is True:
             scale = scale * antialias_scale
 
