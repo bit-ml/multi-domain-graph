@@ -63,6 +63,12 @@ class Halftone(object):
             cmyk = self.gcr(self.im, 50)
             dots = self.halftone(self.im, cmyk, sample, scale, angles, antialias)
             new_img = Image.merge("CMYK", dots).convert('CMYK')
+        elif self.style==3:
+            # grayscale + rot
+            angles = angles[1:2]
+            gray_im = self.im.convert("L")
+            dots = self.halftone(self.im, gray_im, sample, scale, angles, antialias)
+            new_img = dots[0]
 
         '''
         if style == "grayscale":
