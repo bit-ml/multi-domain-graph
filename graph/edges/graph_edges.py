@@ -167,7 +167,7 @@ def generate_experts_output_with_time(experts):
 
 
 class Edge:
-    def __init__(self, expert1, expert2, device, silent):
+    def __init__(self, config, expert1, expert2, device, silent):
         super(Edge, self).__init__()
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=40, n_workers=4)
@@ -189,12 +189,19 @@ class Edge:
 
         self.global_step = 0
         self.ill_posed = False
+        
+        self.models_path = os.path.join(config.get('Save Edge Models', 'models_out_path'), config.get('Run id', 'datetime'))
+        if not self.models_path=='':
+            self.models_path = os.path.join(self.models_path, '%s_%s'%(expert1.str_id, expert2.str_id))
+            if not os.path.exists(self.models_path):
+                os.makedirs(self.models_path)
+            self.save_epochs_distance = config.getint('Save Edge Models', 'epochs_distance')
 
         if silent:
             self.writer = DummySummaryWriter()
         else:
             self.writer = SummaryWriter(
-                log_dir=f'runs/v2_2hops_%s_%s_%s' %
+                log_dir=f'runs/ema_save_models_%s_%s_%s' %
                 (expert1.str_id, expert2.str_id, datetime.now()),
                 flush_secs=30)
 
@@ -357,6 +364,10 @@ class Edge:
                                    self.global_step)
             self.writer.add_scalar('Train/L1_Loss', train_l1_loss,
                                    self.global_step)
+            
+            if (not self.models_path=='') and (epoch % self.save_epochs_distance) == 0:
+                path = os.path.join(self.models_path, 'epoch_%05d.pth'%(epoch))
+                torch.save(self.net.state_dict(), path)
 
             val_l2_loss, val_l1_loss = self.eval_step(device)
             self.writer.add_scalar('Valid/L2_Loss', val_l2_loss,

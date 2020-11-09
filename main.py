@@ -1,18 +1,21 @@
+import sys
 import numpy as np
 import torch
 from scipy.stats import pearsonr
+from datetime import datetime
 
 from experts.experts import Experts
 from graph.edges.graph_edges import (generate_experts_output,
                                      generate_experts_output_with_time)
 from graph.graph import MultiDomainGraph
-
+from datetime import datetime
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+import configparser
 
-def build_space_graph(silent):
+def build_space_graph(config, silent):
     all_experts = Experts(full_experts=False)
-    md_graph = MultiDomainGraph(all_experts, device, silent=silent)
+    md_graph = MultiDomainGraph(config, all_experts, device, silent=silent)
     return md_graph
 
 
@@ -81,8 +84,11 @@ def train_1hop_2Dtasks(space_graph, epochs):
         net.train(epochs=epochs, device=device)
         # break
 
-
-def main():
+def main(argv):
+    config = configparser.ConfigParser()
+    config.read(argv[1])
+    config.set('Run id', 'datetime', str(datetime.now()))
+    
     from experts.rgb_expert import RGBModel
     from experts.tracking1_expert import Tracking1Model
 
@@ -92,11 +98,12 @@ def main():
     # # generate_experts_output([RGBModel(full_expert=True)])
     # generate_experts_output_with_time([Tracking1Model(full_expert=True)])
     # 1. Build graph
-    graph = build_space_graph(silent=False)
-
+   
+    graph = build_space_graph(config, silent=False)
+   
     # 2. Train 1hop
-    train_1hop_2Dtasks(graph, epochs=60)
-
+    train_1hop_2Dtasks(graph, epochs=config.getint('Edge Models', 'n_epochs'))
+    '''
     for i in range(1):
         print(("Train 1hop. Epoch:", i))
         train_1hop_2Dtasks(graph, epochs=1)
@@ -110,7 +117,7 @@ def main():
 
         # # Drop ill-posed connections
         # drop_connections(graph)
-
+    '''
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)
