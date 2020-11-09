@@ -24,9 +24,6 @@ class HalftoneModel():
         elif style==2:
             self.n_maps = 4
             self.str_id = "halftone_cmyk_basic"
-        elif style==3:
-            self.n_maps = 1
-            self.str_id = "halftone_rot_gray_basic"
         
     def apply_expert(self, rgb_frames):
         halftone_maps = []
@@ -54,10 +51,9 @@ class HalftoneModel():
 
     def apply_expert_one_frame(self, rgb_frame):
         resized_rgb_frame = rgb_frame.resize((W, H))
-       
         halftone_map = Halftone(resized_rgb_frame, self.style).make()
-
-        if self.style==0 or self.style==3:
+       
+        if self.style==0:
             halftone_map = np.array(halftone_map)[None,:,:]/255.
         else:
             halftone_map = np.array(halftone_map).transpose(2, 0, 1)/255.

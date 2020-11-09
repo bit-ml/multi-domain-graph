@@ -26,21 +26,19 @@ def ensemble_vs_edge(metrics, edge_idx):
     is_outlier = std > 0.01
     print("[Edge_idx %d] std %.2f" % (edge_idx, std))
 
-    '''
     # v2, with pearson
     r_corr, p_value = pearsonr(ensemble_values, diff_array)
     is_outlier = abs(r_corr) < 0.5
     print("[Edge_idx %d] r_corr %.2f" % (edge_idx, r_corr))
-    '''
+
     return is_outlier
 
 
 def evaluate_all_edges(ending_edges):
     metrics = []
     for edge in ending_edges:
-        if not edge.ill_posed:
-            edge_l2_loss, edge_l1_loss = edge.eval_detailed(device)
-            metrics.append(np.array(edge_l1_loss))
+        edge_l2_loss, edge_l1_loss = edge.eval_detailed(device)
+        metrics.append(np.array(edge_l1_loss))
 
     return np.array(metrics)
 
@@ -53,20 +51,15 @@ def drop_connections(space_graph):
         for edge in space_graph.edges:
             if edge.expert2.str_id == expert.str_id:
                 ending_edges.append(edge)
-      
+
         pred_metrics_res = evaluate_all_edges(ending_edges)
-        print('Expert: %s - incomming edges avg perf: %20.10f'%(expert.str_id, np.mean(np.mean(pred_metrics_res, 1),0)))
-      
+
         # ensembles vs single model
         for edge_idx, edge in enumerate(ending_edges):
             is_outlier = ensemble_vs_edge(pred_metrics_res, edge_idx)
             print("Is edge %s outlier?" % str(edge), is_outlier)
             edge.ill_posed = is_outlier
-
-        after_pred_metrics_res = evaluate_all_edges(ending_edges)
-        print('Expert: %s - after selection incomming edges avg perf: %20.10f'%(expert.str_id, np.mean(np.mean(pred_metrics_res, 1),0)))
-
-        #break
+        break
 
 
 def train_2hop_2Dtasks(space_graph, epochs):
@@ -102,13 +95,8 @@ def main():
     graph = build_space_graph(silent=False)
 
     # 2. Train 1hop
-    train_1hop_2Dtasks(graph, epochs=10)
+    train_1hop_2Dtasks(graph, epochs=60)
 
-    import pdb 
-    pdb.set_trace()
-    drop_connections(graph) 
-
-    '''
     for i in range(1):
         print(("Train 1hop. Epoch:", i))
         train_1hop_2Dtasks(graph, epochs=1)
@@ -122,7 +110,7 @@ def main():
 
         # # Drop ill-posed connections
         # drop_connections(graph)
-    '''
+
 
 if __name__ == "__main__":
     main()
