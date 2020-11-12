@@ -21,3 +21,7 @@ Tracking - PrDIMP-18/50
 
 Video Multi Object Segmentation - VMOS: STM 
 - https://www.dropbox.com/s/mtfxdr93xc3q55i/STM_weights.pth?dl=1
+
+
+Saliency Object Segmentation - EGNet
+- https://drive.google.com/file/d/17Ffc6V5EiujtcFKupsJXhtlQ3cLK5OGp/view
