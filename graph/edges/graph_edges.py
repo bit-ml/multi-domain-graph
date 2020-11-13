@@ -7,170 +7,27 @@ from datetime import datetime
 import numpy as np
 import torch
 from graph.edges.dataset2d import Domain2DDataset
-from graph.edges.unet.unet_model import UNetGood, UNetMedium, UNetSmall
-from PIL import Image
+from graph.edges.unet.unet_model import UNetGood
 from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from torchsummary import summary
-# from torchvision import transforms
-from tqdm import tqdm
-from utils.utils import DummySummaryWriter
-
-RGBS_PATH = "/data/tracking-vot/"
-EXPERTS_OUTPUT_PATH = "/data/experts/"
-
-DATASET_PATH = "GOT-10k/"
-TRAIN_PATH = "%s/train/" % (DATASET_PATH)
-VALID_PATH = "%s/val/" % (DATASET_PATH)
-
-no_generated = 1000
-EPSILON = 1e-8
-
-
-def img_for_plot(img):
-    '''
-    img shape NCHW, ex: torch.Size([3, 1, 256, 256])
-    '''
-    n, c, _, _ = img.shape
-    img_view = img.view(n, c, -1)
-    min_img = img_view.min(axis=2)[0][:, :, None, None]
-    max_img = img_view.max(axis=2)[0][:, :, None, None]
-
-    return (img - min_img) / (max_img - min_img)
-    # return transforms.Normalize(mean=mean, std=std)(img)
-
-
-# def input_normaliz(img):
-#     '''
-#     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
-#     '''
-#     n, c, _, _ = img.shape
-#     img_view = img.view(n, c, -1)
-#     mean = img_view.mean(axis=2)[:, :, None, None]
-#     std = img_view.std(axis=2)[:, :, None, None]
-#     return (img - mean) / (std + EPSILON)
-
-
-def generate_experts_output(experts):
-    pattern = "%s/*/*00001.jpg"  # train/val:
-    # pattern = "%s/*/*333.jpg"  # train/val:
-    # pattern = "%s/*/*0050.jpg"  # train/val:
-    # pattern = "%s/*/*0111.jpg"  # train/val:
-    train_dir = "%s/%s" % (RGBS_PATH, TRAIN_PATH)
-    valid_dir = "%s/%s" % (RGBS_PATH, VALID_PATH)
-    for rgbs_dir_path in [train_dir, valid_dir]:
-        count = 0
-        rgb_paths = sorted(glob.glob(pattern % rgbs_dir_path))
-        for rgb_path in tqdm(rgb_paths):
-            img = Image.open(rgb_path)
-            for expert in experts:
-                fname = rgb_path.replace(
-                    "/data/tracking-vot/",
-                    "%s/%s/" % (EXPERTS_OUTPUT_PATH, expert.str_id)).replace(
-                        ".jpg", ".npy")
-                save_folder = os.path.dirname(fname)
-                if not os.path.exists(save_folder):
-                    pathlib.Path(save_folder).mkdir(parents=True,
-                                                    exist_ok=True)
-                if not os.path.exists(fname):
-                    # e_out shape: expert.n_maps x 256 x 256
-                    e_out = expert.apply_expert_one_frame(img)
-                    np.save(fname, e_out)
-
-                count += 1
-            if count > no_generated * len(experts):
-                break
-        print("Done:", rgbs_dir_path, "pattern:", pattern, "no files",
-              "rgb_paths:", len(rgb_paths))
-
-
-def generate_experts_output_with_time(experts):
-    ends_with = "0001.jpg"  # train/val:
-    # ends_with = "1333.jpg"  # train/val:
-    # ends_with = "0333.jpg"  # train/val:
-    # ends_with = "0050.jpg"  # train/val:
-    # ends_with = "0111.jpg"  # train/val:
-    train_dir = "%s/%s" % (RGBS_PATH, TRAIN_PATH)
-    valid_dir = "%s/%s" % (RGBS_PATH, VALID_PATH)
-    for rgbs_dir_path in [train_dir, valid_dir]:
-        all_dirs = sorted(os.listdir(rgbs_dir_path))
-        count = 0
-
-        for crt_video_dir in tqdm(all_dirs):
-            if len(
-                    glob.glob("%s/%s/*%s" %
-                              (rgbs_dir_path, crt_video_dir, ends_with))) == 0:
-                continue
-
-            # skip already generated outputs:
-            already_gen = True
-            for expert in experts:
-                pattern = "%s/%s/*%s" % (rgbs_dir_path, crt_video_dir,
-                                         ends_with)
-                fpaths = glob.glob(pattern)
-                for path in fpaths:
-                    path = path.replace(
-                        "/data/tracking-vot/",
-                        "%s/%s/" % (EXPERTS_OUTPUT_PATH, expert.str_id))
-
-                    npy_path = path.replace(".jpg", ".npy")
-                    if not os.path.exists(npy_path):
-                        already_gen = False
-            if already_gen:
-                count += 1
-                continue
-
-            all_imgs = sorted(
-                glob.glob("%s/%s/*.jpg" % (rgbs_dir_path, crt_video_dir)))
-            rgb_frames = []
-            for rgb_path in all_imgs:
-                img = Image.open(rgb_path)
-                rgb_frames.append(img)
-
-                # needs clear pattern, without *
-                if rgb_path.endswith(ends_with):
-                    break
-
-            for expert in experts:
-                fname = rgb_path.replace(
-                    "/data/tracking-vot/",
-                    "%s/%s/" % (EXPERTS_OUTPUT_PATH, expert.str_id)).replace(
-                        ".jpg", ".npy")
-                save_folder = os.path.dirname(fname)
-                if not os.path.exists(save_folder):
-                    pathlib.Path(save_folder).mkdir(parents=True,
-                                                    exist_ok=True)
-                if not os.path.exists(fname):
-                    # doar de tracking?!! (to change)
-                    with open(
-                            "%s/%s/groundtruth.txt" %
-                        (rgbs_dir_path, crt_video_dir), "r") as fd:
-                        start_bbox_str = fd.readline()
-                        start_bbox = [
-                            float(x) for x in start_bbox_str.replace(
-                                "\n", "").split(",")
-                        ]
-
-                    # e_out shape: expert.n_maps x 256 x 256
-                    e_out = expert.apply_expert_for_last_map(
-                        rgb_frames, start_bbox)
-
-                    np.save(fname, e_out)
-                count += 1
-
-            if count > no_generated * len(experts):
-                break
-        print("Done:", rgbs_dir_path, "ends_with:", ends_with)
+from utils import utils
+from utils.utils import img_for_plot
 
 
 class Edge:
-    def __init__(self, config, expert1, expert2, device, silent):
+    def __init__(self, config, expert1, expert2, device, rnd_sampler, silent,
+                 valid_shuffle):
         super(Edge, self).__init__()
+        self.config = config
+        self.silent = silent
+
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=40, n_workers=4)
+        self.init_loaders(bs=30,
+                          n_workers=4,
+                          rnd_sampler=rnd_sampler,
+                          valid_shuffle=valid_shuffle)
 
         self.lr = 5e-4
         self.optimizer = AdamW(self.net.parameters(),
@@ -189,29 +46,25 @@ class Edge:
 
         self.global_step = 0
         self.ill_posed = False
-        
-        self.models_path = os.path.join(config.get('Save Edge Models', 'models_out_path'), config.get('Run id', 'datetime'))
-        if not self.models_path=='':
-            self.models_path = os.path.join(self.models_path, '%s_%s'%(expert1.str_id, expert2.str_id))
-            if not os.path.exists(self.models_path):
-                os.makedirs(self.models_path)
-            self.save_epochs_distance = config.getint('Save Edge Models', 'epochs_distance')
 
-        if silent:
-            self.writer = DummySummaryWriter()
-        else:
-            self.writer = SummaryWriter(
-                log_dir=f'runs/ema_save_models_%s_%s_%s' %
-                (expert1.str_id, expert2.str_id, datetime.now()),
-                flush_secs=30)
+        self.load_model_dir = os.path.join(
+            config.get('Edge Models', 'load_path'),
+            '%s_%s' % (expert1.str_id, expert2.str_id))
 
-        trainable_params = sum(p.numel() for p in self.net.parameters()
-                               if p.requires_grad)
-        total_params = sum(p.numel() for p in self.net.parameters())
+        if config.getboolean('Edge Models', 'save_models'):
+            self.save_model_dir = os.path.join(
+                config.get('Edge Models', 'save_path'),
+                config.get('Run id', 'datetime'),
+                '%s_%s' % (expert1.str_id, expert2.str_id))
+            if not os.path.exists(self.save_model_dir):
+                os.makedirs(self.save_model_dir)
 
-        self.writer.add_text("trainable_params", str(trainable_params))
-        self.writer.add_text("total_params", str(total_params))
-        self.writer.add_text("net class", str(self.net.__class__))
+            self.save_epochs_distance = config.getint('Edge Models',
+                                                      'save_epochs_distance')
+
+        # trainable_params = sum(p.numel() for p in self.net.parameters()
+        #                        if p.requires_grad)
+        # total_params = sum(p.numel() for p in self.net.parameters())
 
     def init_edge(self, expert1, expert2, device):
         self.expert1 = expert1
@@ -221,7 +74,12 @@ class Edge:
                             n_classes=self.expert2.n_maps,
                             bilinear=True).to(device)
 
-    def init_loaders(self, bs, n_workers):
+    def init_loaders(self, bs, n_workers, rnd_sampler, valid_shuffle):
+        RGBS_PATH = self.config.get('Paths', 'RGBS_PATH')
+        EXPERTS_OUTPUT_PATH = self.config.get('Paths', 'EXPERTS_OUTPUT_PATH')
+        TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
+        VALID_PATH = self.config.get('Paths', 'VALID_PATH')
+
         experts = [self.expert1, self.expert2]
         train_ds = Domain2DDataset(RGBS_PATH, EXPERTS_OUTPUT_PATH, TRAIN_PATH,
                                    experts)
@@ -232,12 +90,27 @@ class Edge:
                                        batch_size=bs,
                                        shuffle=True,
                                        num_workers=n_workers)
-        self.valid_loader = DataLoader(valid_ds,
-                                       batch_size=bs,
-                                       shuffle=False,
-                                       num_workers=n_workers)
+        self.valid_loader = DataLoader(
+            valid_ds,
+            batch_size=bs,
+            shuffle=valid_shuffle,
+            # sampler=rnd_sampler,
+            num_workers=n_workers)
 
-    def train_step(self, device):
+    def save_model(self, epoch):
+        if not self.config.getboolean('Edge Models', 'save_models'):
+            return
+
+        if epoch % self.save_epochs_distance == 0:
+            path = os.path.join(self.save_model_dir, 'epoch_%05d.pth' % epoch)
+            torch.save(self.net.state_dict(), path)
+            print("Model saved at %s" % path)
+
+    def __str__(self):
+        return '[%s To: %s]' % (self.expert1.domain_name,
+                                self.expert2.domain_name)
+
+    def train_step(self, device, writer, wtag):
         self.net.train()
 
         train_l1_loss = 0
@@ -262,59 +135,22 @@ class Edge:
             # Optimizer
             self.optimizer.zero_grad()
             l2_loss.backward()
-            # nn.utils.clip_grad_value_(self.net.parameters(), 0.1)
             self.optimizer.step()
 
-        tag = 'Train/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
-        if domain1.shape[1] == 2:
-            domain1 = domain1[:, 0:1]
-        self.writer.add_images('%s/Input' % (tag), img_for_plot(domain1[:3]),
-                               self.global_step)
+        writer.add_images('Train_%s/Input' % (wtag), img_for_plot(domain1[:3]),
+                          self.global_step)
 
-        if domain2_gt.shape[1] == 2:
-            domain2_gt = domain2_gt[:, 0:1]
-        self.writer.add_images('%s/GT' % (tag), img_for_plot(domain2_gt[:3]),
-                               self.global_step)
+        writer.add_images('Train_%s/GT_EXPERT' % (wtag),
+                          img_for_plot(domain2_gt[:3]), self.global_step)
 
-        if domain2_pred.shape[1] == 2:
-            domain2_pred = domain2_pred[:, 0:1]
-        self.writer.add_images('%s/Output' % (tag),
-                               img_for_plot(domain2_pred[:3]),
-                               self.global_step)
+        writer.add_images('Train_%s/Output' % (wtag),
+                          img_for_plot(domain2_pred[:3]), self.global_step)
+
         return train_l2_loss / len(
             self.train_loader) * 100, train_l1_loss / len(
                 self.train_loader) * 100
 
-    def __str__(self):
-        return 'From: %s To: %s' % (self.expert1.domain_name,
-                                    self.expert2.domain_name)
-
-    def eval_detailed(self, device):
-        self.net.eval()
-        eval_l2_loss = []
-        eval_l1_loss = []
-
-        for batch in self.valid_loader:
-            domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_gt.shape[1] == self.net.n_classes
-
-            domain1 = domain1.to(device=device, dtype=torch.float32)
-            domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
-
-            with torch.no_grad():
-                domain2_pred = self.net(domain1)
-            loss_l2 = self.l2_detailed_eval(domain2_pred, domain2_gt)
-            loss_l1 = self.l1_detailed_eval(domain2_pred, domain2_gt)
-
-            eval_l2_loss += loss_l2.view(domain2_pred.shape[0],
-                                         -1).mean(axis=1).data.cpu()
-            eval_l1_loss += loss_l1.view(domain2_pred.shape[0],
-                                         -1).mean(axis=1).data.cpu()
-
-        return eval_l2_loss * 100, eval_l1_loss * 100
-
-    def eval_step(self, device):
+    def eval_step(self, device, writer, wtag):
         self.net.eval()
         eval_l2_loss = 0
         eval_l1_loss = 0
@@ -335,149 +171,54 @@ class Edge:
             eval_l2_loss += l2_loss.item()
             eval_l1_loss += l1_loss.item()
 
-        tag = 'Valid/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
+        writer.add_images('Valid_%s/Input' % wtag, img_for_plot(domain1[:3]),
+                          self.global_step)
 
-        if domain1.shape[1] == 2:
-            domain1 = domain1[:, 0:1]
-        self.writer.add_images('%s/Input' % tag, img_for_plot(domain1[:3]),
-                               self.global_step)
-        if domain2_gt.shape[1] == 2:
-            domain2_gt = domain2_gt[:, 0:1]
+        writer.add_images('Valid_%s/GT_EXPERT' % wtag,
+                          img_for_plot(domain2_gt[:3]), self.global_step)
 
-        self.writer.add_images('%s/GT' % tag, img_for_plot(domain2_gt[:3]),
-                               self.global_step)
-
-        if domain2_pred.shape[1] == 2:
-            domain2_pred = domain2_pred[:, 0:1]
-
-        self.writer.add_images('%s/Output' % tag,
-                               img_for_plot(domain2_pred[:3]),
-                               self.global_step)
+        writer.add_images('Valid_%s/Output' % wtag,
+                          img_for_plot(domain2_pred[:3]), self.global_step)
 
         return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
             self.valid_loader) * 100
 
-    def train(self, epochs, device):
+    def train(self, epochs, device, writer):
+        wtag = '%s_%s' % (self.expert1.str_id, self.expert2.str_id)
         for epoch in range(epochs):
-            train_l2_loss, train_l1_loss = self.train_step(device)
-            self.writer.add_scalar('Train/L2_Loss', train_l2_loss,
-                                   self.global_step)
-            self.writer.add_scalar('Train/L1_Loss', train_l1_loss,
-                                   self.global_step)
-            
-            if (not self.models_path=='') and (epoch % self.save_epochs_distance) == 0:
-                path = os.path.join(self.models_path, 'epoch_%05d.pth'%(epoch))
-                torch.save(self.net.state_dict(), path)
+            # 1. Train
+            train_l2_loss, train_l1_loss = self.train_step(
+                device, writer, wtag)
+            writer.add_scalar("Train_%s/L2_Loss" % wtag, train_l2_loss,
+                              self.global_step)
+            writer.add_scalar('Train_%s/L1_Loss' % wtag, train_l1_loss,
+                              self.global_step)
 
-            val_l2_loss, val_l1_loss = self.eval_step(device)
-            self.writer.add_scalar('Valid/L2_Loss', val_l2_loss,
-                                   self.global_step)
-            self.writer.add_scalar('Valid/L1_Loss', val_l1_loss,
-                                   self.global_step)
+            # Save model
+            self.save_model(epoch)
+
+            # 2. Evaluate
+            val_l2_loss, val_l1_loss = self.eval_step(device, writer, wtag)
+            writer.add_scalar('Valid_%s/L2_Loss' % wtag, val_l2_loss,
+                              self.global_step)
+            writer.add_scalar('Valid_%s/L1_Loss' % wtag, val_l1_loss,
+                              self.global_step)
 
             # Scheduler
             self.scheduler.step(val_l2_loss)
-            self.writer.add_scalar('Train/LR',
-                                   self.optimizer.param_groups[0]['lr'],
-                                   self.global_step)
-
-            # Histograms
-            # if global_step % (n_train // (10 * batch_size)) == 0:
-            #     for tag, value in net.named_parameters():
-            #         tag = tag.replace('.', '/')
-            #         writer.add_histogram('weights/' + tag,
-            #                              value.data.cpu().numpy(),
-            #                              global_step)
-            #         writer.add_histogram('grads/' + tag,
-            #                              value.grad.data.cpu().numpy(),
-            #                              global_step)
+            writer.add_scalar('Train_%s/LR' % wtag,
+                              self.optimizer.param_groups[0]['lr'],
+                              self.global_step)
 
             self.global_step += 1
 
-        # if save_cp:
-        #     try:
-        #         os.mkdir(dir_checkpoint)
-        #         logging.info('Created checkpoint directory')
-        #     except OSError:
-        #         pass
-        #     torch.save(net.state_dict(),
-        #                dir_checkpoint + f'CP_epoch{epoch + 1}.pth')
-        #     logging.info(f'Checkpoint {epoch + 1} saved !')
+        # Save last epoch
+        self.save_model(epoch + 1)
 
-    # self.writer.close()
-
-    ####### [2hop ensembles] Start #########
-    def train_from_2hops_step(self, device, edges_2hop):
-        self.net.train()
-
-        train_l1_loss = 0
-        train_l1_loss_ensemble = 0
-        train_l2_loss = 0
-
-        for batch in self.train_loader:
-            domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_gt.shape[1] == self.net.n_classes
-
-            domain1 = domain1.to(device=device, dtype=torch.float32)
-            domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
-
-            # 1hop = direct prediction
-            domain2_pred = self.net(domain1)
-
-            # pseudo-gt = average over all 2hop predictions
-            domain2_pseudo_gt = torch.zeros_like(domain2_gt)
-            for edge1, edge2 in edges_2hop:
-                domain2_pseudo_gt += edge2.net(edge1.net(domain1))
-            domain2_pseudo_gt /= len(edges_2hop)
-
-            l2_loss = self.l2(domain2_pred, domain2_pseudo_gt)
-            train_l2_loss += l2_loss.item()
-
-            with torch.no_grad():
-                train_l1_loss_ensemble += self.l1(domain2_pseudo_gt,
-                                                  domain2_gt).item()
-                train_l1_loss += self.l1(domain2_pred, domain2_gt).item()
-                # print("-----train_loss", train_loss, domain2_pred.shape)
-
-            # Optimizer
-            self.optimizer.zero_grad()
-            l2_loss.backward()
-            # nn.utils.clip_grad_value_(self.net.parameters(), 0.1)
-            self.optimizer.step()
-
-        tag = 'Train_2hop/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
-        if domain1.shape[1] == 2:
-            domain1 = domain1[:, 0:1]
-        self.writer.add_images('%s/Input' % (tag), img_for_plot(domain1[:3]),
-                               self.global_step)
-
-        if domain2_gt.shape[1] == 2:
-            domain2_gt = domain2_gt[:, 0:1]
-        self.writer.add_images('%s/GT' % (tag), img_for_plot(domain2_gt[:3]),
-                               self.global_step)
-
-        if domain2_pseudo_gt.shape[1] == 2:
-            domain2_pseudo_gt = domain2_pseudo_gt[:, 0:1]
-        self.writer.add_images('%s/Ensemble-GT' % (tag),
-                               img_for_plot(domain2_pseudo_gt[:3]),
-                               self.global_step)
-
-        if domain2_pred.shape[1] == 2:
-            domain2_pred = domain2_pred[:, 0:1]
-        self.writer.add_images('%s/Output' % (tag),
-                               img_for_plot(domain2_pred[:3]),
-                               self.global_step)
-        return train_l2_loss / len(
-            self.train_loader) * 100, train_l1_loss / len(
-                self.train_loader) * 100, train_l1_loss_ensemble / len(
-                    self.train_loader) * 100
-
-    def eval_from_2hops_step(self, device, edges_2hop):
+    def eval_detailed(self, device):
         self.net.eval()
-        eval_l2_loss = 0
-        eval_l1_loss = 0
-        eval_l1_loss_ensemble = 0
+        eval_l2_loss = []
+        eval_l1_loss = []
 
         for batch in self.valid_loader:
             domain1, domain2_gt = batch
@@ -488,86 +229,290 @@ class Edge:
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
 
             with torch.no_grad():
+                domain2_pred = self.net(domain1)
+            loss_l2 = self.l2_detailed_eval(domain2_pred, domain2_gt)
+            loss_l1 = self.l1_detailed_eval(domain2_pred, domain2_gt)
+
+            eval_l2_loss += loss_l2.view(domain2_pred.shape[0],
+                                         -1).mean(axis=1).data.cpu() * 100.
+            eval_l1_loss += loss_l1.view(domain2_pred.shape[0],
+                                         -1).mean(axis=1).data.cpu() * 100.
+
+        return eval_l2_loss, eval_l1_loss
+
+    ################ [1Hop Ensembles] ##################
+    def eval_1hop_ensemble(edges_1hop, save_idxes, device, writer):
+        l1_ensemble1hop = 0
+        valid_loaders = []
+        l1_per_edge = []
+
+        wtag = "to_%s" % edges_1hop[0].expert2.str_id
+
+        for edge in edges_1hop:
+            valid_loaders.append(iter(edge.valid_loader))
+            l1_per_edge.append(0)
+
+        num_batches = len(valid_loaders[0])
+        for idx_batch in range(num_batches):
+            domain2_1hop_ens_list = []
+
+            for idx_edge, data_edge in enumerate(zip(edges_1hop,
+                                                     valid_loaders)):
+                edge, valid_loader = data_edge
+                domain1, domain2_gt = next(valid_loader)
+
+                assert domain1.shape[1] == edge.net.n_channels
+                assert domain2_gt.shape[1] == edge.net.n_classes
+
+                domain1 = domain1.to(device=device, dtype=torch.float32)
+                domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+
+                with torch.no_grad():
+                    # Ensemble1Hop: 1hop preds
+                    one_hop_pred = edge.net(domain1)
+                    domain2_1hop_ens_list.append(
+                        one_hop_pred.clone().data.cpu().numpy())
+
+                if idx_batch == len(valid_loader) - 1:
+                    if save_idxes is None:
+                        save_idxes = np.random.choice(domain1.shape[0],
+                                                      size=(3),
+                                                      replace=False)
+                    # Show last batch edges
+                    writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
+                                      img_for_plot(one_hop_pred[save_idxes]),
+                                      0)
+                l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
+                                                 domain2_gt).item()
+
+            domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
+                device=device)
+            l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
+
+        # Show Ensemble
+        writer.add_images('%s/ENSEMBLE' % (wtag),
+                          img_for_plot(domain2_1hop_ens[save_idxes]), 0)
+        writer.add_images('%s/EXPERT' % (wtag),
+                          img_for_plot(domain2_gt[save_idxes]), 0)
+        l1_ensemble1hop = np.array(l1_ensemble1hop) / num_batches
+        writer.add_scalar('Valid_1hop_%s/L1_Loss_ensemble' % (wtag),
+                          l1_ensemble1hop, 0)
+
+        print("Loss %19s: %.2f" % ("Ensemble1Hop", l1_ensemble1hop))
+
+        # Show Individual Losses
+        l1_per_edge = np.array(l1_per_edge) / num_batches
+        for idx_edge, edge in enumerate(edges_1hop):
+            writer.add_scalar(
+                'Valid_1hop_%s/L1_Loss_%s' % (wtag, edge.expert1.str_id),
+                l1_per_edge[idx_edge], 0)
+            print("Loss %19s: %.2f" %
+                  (edge.expert1.str_id, l1_per_edge[idx_edge]))
+        print("")
+        print("")
+        return save_idxes
+
+    ################ [2Hop Ensembles] ##################
+    # def train_from_2hops_ens_step(self, device, edges_2hop):
+    #     self.net.train()
+
+    #     train_l1_loss = 0
+    #     train_l1_loss_ensemble = 0
+    #     train_l2_loss = 0
+    #     tag = 'Train_2hop/'
+    #     # tag = 'Train_2hop/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
+
+    #     for idx_batch, batch in enumerate(self.train_loader):
+    #         domain1, domain2_gt = batch
+    #         assert domain1.shape[1] == self.net.n_channels
+    #         assert domain2_gt.shape[1] == self.net.n_classes
+
+    #         domain1 = domain1.to(device=device, dtype=torch.float32)
+    #         domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+
+    #         # 1hop = direct prediction
+    #         domain2_pred = self.net(domain1)
+
+    #         # pseudo-gt = average over all 2hop predictions
+    #         domain2_pseudo_gt = torch.zeros_like(domain2_gt)
+    #         for edge1, edge2 in edges_2hop:
+    #             composed_out = edge2.net(edge1.net(domain1))
+    #             domain2_pseudo_gt += composed_out
+
+    #             if idx_batch == len(self.train_loader) - 1:
+    #                 # log all
+    #                 experts_names = "%s-%s-%s" % (
+    #                     edge1.expert1.__class__.__name__,
+    #                     edge1.expert2.__class__.__name__,
+    #                     edge2.expert2.__class__.__name__)
+    #                 self.writer.add_images('%s/%s' % (tag, experts_names),
+    #                                        img_for_plot(composed_out[:3]),
+    #                                        self.global_step)
+
+    #         domain2_pseudo_gt /= len(edges_2hop)
+
+    #         l2_loss = self.l2(domain2_pred, domain2_pseudo_gt)
+    #         train_l2_loss += l2_loss.item()
+
+    #         with torch.no_grad():
+    #             train_l1_loss_ensemble += self.l1(domain2_pseudo_gt,
+    #                                               domain2_gt).item()
+    #             train_l1_loss += self.l1(domain2_pred, domain2_gt).item()
+
+    #         # Optimizer
+    #         self.optimizer.zero_grad()
+    #         l2_loss.backward()
+    #         self.optimizer.step()
+
+    #     self.writer.add_images('%s/Input' % (tag), img_for_plot(domain1[:3]),
+    #                            self.global_step)
+
+    #     self.writer.add_images('%s/Expert0HopOut' % (tag),
+    #                            img_for_plot(domain2_gt[:3]), self.global_step)
+
+    #     self.writer.add_images('%s/Ensemble2HopOut' % (tag),
+    #                            img_for_plot(domain2_pseudo_gt[:3]),
+    #                            self.global_step)
+
+    #     self.writer.add_images('%s/Edge1HopOut' % (tag),
+    #                            img_for_plot(domain2_pred[:3]),
+    #                            self.global_step)
+    #     return train_l2_loss / len(
+    #         self.train_loader) * 100, train_l1_loss / len(
+    #             self.train_loader) * 100, train_l1_loss_ensemble / len(
+    #                 self.train_loader) * 100
+
+    def eval_from_2hops_ens_step(self, device, edges_2hop, writer,
+                                 use_expert_gt):
+        self.net.eval()
+        eval_l2_loss = 0
+        eval_l1_loss = 0
+        eval_l1_loss_ensemble = 0
+        tag = 'Valid_2hop_%s_%s' % (self.expert1.str_id, self.expert2.str_id)
+
+        for idx_batch, batch in enumerate(self.valid_loader):
+            domain1, domain2_expertgt = batch
+            assert domain1.shape[1] == self.net.n_channels
+            assert domain2_expertgt.shape[1] == self.net.n_classes
+
+            domain1 = domain1.to(device=device, dtype=torch.float32)
+            domain2_expertgt = domain2_expertgt.to(device=device,
+                                                   dtype=torch.float32)
+
+            with torch.no_grad():
                 # 1hop = direct prediction
                 domain2_pred = self.net(domain1)
 
-                # pseudo-gt = average over all 2hop predictions
-                domain2_pseudo_gt = torch.zeros_like(domain2_gt)
-                for edge1, edge2 in edges_2hop:
-                    domain2_pseudo_gt += edge2.net(edge1.net(domain1))
-                domain2_pseudo_gt /= len(edges_2hop)
+                # Ensemble2Hop: over all 2hop preds
+                domain2_2hop_ens = domain2_pred.clone()
+                no_add_terms = 1
 
-            eval_l2_loss += self.l2(domain2_pred, domain2_pseudo_gt).item()
-            eval_l1_loss += self.l1(domain2_pred, domain2_gt).item()
-            eval_l1_loss_ensemble += self.l1(domain2_pseudo_gt,
-                                             domain2_gt).item()
+            if use_expert_gt:
+                domain2_2hop_ens += domain2_expertgt
+                no_add_terms += 1
 
-        tag = 'Valid/%s---%s' % (self.expert1.str_id, self.expert2.str_id)
+            for edge1, edge2 in edges_2hop:
+                composed_out = edge2.net(edge1.net(domain1))
+                domain2_2hop_ens += composed_out
 
-        if domain1.shape[1] == 2:
-            domain1 = domain1[:, 0:1]
-        self.writer.add_images('%s/Input' % tag, img_for_plot(domain1[:3]),
-                               self.global_step)
-        if domain2_gt.shape[1] == 2:
-            domain2_gt = domain2_gt[:, 0:1]
+                if idx_batch == len(self.valid_loader) - 1:
+                    rnd_idx = np.random.choice(domain1.shape[0],
+                                               size=(3),
+                                               replace=False)
+                    # Log
+                    experts_names = "%s-%s-%s" % (edge1.expert1.str_id,
+                                                  edge1.expert2.str_id,
+                                                  edge2.expert2.str_id)
 
-        self.writer.add_images('%s/GT' % tag, img_for_plot(domain2_gt[:3]),
-                               self.global_step)
+                    writer.add_images('%s/%s' % (tag, experts_names),
+                                      img_for_plot(composed_out[rnd_idx]),
+                                      self.global_step)
 
-        if domain2_pred.shape[1] == 2:
-            domain2_pred = domain2_pred[:, 0:1]
+            domain2_2hop_ens /= (len(edges_2hop) + no_add_terms)
 
-        self.writer.add_images('%s/Output' % tag,
-                               img_for_plot(domain2_pred[:3]),
-                               self.global_step)
+            eval_l2_loss += self.l2(domain2_pred, domain2_2hop_ens).item()
+            eval_l1_loss += self.l1(domain2_pred, domain2_expertgt).item()
+            if len(edges_2hop) > 0:
+                eval_l1_loss_ensemble += self.l1(domain2_2hop_ens,
+                                                 domain2_expertgt).item()
+
+        # Log
+        writer.add_images('%s/Input' % tag, img_for_plot(domain1[rnd_idx]),
+                          self.global_step)
+
+        writer.add_images('%s/EXPERT' % tag,
+                          img_for_plot(domain2_expertgt[rnd_idx]),
+                          self.global_step)
+
+        writer.add_images('%s/EDGE' % tag, img_for_plot(domain2_pred[rnd_idx]),
+                          self.global_step)
+
+        writer.add_images('%s/ENSEMBLE_2HOP' % (tag),
+                          img_for_plot(domain2_2hop_ens[rnd_idx]),
+                          self.global_step)
 
         return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
             self.valid_loader) * 100, eval_l1_loss_ensemble / len(
-                self.train_loader) * 100
+                self.valid_loader) * 100
 
-    def train_from_2hops_ensemble(self, graph, epochs, device):
+    def train_from_2hops_ens(self, graph, epochs, drop_version, device, writer,
+                             use_expert_gt):
+        wtag = '%s_%s' % (self.expert1.str_id, self.expert2.str_id)
         start_id = self.expert1.str_id
         end_id = self.expert2.str_id
         edges_2hop = []
+        edges_1hop = []
 
         print("Direct Edge X->Y: %s" % (self))
         for edge_xk in graph.edges:
-            # if edge_xk.ill_posed:
-            #     continue
+            if edge_xk.ill_posed:
+                continue
             if edge_xk.expert1.str_id == start_id:
                 if edge_xk.expert2.str_id == end_id:
                     continue
 
                 for edge_ky in graph.edges:
                     if edge_ky.expert1.str_id == edge_xk.expert2.str_id and edge_ky.expert2.str_id == end_id:
-                        # if edge_ky.ill_posed:
-                        #     continue
+                        if edge_ky.ill_posed:
+                            continue
                         print("\tAdding 2hop: %s, %s" % (edge_xk, edge_ky))
                         edges_2hop.append((edge_xk, edge_ky))
+            else:
+                if edge_xk.expert2.str_id == end_id:
+                    edges_1hop.append(edge_xk)
+
+        if len(edges_2hop) < 1:
+            return
 
         for epoch in range(epochs):
-            train_l2_loss, train_l1_loss, train_l1_loss_ensemble = self.train_from_2hops_step(
-                device, edges_2hop)
-            self.writer.add_scalar('Train_2hop/L2_Loss', train_l2_loss,
-                                   self.global_step)
-            self.writer.add_scalar('Train_2hop/L1_Loss', train_l1_loss,
-                                   self.global_step)
-            self.writer.add_scalar('Train_2hop/L1_Loss_ensemble',
-                                   train_l1_loss_ensemble, self.global_step)
+            # train_l2_loss, train_l1_loss, train_l1_loss_ensemble = self.train_from_2hops_step(
+            #     device, edges_2hop)
+            # self.writer.add_scalar('Train_2hop/L2_Loss', train_l2_loss,
+            #                        self.global_step)
+            # self.writer.add_scalar('Train_2hop/L1_Loss', train_l1_loss,
+            #                        self.global_step)
+            # self.writer.add_scalar('Train_2hop/L1_Loss_ensemble',
+            #                        train_l1_loss_ensemble, self.global_step)
 
-            val_l2_loss, val_l1_loss, val_l1_loss_ensemble = self.eval_from_2hops_step(
-                device, edges_2hop)
-            self.writer.add_scalar('Valid_2hop/L2_Loss', val_l2_loss,
-                                   self.global_step)
-            self.writer.add_scalar('Valid_2hop/L1_Loss', val_l1_loss,
-                                   self.global_step)
-            self.writer.add_scalar('Valid_2hop/L1_Loss_ensemble',
-                                   val_l1_loss_ensemble, self.global_step)
+            val_l2_loss, val_l1_loss, val_l1_loss_ensemble = self.eval_from_2hops_ens_step(
+                device, edges_2hop, writer=writer, use_expert_gt=use_expert_gt)
+            writer.add_scalar('Valid_2hop_%s/L2_Loss' % wtag, val_l2_loss,
+                              self.global_step)
+
+            if val_l1_loss_ensemble > 0:
+                writer.add_scalar('Valid_2hop_%s/L1_Loss' % wtag, val_l1_loss,
+                                  self.global_step)
+                writer.add_scalar('Valid_2hop_%s/L1_Loss_ensemble' % wtag,
+                                  val_l1_loss_ensemble, self.global_step)
+                writer.add_scalar(
+                    'Valid_2hop_%s/Delta_L1_EdgeMinusEnsemble_Pozitive_is_Better'
+                    % wtag, val_l1_loss - val_l1_loss_ensemble,
+                    self.global_step)
 
             # Scheduler
             self.scheduler.step(val_l2_loss)
-            self.writer.add_scalar('Train_2hop/LR',
-                                   self.optimizer.param_groups[0]['lr'],
-                                   self.global_step)
+            writer.add_scalar('Train_2hop_%s/LR' % wtag,
+                              self.optimizer.param_groups[0]['lr'],
+                              self.global_step)
 
             self.global_step += 1

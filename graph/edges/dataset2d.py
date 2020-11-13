@@ -7,8 +7,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
-first_k = 1000
-
+first_k = 3000
 
 def load_with_cache(cache_file, glob_path):
     if not os.path.exists(cache_file):
@@ -62,18 +61,8 @@ class Domain2DDataset(Dataset):
         # TODO: precompute+save mean & std when buliding cache
 
     def __getitem__(self, index):
-        # rgb_path = self.rgb_paths[index]
-        # img = Image.open(rgb_path)
-        # experts_output = []
-        # for expert in self.experts:
-        #     e_out = expert.apply_expert_one_frame(img)
-        #     experts_output.append(e_out)
-
         oe1 = np.load(self.e1_output_path[index])
         oe2 = np.load(self.e2_output_path[index])
-
-        # return torch.from_numpy(np.array(img)), experts_output
-        # TODO: normalize?!!
         return oe1, oe2
 
     def __len__(self):
