@@ -2,7 +2,7 @@ import glob
 import os
 import pathlib
 import time
-
+import torch
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
@@ -67,3 +67,75 @@ class Domain2DDataset(Dataset):
 
     def __len__(self):
         return len(self.rgb_paths)
+
+
+taskonomy_src_domains = [
+    'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc',
+    'halftone_cmyk_basic', 'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_rot_gray_basic',
+    'saliency_seg_egnet', 'sseg_deeplabv3', 'sseg_fcn']
+taskonomy_dst_domains = [
+    'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc']
+taskonomy_dst_domains_alt_names = [
+    'rgb', 'depth_zbuffer', 'edge_texture', 'normal']
+taskonomy_annotations_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master'
+taskonomy_experts_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master-experts'
+
+class DomainTestDataset(Dataset):
+    """Build Testing Dataset 
+    """
+    def __init__(self, src_expert, dst_expert):
+        super(DomainTestDataset, self).__init__()
+        self.src_expert = src_expert
+        self.dst_expert = dst_expert
+        if src_expert in taskonomy_src_domains and dst_expert in taskonomy_dst_domains:
+            self.available = True 
+        else:
+            self.available = False
+            return 
+        src_path = os.path.join(taskonomy_experts_path, src_expert)
+        index = taskonomy_dst_domains.index(dst_expert)
+        alt_name = taskonomy_dst_domains_alt_names[index]
+        dst_path = os.path.join(taskonomy_annotations_path, alt_name)
+        self.inputs_path = []
+        self.outputs_path = []
+        filenames = os.listdir(dst_path)
+        filenames.sort()
+        for filename in filenames:
+            self.outputs_path.append(os.path.join(dst_path, filename))
+            self.inputs_path.append(os.path.join(src_path, filename.replace('_%s.png'%alt_name, '_rgb.npy')))
+        #print(self.inputs_path[0])
+        #print(self.outputs_path[0])
+        #import pdb 
+        #pdb.set_trace()
+        
+            
+    def __getitem__(self, index):
+        if self.available == False:
+            return None, None
+        input_path = self.inputs_path[index]
+        output_path = self.outputs_path[index]
+
+        #print(input_path)
+        #print(output_path)
+
+        input = np.load(input_path)
+
+        output = Image.open(output_path)
+        output = np.array(output)
+        if len(output.shape) == 2:
+            output = output[:, :, None]
+        output = torch.tensor(output, dtype=torch.float32)
+        output = output.permute(2, 0, 1)
+        output = torch.nn.functional.interpolate(output[None], (input.shape[1], input.shape[2]))[0]
+        if self.dst_expert == 'depth_sgdepth' or self.dst_expert == 'edges_dexined':
+            output = output / 65536.0
+        if self.dst_expert == 'normals_xtc':
+            output = output / 255.0
+
+        return input, output
+
+    def __len__(self):
+        if self.available == False:
+            return 0
+        else:
+            return len(self.inputs_path)

@@ -14,6 +14,7 @@ class FCNModel:
         self.domain_name = "semantic_segmentation"
         self.n_maps = 21
         self.str_id = 'sseg_fcn'
+        self.identifier = self.str_id
         
     def apply(self, frame):
         # frame should be RGB 

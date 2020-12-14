@@ -8,6 +8,7 @@ class RGBModel():
         self.domain_name = "rgb"
         self.n_maps = 3
         self.str_id = "rgb"
+        self.identifier = "rgb"
 
     def apply_expert(self, rgb_frames):
         # todo resize

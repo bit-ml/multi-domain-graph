@@ -11,21 +11,29 @@ from experts.raft_optical_flow.core.raft_utils import InputPadder
 
 DEVICE = 'cuda'
 
-RAFT_MODEL_PATH = r'experts/raft_optical_flow/models/raft-kitti.pth'
+#RAFT_MODEL_PATH = r'experts/raft_optical_flow/models/raft-kitti.pth'
+current_dir_name = os.path.dirname(os.path.realpath(__file__))
+RAFT_MODEL_PATH = os.path.join(current_dir_name,
+                               'models/of_raft.pth')
 
 class RaftModel:
-
-    def __init__(self, full_expert = True, fwd = 1):
+    def __init__(self, full_expert=True, fwd=1):
         if full_expert:
-            #import pdb 
+            #import pdb
             #pdb.set_trace()
             parser = argparse.ArgumentParser()
             parser.add_argument('--model', help="restore checkpoint")
             parser.add_argument('--path', help="dataset for evaluation")
-            parser.add_argument('--small', action='store_true', help='use small model')
-            parser.add_argument('--mixed_precision', action='store_true', help='use mixed precision')
-            parser.add_argument('--alternate_corr', action='store_true', help='use efficent correlation implementation')
-            str1 = '--model=%s'%RAFT_MODEL_PATH
+            parser.add_argument('--small',
+                                action='store_true',
+                                help='use small model')
+            parser.add_argument('--mixed_precision',
+                                action='store_true',
+                                help='use mixed precision')
+            parser.add_argument('--alternate_corr',
+                                action='store_true',
+                                help='use efficent correlation implementation')
+            str1 = '--model=%s' % RAFT_MODEL_PATH
             args = parser.parse_args([str1])
             #args = parser.parse_args(['--model=raft_optical_flow/models/raft-things.pth'])
 
@@ -37,13 +45,14 @@ class RaftModel:
             self.model.eval()
 
         self.fwd = fwd
-        
+
         self.domain_name = "optical_flow"
         self.n_maps = 2
         if fwd:
             self.str_id = 'of_fwd_raft'
         else:
             self.str_id = 'of_bwd_raft'
+        self.identifier = self.str_id
 
     def apply(self, img1, img2):
         img1 = torch.from_numpy(img1).permute(2, 0, 1).float().cuda()
@@ -54,58 +63,70 @@ class RaftModel:
         with torch.no_grad():
             padder = InputPadder(img1.shape)
             img1, img2 = padder.pad(img1, img2)
-            if self.fwd==1:
+            if self.fwd == 1:
                 _, flow_up = self.model(img1, img2, iters=20, test_mode=True)
             else:
                 _, flow_up = self.model(img2, img1, iters=20, test_mode=True)
 
-        return flow_up[0,:,:,:]
+        return flow_up[0, :, :, :]
 
     def apply_expert(self, frames):
         flows = []
-        if self.fwd==1:
+        if self.fwd == 1:
             prev_img = frames[0]
-            prev_img = torch.from_numpy(prev_img).permute(2, 0, 1).float().cuda()
+            prev_img = torch.from_numpy(prev_img).permute(2, 0,
+                                                          1).float().cuda()
             prev_img = prev_img[None]
 
-            for i in range(len(frames)-1):
-                current_img = frames[i+1]
-                current_img = torch.from_numpy(current_img).permute(2, 0, 1).float().cuda()
+            for i in range(len(frames) - 1):
+                current_img = frames[i + 1]
+                current_img = torch.from_numpy(current_img).permute(
+                    2, 0, 1).float().cuda()
                 current_img = current_img[None]
 
                 with torch.no_grad():
                     padder = InputPadder(prev_img.shape)
-                    img1, img2 = padder.pad(prev_img.clone(), current_img.clone())
-                    _, flow_up =  self.model(img1, img2, iters=20, test_mode=True)
-                    flows.append(flow_up[0,:,:,:].cpu().numpy())
+                    img1, img2 = padder.pad(prev_img.clone(),
+                                            current_img.clone())
+                    _, flow_up = self.model(img1,
+                                            img2,
+                                            iters=20,
+                                            test_mode=True)
+                    flows.append(flow_up[0, :, :, :].cpu().numpy())
 
                 prev_img = current_img.clone()
             with torch.no_grad():
                 padder = InputPadder(prev_img.shape)
                 img1, img2 = padder.pad(prev_img.clone(), prev_img.clone())
-                _, flow_up =  self.model(img1, img2, iters=20, test_mode=True)
-                flows.append(flow_up[0,:,:,:].cpu().numpy())
+                _, flow_up = self.model(img1, img2, iters=20, test_mode=True)
+                flows.append(flow_up[0, :, :, :].cpu().numpy())
 
         else:
             prev_img = frames[0]
-            prev_img = torch.from_numpy(prev_img).permute(2, 0, 1).float().cuda()
+            prev_img = torch.from_numpy(prev_img).permute(2, 0,
+                                                          1).float().cuda()
             prev_img = prev_img[None]
             with torch.no_grad():
                 padder = InputPadder(prev_img.shape)
                 img1, img2 = padder.pad(prev_img.clone(), prev_img.clone())
-                _, flow_up =  self.model(img2, img1, iters=20, test_mode=True)
-                flows.append(flow_up[0,:,:,:].cpu().numpy())
+                _, flow_up = self.model(img2, img1, iters=20, test_mode=True)
+                flows.append(flow_up[0, :, :, :].cpu().numpy())
 
-            for i in range(len(frames)-1):
-                current_img = frames[i+1]
-                current_img = torch.from_numpy(current_img).permute(2, 0, 1).float().cuda()
+            for i in range(len(frames) - 1):
+                current_img = frames[i + 1]
+                current_img = torch.from_numpy(current_img).permute(
+                    2, 0, 1).float().cuda()
                 current_img = current_img[None]
 
                 with torch.no_grad():
                     padder = InputPadder(prev_img.shape)
-                    img1, img2 = padder.pad(prev_img.clone(), current_img.clone())
-                    _, flow_up =  self.model(img2, img1, iters=20, test_mode=True)
-                    flows.append(flow_up[0,:,:,:].cpu().numpy())
+                    img1, img2 = padder.pad(prev_img.clone(),
+                                            current_img.clone())
+                    _, flow_up = self.model(img2,
+                                            img1,
+                                            iters=20,
+                                            test_mode=True)
+                    flows.append(flow_up[0, :, :, :].cpu().numpy())
 
                 prev_img = current_img.clone()
         return flows

@@ -27,6 +27,7 @@ class HalftoneModel():
         elif style==3:
             self.n_maps = 1
             self.str_id = "halftone_rot_gray_basic"
+        self.identifier = self.str_id
         
     def apply_expert(self, rgb_frames):
         halftone_maps = []

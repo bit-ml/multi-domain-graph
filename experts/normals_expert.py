@@ -1,5 +1,5 @@
 # https://github.com/EPFL-VILAB/XTConsistency
-
+import os
 import cv2
 import numpy as np
 import PIL
@@ -10,11 +10,15 @@ from experts.normals.unet import UNet
 
 W, H = 256, 256
 
+current_dir_name = os.path.dirname(os.path.realpath(__file__))
+normals_model_path = os.path.join(current_dir_name,
+                                  'models/normals_xtc.pth')
+
 
 class SurfaceNormalsModel():
     def __init__(self, full_expert=True):
         if full_expert:
-            model_path = "experts/models/rgb2normal_consistency.pth"
+            model_path = normals_model_path  #"experts/models/rgb2normal_consistency.pth"
             self.model = UNet()
             model_state_dict = torch.load(model_path)
             self.model.load_state_dict(model_state_dict)
@@ -28,20 +32,23 @@ class SurfaceNormalsModel():
         self.domain_name = "surface_normals"
         self.n_maps = 3
         self.str_id = "xtc_surface_normals"
+        self.identifier = "normals_xtc"
 
     def apply_expert(self, rgb_frames):
         normals_maps = []
         for idx, rgb_frame in enumerate(rgb_frames):
             img_tensor = self.trans_totensor(rgb_frame)[:3].unsqueeze(0)
-            output_map = self.model(img_tensor).clamp(min=0, max=1).data.cpu()
-            output_map = output_map.permute(0, 2, 3, 1)
+            output_map = self.model(img_tensor).clamp(
+                min=0, max=1).data.cpu()[0].numpy()
+            #output_map = output_map.permute(0, 2, 3, 1)
+            #normals_maps.append(output_map)
             normals_maps.append(output_map)
-
         # save_fname = "normals_test.png"
         # print("Save Surface Normals to %s" % save_fname)
         # cv2.imwrite(save_fname, output_map[0].numpy() * 255.)
 
-        return torch.cat(normals_maps, dim=0)
+        #return torch.cat(normals_maps, dim=0)
+        return normals_maps
 
     def apply_expert_one_frame(self, rgb_frame):
         img_tensor = self.trans_totensor(rgb_frame)[:3].unsqueeze(0)

@@ -7,7 +7,10 @@ import sys
 
 import experts.liteflownet_optical_flow.run
 
-LITE_FLOW_NET_MODEL_PATH = r'experts/liteflownet_optical_flow/models/liteflownet-default'
+#LITE_FLOW_NET_MODEL_PATH = r'experts/liteflownet_optical_flow/models/liteflownet-default'
+current_dir_name = os.path.dirname(os.path.realpath(__file__))
+LITE_FLOW_NET_MODEL_PATH = os.path.join(current_dir_name,
+                               'models/of_liteflownet')
 
 class LiteFlowNetModel:
     def __init__(self, full_expert=True, fwd=1):
@@ -21,6 +24,7 @@ class LiteFlowNetModel:
             self.str_id = 'of_fwd_liteflownet'
         else:
             self.str_id = 'of_bwd_liteflownet'
+        self.identifier = self.str_id
 
     def aux(self, img1, img2):
         tenFirst = torch.FloatTensor(numpy.ascontiguousarray(img1[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32) * (1.0 / 255.0)))

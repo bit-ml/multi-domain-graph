@@ -7,6 +7,7 @@ from datetime import datetime
 import numpy as np
 import torch
 from graph.edges.dataset2d import Domain2DDataset
+from graph.edges.dataset2d import DomainTestDataset
 from graph.edges.unet.unet_model import UNetGood
 from torch import nn
 from torch.optim import AdamW
@@ -97,6 +98,16 @@ class Edge:
             # sampler=rnd_sampler,
             num_workers=n_workers)
 
+        test_ds = DomainTestDataset(self.expert1.identifier,
+                                    self.expert2.identifier)
+        if test_ds.available:
+            self.test_loader = DataLoader(test_ds,
+                                          batch_size=bs,
+                                          shuffle=False,
+                                          num_workers=n_workers)
+        else:
+            self.test_loader = None
+
     def save_model(self, epoch):
         if not self.config.getboolean('Edge Models', 'save_models'):
             return
@@ -183,6 +194,41 @@ class Edge:
         return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
             self.valid_loader) * 100
 
+    def test_step(self, device, writer, wtag):
+        """Currently should work as eval_step
+        """
+        self.net.eval()
+        test_l2_loss = 0
+        test_l1_loss = 0
+
+        for batch in self.test_loader:
+            domain1, domain2_gt = batch
+            assert domain1.shape[1] == self.net.n_channels
+            assert domain2_gt.shape[1] == self.net.n_classes
+
+            domain1 = domain1.to(device=device, dtype=torch.float32)
+            domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+
+            with torch.no_grad():
+                domain2_pred = self.net(domain1)
+            l2_loss = self.l2(domain2_pred, domain2_gt)
+            l1_loss = self.l1(domain2_pred, domain2_gt)
+
+            test_l2_loss += l2_loss.item()
+            test_l1_loss += l1_loss.item()
+
+        writer.add_images('Test_%s/Input' % wtag, img_for_plot(domain1[:3]),
+                          self.global_step)
+
+        writer.add_images('Test_%s/GT' % wtag,
+                          img_for_plot(domain2_gt[:3]), self.global_step)
+
+        writer.add_images('Test_%s/Output' % wtag,
+                          img_for_plot(domain2_pred[:3]), self.global_step)
+
+        return test_l2_loss / len(self.test_loader) * 100, test_l1_loss / len(
+            self.test_loader) * 100
+
     def train(self, epochs, device, writer):
         wtag = '%s_%s' % (self.expert1.str_id, self.expert2.str_id)
         for epoch in range(epochs):
@@ -197,12 +243,20 @@ class Edge:
             # Save model
             self.save_model(epoch)
 
-            # 2. Evaluate
+            # 2. Evaluate - validation set - pseudo gt from experts 
             val_l2_loss, val_l1_loss = self.eval_step(device, writer, wtag)
             writer.add_scalar('Valid_%s/L2_Loss' % wtag, val_l2_loss,
                               self.global_step)
             writer.add_scalar('Valid_%s/L1_Loss' % wtag, val_l1_loss,
                               self.global_step)
+
+            # 3. Evaluate - test set - gt - testing on other datasets 
+            if not self.test_loader==None:
+                test_l2_loss, test_l1_loss = self.test_step(device, writer, wtag)
+                writer.add_scalar('Test_%s/L2_Loss' % wtag, test_l2_loss,
+                                self.global_step)
+                writer.add_scalar('Test_%s/L1_Loss' % wtag, test_l1_loss,
+                                self.global_step)
 
             # Scheduler
             self.scheduler.step(val_l2_loss)

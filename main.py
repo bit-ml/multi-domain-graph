@@ -177,7 +177,7 @@ def main(argv):
         # 2. Build graph + Load 1Hop edges
         graph = build_space_graph(config, silent=silent, valid_shuffle=False)
         load_2Dtasks(graph, epoch=epochs)
-
+    '''
     # 3. Drop ill-posed connections
     drop_version = config.getint('Training', 'drop_version')
     if drop_version > 0:
@@ -197,7 +197,7 @@ def main(argv):
                         use_expert_gt=True,
                         silent=silent,
                         config=config)
-
+    '''
 
 if __name__ == "__main__":
     main(sys.argv)
