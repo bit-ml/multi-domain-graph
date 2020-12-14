@@ -220,8 +220,8 @@ class Edge:
         writer.add_images('Test_%s/Input' % wtag, img_for_plot(domain1[:3]),
                           self.global_step)
 
-        writer.add_images('Test_%s/GT' % wtag,
-                          img_for_plot(domain2_gt[:3]), self.global_step)
+        writer.add_images('Test_%s/GT' % wtag, img_for_plot(domain2_gt[:3]),
+                          self.global_step)
 
         writer.add_images('Test_%s/Output' % wtag,
                           img_for_plot(domain2_pred[:3]), self.global_step)
@@ -229,7 +229,7 @@ class Edge:
         return test_l2_loss / len(self.test_loader) * 100, test_l1_loss / len(
             self.test_loader) * 100
 
-    def train(self, epochs, device, writer):
+    def train(self, epochs, device, writer, eval_test):
         wtag = '%s_%s' % (self.expert1.str_id, self.expert2.str_id)
         for epoch in range(epochs):
             # 1. Train
@@ -241,22 +241,23 @@ class Edge:
                               self.global_step)
 
             # Save model
-            self.save_model(epoch)
+            self.save_model(epoch + 1)
 
-            # 2. Evaluate - validation set - pseudo gt from experts 
+            # 2. Evaluate - validation set - pseudo gt from experts
             val_l2_loss, val_l1_loss = self.eval_step(device, writer, wtag)
             writer.add_scalar('Valid_%s/L2_Loss' % wtag, val_l2_loss,
                               self.global_step)
             writer.add_scalar('Valid_%s/L1_Loss' % wtag, val_l1_loss,
                               self.global_step)
 
-            # 3. Evaluate - test set - gt - testing on other datasets 
-            if not self.test_loader==None:
-                test_l2_loss, test_l1_loss = self.test_step(device, writer, wtag)
+            # 3. Evaluate - test set - gt - testing on other datasets
+            if eval_test and not self.test_loader == None:
+                test_l2_loss, test_l1_loss = self.test_step(
+                    device, writer, wtag)
                 writer.add_scalar('Test_%s/L2_Loss' % wtag, test_l2_loss,
-                                self.global_step)
+                                  self.global_step)
                 writer.add_scalar('Test_%s/L1_Loss' % wtag, test_l1_loss,
-                                self.global_step)
+                                  self.global_step)
 
             # Scheduler
             self.scheduler.step(val_l2_loss)
@@ -295,25 +296,16 @@ class Edge:
         return eval_l2_loss, eval_l1_loss
 
     ################ [1Hop Ensembles] ##################
-    def eval_1hop_ensemble(edges_1hop, save_idxes, device, writer):
-        l1_ensemble1hop = 0
-        valid_loaders = []
-        l1_per_edge = []
 
-        wtag = "to_%s" % edges_1hop[0].expert2.str_id
-
-        for edge in edges_1hop:
-            valid_loaders.append(iter(edge.valid_loader))
-            l1_per_edge.append(0)
-
-        num_batches = len(valid_loaders[0])
+    def eval_1hop_ensemble_aux(loaders, l1_per_edge, l1_ensemble1hop,
+                               edges_1hop, device, save_idxes, writer, wtag):
+        num_batches = len(loaders[0])
         for idx_batch in range(num_batches):
             domain2_1hop_ens_list = []
 
-            for idx_edge, data_edge in enumerate(zip(edges_1hop,
-                                                     valid_loaders)):
-                edge, valid_loader = data_edge
-                domain1, domain2_gt = next(valid_loader)
+            for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
+                edge, loader = data_edge
+                domain1, domain2_gt = next(loader)
 
                 assert domain1.shape[1] == edge.net.n_channels
                 assert domain2_gt.shape[1] == edge.net.n_classes
@@ -327,12 +319,12 @@ class Edge:
                     domain2_1hop_ens_list.append(
                         one_hop_pred.clone().data.cpu().numpy())
 
-                if idx_batch == len(valid_loader) - 1:
+                if idx_batch == len(loader) - 1:
                     if save_idxes is None:
                         save_idxes = np.random.choice(domain1.shape[0],
                                                       size=(3),
                                                       replace=False)
-                    # Show last batch edges
+                    # Show last but one batch edges
                     writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
                                       img_for_plot(one_hop_pred[save_idxes]),
                                       0)
@@ -343,6 +335,38 @@ class Edge:
                 device=device)
             l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
 
+        return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
+
+    def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
+                           writer):
+        wtag = "to_%s" % edges_1hop[0].expert2.str_id
+
+        valid_loaders = []
+        l1_per_edge = []
+        l1_ensemble1hop = 0
+        for edge in edges_1hop:
+            valid_loaders.append(iter(edge.valid_loader))
+            l1_per_edge.append(0)
+
+        l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_aux(
+            valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
+            save_idxes, writer, wtag)
+
+        test_loaders = []
+        test_edges = []
+        l1_per_edge_test = []
+        l1_ensemble1hop_test = 0
+        for edge in edges_1hop:
+            if edge.test_loader != None:
+                test_loaders.append(iter(edge.test_loader))
+                test_edges.append(edge)
+                l1_per_edge_test.append(0)
+
+        if len(test_loaders) > 0:
+            l1_per_edge_test, l1_ensemble1hop_test, save_idxes_test, domain2_1hop_ens_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_aux(
+                test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
+                test_edges, device, save_idxes_test, writer, wtag)
+
         # Show Ensemble
         writer.add_images('%s/ENSEMBLE' % (wtag),
                           img_for_plot(domain2_1hop_ens[save_idxes]), 0)
@@ -352,19 +376,52 @@ class Edge:
         writer.add_scalar('Valid_1hop_%s/L1_Loss_ensemble' % (wtag),
                           l1_ensemble1hop, 0)
 
-        print("Loss %19s: %.2f" % ("Ensemble1Hop", l1_ensemble1hop))
+        # Show Ensemble - Test DB
+        if len(test_loaders) > 0:
+            writer.add_images(
+                '%s/ENSEMBLE_TEST' % (wtag),
+                img_for_plot(domain2_1hop_ens_test[save_idxes_test]), 0)
+            writer.add_images('%s/GT_TEST' % (wtag),
+                              img_for_plot(domain2_gt_test[save_idxes_test]),
+                              0)
+            l1_ensemble1hop_test = np.array(
+                l1_ensemble1hop_test) / num_batches_test
+            writer.add_scalar('Test_1hop_%s/L1_Loss_ensemble' % (wtag),
+                              l1_ensemble1hop_test, 0)
 
+        print("%24s  Expert  GT" % (wtag))
+        print("Loss %19s: %.2f   %.2f" %
+              ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))
+        print("%25s------------------"%(" "))
         # Show Individual Losses
         l1_per_edge = np.array(l1_per_edge) / num_batches
+        mean_l1_per_edge = np.mean(l1_per_edge)
+        mean_l1_per_edge_test = 0
+        if len(test_loaders) > 0:
+            l1_per_edge_test = np.array(l1_per_edge_test) / num_batches_test
+            mean_l1_per_edge_test = np.mean(l1_per_edge_test)
+        idx_test_edge = 0
         for idx_edge, edge in enumerate(edges_1hop):
             writer.add_scalar(
                 'Valid_1hop_%s/L1_Loss_%s' % (wtag, edge.expert1.str_id),
                 l1_per_edge[idx_edge], 0)
-            print("Loss %19s: %.2f" %
-                  (edge.expert1.str_id, l1_per_edge[idx_edge]))
+            if edge.test_loader != None:
+                writer.add_scalar(
+                    'Test_1hop_%s/L1_Loss_%s' % (wtag, edge.expert1.str_id),
+                    l1_per_edge_test[idx_test_edge], 0)
+                print("Loss %19s: %.2f   %.2f" %
+                      (edge.expert1.str_id, l1_per_edge[idx_edge],
+                       l1_per_edge_test[idx_test_edge]))
+                idx_test_edge = idx_test_edge + 1
+            else:
+                print("Loss %19s: %.2f    - " %
+                      (edge.expert1.str_id, l1_per_edge[idx_edge]))                      
+        print("%25s------------------"%(" "))
+        print("Loss %-20s %.2f   %.2f"%("average",mean_l1_per_edge, mean_l1_per_edge_test))
+
         print("")
         print("")
-        return save_idxes
+        return save_idxes, save_idxes_test
 
     ################ [2Hop Ensembles] ##################
     # def train_from_2hops_ens_step(self, device, edges_2hop):

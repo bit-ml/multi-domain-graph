@@ -76,6 +76,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             (tb_dir, tb_prefix, drop_version, datetime.now()),
             flush_secs=30)
     save_idxes = None
+    save_idxes_test = None
 
     for expert in space_graph.experts.methods:
         end_id = expert.str_id
@@ -90,8 +91,8 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                 edges_1hop.append(edge_xk)
 
         # 2. Eval each ensemble
-        save_idxes = Edge.eval_1hop_ensemble(edges_1hop, save_idxes, device,
-                                             writer)
+        save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
+            edges_1hop, save_idxes, save_idxes_test, device, writer)
 
     writer.close()
 
@@ -106,10 +107,14 @@ def train_2Dtasks(space_graph, epochs, silent, config):
         writer = SummaryWriter(log_dir=f'%s/%s_train_2Dtasks_%s' %
                                (tb_dir, tb_prefix, datetime.now()),
                                flush_secs=30)
-
+    eval_test = config.getboolean('Training', 'eval_test_during_train')
     for net_idx, net in enumerate(space_graph.edges):
         print("[%2d] Train" % net_idx, net)
-        net.train(epochs=epochs, device=device, writer=writer)
+
+        net.train(epochs=epochs,
+                  device=device,
+                  writer=writer,
+                  eval_test=eval_test)
 
     writer.close()
 
@@ -183,11 +188,12 @@ def main(argv):
     if drop_version > 0:
         # TODO: integrate solution from Ema
         drop_connections(graph, drop_version)
-
+    '''
     # 4. Eval 1Hop
     print("Eval 1Hop ensembles")
+    drop_version = config.getint('Training', 'drop_version')
     eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
-
+    '''
     # 5. Train/Eval 2Hop
     print("Eval 2Hop ensembles")
     # used only as eval
@@ -198,6 +204,7 @@ def main(argv):
                         silent=silent,
                         config=config)
     '''
+
 
 if __name__ == "__main__":
     main(sys.argv)

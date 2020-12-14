@@ -7,7 +7,8 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
-first_k = 3000
+first_k = 60#3000
+test_samples = 60#64
 
 def load_with_cache(cache_file, glob_path):
     if not os.path.exists(cache_file):
@@ -100,13 +101,11 @@ class DomainTestDataset(Dataset):
         self.outputs_path = []
         filenames = os.listdir(dst_path)
         filenames.sort()
+        if test_samples!=0:
+            filenames = filenames[0:test_samples]
         for filename in filenames:
             self.outputs_path.append(os.path.join(dst_path, filename))
             self.inputs_path.append(os.path.join(src_path, filename.replace('_%s.png'%alt_name, '_rgb.npy')))
-        #print(self.inputs_path[0])
-        #print(self.outputs_path[0])
-        #import pdb 
-        #pdb.set_trace()
         
             
     def __getitem__(self, index):
@@ -114,9 +113,6 @@ class DomainTestDataset(Dataset):
             return None, None
         input_path = self.inputs_path[index]
         output_path = self.outputs_path[index]
-
-        #print(input_path)
-        #print(output_path)
 
         input = np.load(input_path)
 
@@ -129,9 +125,9 @@ class DomainTestDataset(Dataset):
         output = torch.nn.functional.interpolate(output[None], (input.shape[1], input.shape[2]))[0]
         if self.dst_expert == 'depth_sgdepth' or self.dst_expert == 'edges_dexined':
             output = output / 65536.0
-        if self.dst_expert == 'normals_xtc':
+        if self.dst_expert == 'normals_xtc' or self.dst_expert == 'rgb':
             output = output / 255.0
-
+        
         return input, output
 
     def __len__(self):
