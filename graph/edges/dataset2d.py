@@ -7,8 +7,8 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
-first_k = 60#3000
-test_samples = 60#64
+first_k = 3000
+test_samples = 9464#60#64
 
 def load_with_cache(cache_file, glob_path):
     if not os.path.exists(cache_file):
