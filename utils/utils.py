@@ -2,6 +2,35 @@ import numpy as np
 import torch
 from scipy.stats import pearsonr
 
+def get_ssim_score(im1, im2, win_size):
+    from skimage.metrics import structural_similarity as ssim
+    im1 = np.moveaxis(im1, 0, -1)
+    im2 = np.moveaxis(im2, 0, -1)
+    ssim_score = ssim(im1, im2, win_size=win_size, multichannel=True)
+    return ssim_score
+
+def get_correlation_score(batch_results, correlations, drop_version):
+    n_tasks = len(batch_results)
+    if drop_version == 10:
+        win_size = 255
+    elif drop_version == 11:
+        win_size = 127
+    for i in range(n_tasks):
+        for j in range(n_tasks):
+            if i>j:
+                continue
+            task_i_res = batch_results[i]
+            task_j_res = batch_results[j]
+            scores = []
+            for k in range(task_i_res.shape[0]):
+                sample_i = task_i_res[k]
+                sample_j = task_j_res[k]
+                scores.append(get_ssim_score(sample_i, sample_j, win_size))
+            sum_scores = np.sum(np.array(scores))
+            correlations[i, j] = correlations[i,j] + sum_scores
+            correlations[j, i] = correlations[j,i] + sum_scores 
+    return correlations
+
 
 def img_for_plot(img):
     '''
@@ -39,6 +68,11 @@ def median_100(multi_chan_arr):
     med_100 = np.median(ar_100_int, axis=0).astype(np.float32)
     med_100_th = torch.from_numpy(med_100) / 100.
     return med_100_th
+
+
+def median_simple(multi_chan_arr):
+    med = torch.from_numpy(np.median(multi_chan_arr, axis=0))
+    return med
 
 
 def check_illposed_edge(ensemble_per_sample, edge_per_sample, mean_per_edge,

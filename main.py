@@ -37,6 +37,46 @@ def evaluate_all_edges(ending_edges):
     return np.array(metrics)
 
 
+############################## drop connections ###############################
+
+
+def drop_connections_correlations(space_graph, drop_version):
+    for expert_idx, expert in enumerate(space_graph.experts.methods):
+        print('=======')
+        print('EXPERT %s' % expert.str_id)
+        print('=======')
+
+        # get edges ending in current expert
+        ending_edges = []
+        for edge in space_graph.edges:
+            if edge.expert2.str_id == expert.str_id:
+                ending_edges.append(edge)
+        expert_correlations = Edge.drop_1hop_connections(
+            ending_edges, device, drop_version)
+
+        import numpy.linalg as linalg
+        eigenValues, eigenVectors = linalg.eig(expert_correlations)
+        pos = np.argmax(eigenValues)
+        task_weights = eigenVectors[:, pos]
+
+        min_val = np.min(task_weights)
+        max_val = np.max(task_weights)
+
+        task_weights = (task_weights - min_val) / (max_val - min_val)
+
+        task_weights[task_weights < 0.5] = 0
+
+        remove_indexes = np.argwhere(task_weights == 0)[:, 0]
+        keep_indexes = np.argwhere(task_weights > 0)[:, 0]
+
+        remove_indexes = remove_indexes[remove_indexes < len(ending_edges)]
+        keep_indexes = keep_indexes[keep_indexes < len(ending_edges)]
+
+        for idx in remove_indexes:
+            #print("remove edge from: %s"%(ending_edges[idx].expert1.str_id))
+            ending_edges[idx].ill_posed = True
+
+
 def drop_connections(space_graph, drop_version):
     # for each node domain (= expert in our case)
     for expert_idx, expert in enumerate(space_graph.experts.methods):
@@ -182,15 +222,21 @@ def main(argv):
         # 2. Build graph + Load 1Hop edges
         graph = build_space_graph(config, silent=silent, valid_shuffle=False)
         load_2Dtasks(graph, epoch=epochs)
-    '''
+
+    print("Eval 1Hop ensembles before drop")
+    # drop_version passed as -1 -> no drop
+    eval_1hop_ensembles(graph, -1, silent=silent, config=config)
+
     # 3. Drop ill-posed connections
     drop_version = config.getint('Training', 'drop_version')
     if drop_version > 0:
-        # TODO: integrate solution from Ema
-        drop_connections(graph, drop_version)
-    '''
+        if drop_version < 10:
+            drop_connections(graph, drop_version)
+        else:
+            drop_connections_correlations(graph, drop_version)
+
     # 4. Eval 1Hop
-    print("Eval 1Hop ensembles")
+    print("Eval 1Hop ensembles after drop")
     drop_version = config.getint('Training', 'drop_version')
     eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
     '''

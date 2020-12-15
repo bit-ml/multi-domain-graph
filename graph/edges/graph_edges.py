@@ -295,6 +295,40 @@ class Edge:
 
         return eval_l2_loss, eval_l1_loss
 
+    ################ [Drop connections] ##################
+    def drop_1hop_connections(edges_1hop, device, drop_version):
+        valid_loaders = []
+        for edge in edges_1hop:
+            valid_loaders.append(iter(edge.valid_loader))
+
+        correlations = np.zeros((len(edges_1hop)+1, len(edges_1hop)+1))
+        num_batches = len(valid_loaders[0])
+        n_samples = 0
+        for idx_batch in range(num_batches):
+            domain2_1hop_ens_list = []
+
+            for idx_edge, data_edge in enumerate(zip(edges_1hop, valid_loaders)):
+                edge, loader = data_edge
+                domain1, domain2_gt = next(loader)
+
+                assert domain1.shape[1] == edge.net.n_channels
+                assert domain2_gt.shape[1] == edge.net.n_classes
+
+                domain1 = domain1.to(device=device, dtype=torch.float32)
+                domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+
+                with torch.no_grad():
+                    one_hop_pred = edge.net(domain1)
+                    domain2_1hop_ens_list.append(
+                        one_hop_pred.clone().data.cpu().numpy())
+            domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
+
+            # domain2_1hop_ens_list contains all data for current batch
+            correlations = utils.get_correlation_score(domain2_1hop_ens_list, correlations, drop_version)
+            n_samples = n_samples + domain1.shape[0]
+        correlations = correlations / n_samples
+        return correlations
+
     ################ [1Hop Ensembles] ##################
 
     def eval_1hop_ensemble_aux(loaders, l1_per_edge, l1_ensemble1hop,
@@ -330,7 +364,9 @@ class Edge:
                                       0)
                 l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
                                                  domain2_gt).item()
-
+            #import pdb
+            #pdb.set_trace()
+            domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
             domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
                 device=device)
             l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
@@ -392,7 +428,7 @@ class Edge:
         print("%24s  Expert  GT" % (wtag))
         print("Loss %19s: %.2f   %.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))
-        print("%25s------------------"%(" "))
+        print("%25s------------------" % (" "))
         # Show Individual Losses
         l1_per_edge = np.array(l1_per_edge) / num_batches
         mean_l1_per_edge = np.mean(l1_per_edge)
@@ -415,9 +451,10 @@ class Edge:
                 idx_test_edge = idx_test_edge + 1
             else:
                 print("Loss %19s: %.2f    - " %
-                      (edge.expert1.str_id, l1_per_edge[idx_edge]))                      
-        print("%25s------------------"%(" "))
-        print("Loss %-20s %.2f   %.2f"%("average",mean_l1_per_edge, mean_l1_per_edge_test))
+                      (edge.expert1.str_id, l1_per_edge[idx_edge]))
+        print("%25s------------------" % (" "))
+        print("Loss %-20s %.2f   %.2f" %
+              ("average", mean_l1_per_edge, mean_l1_per_edge_test))
 
         print("")
         print("")
