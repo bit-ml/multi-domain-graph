@@ -38,6 +38,12 @@ def evaluate_all_edges(ending_edges):
 
 
 ############################## drop connections ###############################
+def drop_connections(space_graph, drop_version):
+    if drop_version > 0:
+        if drop_version < 10:
+            drop_connections_simple(space_graph, drop_version)
+        else:
+            drop_connections_correlations(space_graph, drop_version)
 
 
 def drop_connections_correlations(space_graph, drop_version):
@@ -77,7 +83,7 @@ def drop_connections_correlations(space_graph, drop_version):
             ending_edges[idx].ill_posed = True
 
 
-def drop_connections(space_graph, drop_version):
+def drop_connections_simple(space_graph, drop_version):
     # for each node domain (= expert in our case)
     for expert_idx, expert in enumerate(space_graph.experts.methods):
         ending_edges = []
@@ -131,8 +137,9 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                 edges_1hop.append(edge_xk)
 
         # 2. Eval each ensemble
-        save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
-            edges_1hop, save_idxes, save_idxes_test, device, writer)
+        if len(edges_1hop) > 0:
+            save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
+                edges_1hop, save_idxes, save_idxes_test, device, writer)
 
     writer.close()
 
@@ -223,23 +230,19 @@ def main(argv):
         graph = build_space_graph(config, silent=silent, valid_shuffle=False)
         load_2Dtasks(graph, epoch=epochs)
 
-    print("Eval 1Hop ensembles before drop")
-    # drop_version passed as -1 -> no drop
-    eval_1hop_ensembles(graph, -1, silent=silent, config=config)
+    # print("Eval 1Hop ensembles before drop")
+    # # drop_version passed as -1 -> no drop
+    # eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
 
     # 3. Drop ill-posed connections
     drop_version = config.getint('Training', 'drop_version')
-    if drop_version > 0:
-        if drop_version < 10:
-            drop_connections(graph, drop_version)
-        else:
-            drop_connections_correlations(graph, drop_version)
+    drop_connections(graph, drop_version)
 
     # 4. Eval 1Hop
-    print("Eval 1Hop ensembles after drop")
+    print("Eval 1Hop ensembles after drop (version %i)" % drop_version)
     drop_version = config.getint('Training', 'drop_version')
     eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
-    '''
+
     # 5. Train/Eval 2Hop
     print("Eval 2Hop ensembles")
     # used only as eval
@@ -249,7 +252,6 @@ def main(argv):
                         use_expert_gt=True,
                         silent=silent,
                         config=config)
-    '''
 
 
 if __name__ == "__main__":

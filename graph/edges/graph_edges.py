@@ -2,12 +2,12 @@ import glob
 import logging
 import os
 import pathlib
+import time
 from datetime import datetime
 
 import numpy as np
 import torch
-from graph.edges.dataset2d import Domain2DDataset
-from graph.edges.dataset2d import DomainTestDataset
+from graph.edges.dataset2d import Domain2DDataset, DomainTestDataset
 from graph.edges.unet.unet_model import UNetGood
 from torch import nn
 from torch.optim import AdamW
@@ -26,6 +26,7 @@ class Edge:
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=30,
+                          bs_test=200,
                           n_workers=4,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle)
@@ -75,7 +76,7 @@ class Edge:
                             n_classes=self.expert2.n_maps,
                             bilinear=True).to(device)
 
-    def init_loaders(self, bs, n_workers, rnd_sampler, valid_shuffle):
+    def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle):
         RGBS_PATH = self.config.get('Paths', 'RGBS_PATH')
         EXPERTS_OUTPUT_PATH = self.config.get('Paths', 'EXPERTS_OUTPUT_PATH')
         TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
@@ -102,7 +103,7 @@ class Edge:
                                     self.expert2.identifier)
         if test_ds.available:
             self.test_loader = DataLoader(test_ds,
-                                          batch_size=bs,
+                                          batch_size=bs_test,
                                           shuffle=False,
                                           num_workers=n_workers)
         else:
@@ -337,45 +338,46 @@ class Edge:
     def eval_1hop_ensemble_aux(loaders, l1_per_edge, l1_ensemble1hop,
                                edges_1hop, device, save_idxes, writer, wtag,
                                test):
-        num_batches = len(loaders[0])
-        for idx_batch in range(num_batches):
-            domain2_1hop_ens_list = []
+        with torch.no_grad():
+            num_batches = len(loaders[0])
+            for idx_batch in range(num_batches):
+                domain2_1hop_ens_list = []
 
-            for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
-                edge, loader = data_edge
-                domain1, domain2_gt = next(loader)
+                for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
+                    edge, loader = data_edge
+                    domain1, domain2_gt = next(loader)
 
-                assert domain1.shape[1] == edge.net.n_channels
-                assert domain2_gt.shape[1] == edge.net.n_classes
+                    assert domain1.shape[1] == edge.net.n_channels
+                    assert domain2_gt.shape[1] == edge.net.n_classes
 
-                domain1 = domain1.to(device=device, dtype=torch.float32)
-                domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+                    domain1 = domain1.to(device=device, dtype=torch.float32)
+                    domain2_gt = domain2_gt.to(device=device,
+                                               dtype=torch.float32)
 
-                with torch.no_grad():
-                    # Ensemble1Hop: 1hop preds
-                    one_hop_pred = edge.net(domain1)
-                    domain2_1hop_ens_list.append(
-                        one_hop_pred.clone().data.cpu().numpy())
+                    with torch.no_grad():
+                        # Ensemble1Hop: 1hop preds
+                        one_hop_pred = edge.net(domain1)
+                        domain2_1hop_ens_list.append(
+                            one_hop_pred.clone().data.cpu().numpy())
 
-                if idx_batch == len(loader) - 1:
-                    if save_idxes is None:
-                        save_idxes = np.random.choice(domain1.shape[0],
-                                                      size=(3),
-                                                      replace=False)
-                    # Show last but one batch edges
-                    writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
-                                      img_for_plot(one_hop_pred[save_idxes]),
-                                      0)
+                    if idx_batch == len(loader) - 1:
+                        if save_idxes is None:
+                            save_idxes = np.random.choice(domain1.shape[0],
+                                                          size=(3),
+                                                          replace=False)
+                        # Show last but one batch edges
+                        writer.add_images(
+                            '%s/%s' % (wtag, edge.expert1.str_id),
+                            img_for_plot(one_hop_pred[save_idxes]), 0)
 
-                l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
-                                                 domain2_gt).item()
-            #import pdb
-            #pdb.set_trace()
-            if test == 0:
-                domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
-            domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
-                device=device)
-            l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
+                    l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
+                                                     domain2_gt).item()
+                if test == 0:
+                    domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
+
+                domain2_1hop_ens = utils.combine_maps(
+                    domain2_1hop_ens_list, fct="median").to(device=device)
+                l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
 
         return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
 
@@ -391,9 +393,12 @@ class Edge:
             valid_loaders.append(iter(edge.valid_loader))
             l1_per_edge.append(0)
 
+        start = time.time()
         l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_aux(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
             save_idxes, writer, wtag_valid, 0)
+        end = time.time()
+        print("valid Edge.eval_1hop_ensemble_aux", end - start)
 
         test_loaders = []
         test_edges = []
@@ -405,11 +410,13 @@ class Edge:
                 test_edges.append(edge)
                 l1_per_edge_test.append(0)
 
+        start = time.time()
         if len(test_loaders) > 0:
             l1_per_edge_test, l1_ensemble1hop_test, save_idxes_test, domain2_1hop_ens_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_aux(
                 test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
                 test_edges, device, save_idxes_test, writer, wtag_test, 1)
-
+        end = time.time()
+        print("TEST Edge.eval_1hop_ensemble_aux", end - start)
         # Show Ensemble
         writer.add_images('%s/ENSEMBLE' % (wtag_valid),
                           img_for_plot(domain2_1hop_ens[save_idxes]), 0)
@@ -433,10 +440,13 @@ class Edge:
                               l1_ensemble1hop_test, 0)
 
         tag = "to_%s" % (edges_1hop[0].expert2.str_id)
-        print("%24s  Expert  GT" % (tag))
-        print("Loss %19s: %.2f   %.2f" %
+        print("%24s  L1(ensemble, Expert)_valset  L1(ensemble, GT)_testset" %
+              (tag))
+        print("Loss %19s: %20.2f   %20.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))
-        print("%25s------------------" % (" "))
+        print("%25s-----------------------------------------------------" %
+              (" "))
+
         # Show Individual Losses
         l1_per_edge = np.array(l1_per_edge) / num_batches
         mean_l1_per_edge = np.mean(l1_per_edge)
@@ -453,15 +463,16 @@ class Edge:
                 writer.add_scalar(
                     '1hop_%s/L1_Loss_%s' % (wtag_test, edge.expert1.str_id),
                     l1_per_edge_test[idx_test_edge], 0)
-                print("Loss %19s: %.2f   %.2f" %
+                print("Loss %19s: %20.2f   %20.2f" %
                       (edge.expert1.str_id, l1_per_edge[idx_edge],
                        l1_per_edge_test[idx_test_edge]))
                 idx_test_edge = idx_test_edge + 1
             else:
                 print("Loss %19s: %.2f    - " %
                       (edge.expert1.str_id, l1_per_edge[idx_edge]))
-        print("%25s------------------" % (" "))
-        print("Loss %-20s %.2f   %.2f" %
+        print("%25s-----------------------------------------------------" %
+              (" "))
+        print("Loss %-20s %20.2f   %20.2f" %
               ("average", mean_l1_per_edge, mean_l1_per_edge_test))
 
         print("")

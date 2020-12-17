@@ -1,13 +1,15 @@
 import numpy as np
 import torch
 from scipy.stats import pearsonr
+from skimage.metrics import structural_similarity as ssim
+
 
 def get_ssim_score(im1, im2, win_size):
-    from skimage.metrics import structural_similarity as ssim
     im1 = np.moveaxis(im1, 0, -1)
     im2 = np.moveaxis(im2, 0, -1)
     ssim_score = ssim(im1, im2, win_size=win_size, multichannel=True)
     return ssim_score
+
 
 def get_correlation_score(batch_results, correlations, drop_version):
     n_tasks = len(batch_results)
@@ -17,7 +19,7 @@ def get_correlation_score(batch_results, correlations, drop_version):
         win_size = 127
     for i in range(n_tasks):
         for j in range(n_tasks):
-            if i>j:
+            if i > j:
                 continue
             task_i_res = batch_results[i]
             task_j_res = batch_results[j]
@@ -27,8 +29,8 @@ def get_correlation_score(batch_results, correlations, drop_version):
                 sample_j = task_j_res[k]
                 scores.append(get_ssim_score(sample_i, sample_j, win_size))
             sum_scores = np.sum(np.array(scores))
-            correlations[i, j] = correlations[i,j] + sum_scores
-            correlations[j, i] = correlations[j,i] + sum_scores 
+            correlations[i, j] = correlations[i, j] + sum_scores
+            correlations[j, i] = correlations[j, i] + sum_scores
     return correlations
 
 
@@ -55,7 +57,7 @@ def combine_maps(result_list, fct="median"):
     '''
     multi_chan_arr = np.array(result_list)
     if fct == "mean":
-        return multi_chan_arr.mean(axis=0)
+        return torch.from_numpy(multi_chan_arr.mean(axis=0))
     if fct == "median":
         return median_100(multi_chan_arr)
 

@@ -8,3 +8,4 @@ experts/models/prdimp50.pth.tar
 experts/models/prdimp18.pth.tar
 nohup.out
 *events.out.tfevents*
+.ropeproject/objectdb

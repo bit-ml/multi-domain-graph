@@ -31,7 +31,8 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "config2_load_edges.ini"
+                // "config2_load_edges.ini"
+                "config_elena.ini"
             ]
         }
     ]

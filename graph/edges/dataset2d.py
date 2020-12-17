@@ -2,15 +2,19 @@ import glob
 import os
 import pathlib
 import time
-import torch
+
 import numpy as np
+import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
 first_k = 3000
-test_samples = 9464#60#64
+test_samples = 9464  #60#64
+CACHE_NAME = "my_cache"
+W, H = 256, 256
 
-def load_with_cache(cache_file, glob_path):
+
+def load_glob_with_cache(cache_file, glob_path):
     if not os.path.exists(cache_file):
         all_paths = sorted(glob.glob(glob_path))
         save_folder = os.path.dirname(cache_file)
@@ -32,22 +36,25 @@ class Domain2DDataset(Dataset):
 
         tag = pathlib.Path(dataset_path).parts[-1]
         # load all rgbs paths
-        cache_rgb = "my_cache/rgbs_paths_%s_%s.npy" % (tag, pattern[-3:])
+        cache_rgb = "%s/rgbs_paths_%s_%s.npy" % (CACHE_NAME, tag, pattern[-3:])
         glob_path_rgb = "%s/%s/%s.jpg" % (rgbs_path, dataset_path, pattern)
-        self.rgb_paths = load_with_cache(cache_rgb, glob_path_rgb)[:first_k]
+        self.rgb_paths = load_glob_with_cache(cache_rgb,
+                                              glob_path_rgb)[:first_k]
 
         # load experts paths
-        cache_e1 = "my_cache/%s_%s_%s.npy" % (self.experts[0].str_id, tag,
-                                              pattern[-3:])
+        cache_e1 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[0].str_id,
+                                        tag, pattern[-3:])
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, self.experts[0].str_id, dataset_path, pattern)
-        self.e1_output_path = load_with_cache(cache_e1, glob_path_e1)[:first_k]
+        self.e1_output_path = load_glob_with_cache(cache_e1,
+                                                   glob_path_e1)[:first_k]
 
-        cache_e2 = "my_cache/%s_%s_%s.npy" % (self.experts[1].str_id, tag,
-                                              pattern[-3:])
+        cache_e2 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[1].str_id,
+                                        tag, pattern[-3:])
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
             experts_path, self.experts[1].str_id, dataset_path, pattern)
-        self.e2_output_path = load_with_cache(cache_e2, glob_path_e2)[:first_k]
+        self.e2_output_path = load_glob_with_cache(cache_e2,
+                                                   glob_path_e2)[:first_k]
         e = time.time()
 
         # print("glob time:", e - s)
@@ -72,14 +79,47 @@ class Domain2DDataset(Dataset):
 
 taskonomy_src_domains = [
     'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc',
-    'halftone_cmyk_basic', 'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_rot_gray_basic',
-    'saliency_seg_egnet', 'sseg_deeplabv3', 'sseg_fcn']
+    'halftone_cmyk_basic', 'halftone_gray_basic', 'halftone_rgb_basic',
+    'halftone_rot_gray_basic', 'saliency_seg_egnet', 'sseg_deeplabv3',
+    'sseg_fcn'
+]
 taskonomy_dst_domains = [
-    'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc']
+    'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc'
+]
 taskonomy_dst_domains_alt_names = [
-    'rgb', 'depth_zbuffer', 'edge_texture', 'normal']
+    'rgb', 'depth_zbuffer', 'edge_texture', 'normal'
+]
 taskonomy_annotations_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master'
 taskonomy_experts_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master-experts'
+
+
+def load_filelist_with_cache(cache_file_input, cache_file_output, src_path,
+                             dst_path, alt_name):
+    if os.path.exists(cache_file_input) and os.path.exists(cache_file_output):
+        inputs_path = np.load(cache_file_input)
+        outputs_path = np.load(cache_file_output)
+        return inputs_path, outputs_path
+
+    # cache paths
+    inputs_path = []
+    outputs_path = []
+
+    filenames = os.listdir(dst_path)
+    filenames.sort()
+    if test_samples != 0:
+        filenames = filenames[0:test_samples]
+    for filename in filenames:
+        # save file list for caching
+        inputs_path.append(
+            os.path.join(src_path, filename.replace('_%s.' % alt_name, '_rgb.')    ))
+        outputs_path.append(os.path.join(dst_path, filename))
+
+    # save input/output cache
+    np.save(cache_file_input, np.array(inputs_path))
+    np.save(cache_file_output, np.array(outputs_path))
+    return inputs_path, outputs_path
+
+
 
 class DomainTestDataset(Dataset):
     """Build Testing Dataset 
@@ -89,49 +129,68 @@ class DomainTestDataset(Dataset):
         self.src_expert = src_expert
         self.dst_expert = dst_expert
         if src_expert in taskonomy_src_domains and dst_expert in taskonomy_dst_domains:
-            self.available = True 
+            self.available = True
         else:
             self.available = False
-            return 
+            return
+
+        # src/dst paths
         src_path = os.path.join(taskonomy_experts_path, src_expert)
         index = taskonomy_dst_domains.index(dst_expert)
         alt_name = taskonomy_dst_domains_alt_names[index]
-        dst_path = os.path.join(taskonomy_annotations_path, alt_name)
-        self.inputs_path = []
-        self.outputs_path = []
-        filenames = os.listdir(dst_path)
-        filenames.sort()
-        if test_samples!=0:
-            filenames = filenames[0:test_samples]
-        for filename in filenames:
-            self.outputs_path.append(os.path.join(dst_path, filename))
-            self.inputs_path.append(os.path.join(src_path, filename.replace('_%s.png'%alt_name, '_rgb.npy')))
-        
-            
+        dst_path_preproc = os.path.join("%s-preproc" % taskonomy_annotations_path,
+                                        alt_name)
+
+        # save preproc files
+        if not os.path.exists(dst_path_preproc):
+            pathlib.Path(dst_path_preproc).mkdir(parents=True, exist_ok=True)
+            dst_path = os.path.join(taskonomy_annotations_path, alt_name)
+            self.__save_preprocessed__(dst_path, dst_path_preproc)
+
+        # cache filenames
+        cache_file_input = "%s/dataset_test_input_%s.npy" % (CACHE_NAME, src_expert)
+        cache_file_output = "%s/dataset_test_output_%s.npy" % (CACHE_NAME, dst_expert)
+        self.inputs_path, self.outputs_path = load_filelist_with_cache(
+            cache_file_input, cache_file_output, src_path, dst_path_preproc,
+            alt_name)
+
     def __getitem__(self, index):
         if self.available == False:
             return None, None
-        input_path = self.inputs_path[index]
-        output_path = self.outputs_path[index]
 
-        input = np.load(input_path)
+        inp = np.load(self.inputs_path[index])
+        outp = np.load(self.outputs_path[index])
 
-        output = Image.open(output_path)
-        output = np.array(output)
-        if len(output.shape) == 2:
-            output = output[:, :, None]
-        output = torch.tensor(output, dtype=torch.float32)
-        output = output.permute(2, 0, 1)
-        output = torch.nn.functional.interpolate(output[None], (input.shape[1], input.shape[2]))[0]
-        if self.dst_expert == 'depth_sgdepth' or self.dst_expert == 'edges_dexined':
-            output = output / 65536.0
-        if self.dst_expert == 'normals_xtc' or self.dst_expert == 'rgb':
-            output = output / 255.0
-        
-        return input, output
+        return inp, outp
 
     def __len__(self):
         if self.available == False:
             return 0
-        else:
-            return len(self.inputs_path)
+        return len(self.inputs_path)
+
+    def __save_preprocessed__(self, dst_path_raw, dst_path_preproc):
+        filenames = os.listdir(dst_path_raw)
+        filenames.sort()
+        if test_samples != 0:
+            filenames = filenames[0:test_samples]
+        for filename in filenames:
+            fname_path_raw = os.path.join(dst_path_raw, filename)
+
+            output = Image.open(fname_path_raw)
+            output = np.array(output)
+
+            if len(output.shape) == 2:
+                output = output[:, :, None]
+            output = torch.tensor(output, dtype=torch.float32)
+            output = output.permute(2, 0, 1)
+            output = torch.nn.functional.interpolate(output[None], (H, W))[0]
+            if self.dst_expert == 'depth_sgdepth' or self.dst_expert == 'edges_dexined':
+                output = output / 65536.0
+            if self.dst_expert == 'normals_xtc' or self.dst_expert == 'rgb':
+                output = output / 255.0
+
+            # save output
+            fname_path_preproc = os.path.join(dst_path_preproc,
+                                              filename.replace(".png", ".npy"))
+
+            np.save(fname_path_preproc, output)
