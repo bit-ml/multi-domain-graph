@@ -332,7 +332,7 @@ class Edge:
     ################ [1Hop Ensembles] ##################
 
     def eval_1hop_ensemble_aux(loaders, l1_per_edge, l1_ensemble1hop,
-                               edges_1hop, device, save_idxes, writer, wtag):
+                               edges_1hop, device, save_idxes, writer, wtag, test):
         num_batches = len(loaders[0])
         for idx_batch in range(num_batches):
             domain2_1hop_ens_list = []
@@ -366,7 +366,8 @@ class Edge:
                                                  domain2_gt).item()
             #import pdb
             #pdb.set_trace()
-            domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
+            if test==0:
+                domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
             domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
                 device=device)
             l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
@@ -386,7 +387,7 @@ class Edge:
 
         l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_aux(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag)
+            save_idxes, writer, wtag, 0)
 
         test_loaders = []
         test_edges = []
@@ -401,7 +402,7 @@ class Edge:
         if len(test_loaders) > 0:
             l1_per_edge_test, l1_ensemble1hop_test, save_idxes_test, domain2_1hop_ens_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_aux(
                 test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
-                test_edges, device, save_idxes_test, writer, wtag)
+                test_edges, device, save_idxes_test, writer, wtag, 1)
 
         # Show Ensemble
         writer.add_images('%s/ENSEMBLE' % (wtag),
