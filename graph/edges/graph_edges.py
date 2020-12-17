@@ -13,6 +13,7 @@ from torch import nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from utils import utils
 from utils.utils import img_for_plot
 
@@ -25,8 +26,8 @@ class Edge:
         self.silent = silent
 
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=30,
-                          bs_test=200,
+        self.init_loaders(bs=100,
+                          bs_test=220 * torch.cuda.device_count(),
                           n_workers=4,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle)
@@ -75,6 +76,7 @@ class Edge:
         self.net = UNetGood(n_channels=self.expert1.n_maps,
                             n_classes=self.expert2.n_maps,
                             bilinear=True).to(device)
+        self.net = nn.DataParallel(self.net)
 
     def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle):
         RGBS_PATH = self.config.get('Paths', 'RGBS_PATH')
@@ -313,8 +315,8 @@ class Edge:
                 edge, loader = data_edge
                 domain1, domain2_gt = next(loader)
 
-                assert domain1.shape[1] == edge.net.n_channels
-                assert domain2_gt.shape[1] == edge.net.n_classes
+                assert domain1.shape[1] == edge.net.module.n_channels
+                assert domain2_gt.shape[1] == edge.net.module.n_classes
 
                 domain1 = domain1.to(device=device, dtype=torch.float32)
                 domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
@@ -337,88 +339,91 @@ class Edge:
     def eval_1hop_ensemble_test_set(loaders, l1_per_edge, l1_ensemble1hop,
                                     edges_1hop, device, save_idxes, writer,
                                     wtag):
-        num_batches = len(loaders[0])
-        for idx_batch in range(num_batches):
-            domain2_1hop_ens_list = []
+        with torch.no_grad():
+            num_batches = len(loaders[0])
+            for idx_batch in tqdm(range(num_batches)):
+                domain2_1hop_ens_list = []
 
-            for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
-                edge, loader = data_edge
-                domain1, domain2_gt, domain2_pseudo_gt = next(loader)
+                for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
+                    edge, loader = data_edge
+                    domain1, domain2_gt, domain2_pseudo_gt = next(loader)
 
-                assert domain1.shape[1] == edge.net.n_channels
-                assert domain2_gt.shape[1] == edge.net.n_classes
+                    assert domain1.shape[1] == edge.net.module.n_channels
+                    assert domain2_gt.shape[1] == edge.net.module.n_classes
 
-                domain1 = domain1.to(device=device, dtype=torch.float32)
-                domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+                    domain1 = domain1.to(device=device, dtype=torch.float32)
+                    domain2_gt = domain2_gt.to(device=device,
+                                               dtype=torch.float32)
+                    domain2_pseudo_gt = domain2_pseudo_gt.to(
+                        device=device, dtype=torch.float32)
 
-                with torch.no_grad():
-                    # Ensemble1Hop: 1hop preds
-                    one_hop_pred = edge.net(domain1)
-                    domain2_1hop_ens_list.append(
-                        one_hop_pred.clone().data.cpu().numpy())
+                    with torch.no_grad():
+                        # Ensemble1Hop: 1hop preds
+                        one_hop_pred = edge.net(domain1)
+                        domain2_1hop_ens_list = one_hop_pred.clone()
 
-                if idx_batch == len(loader) - 1:
-                    if save_idxes is None:
-                        save_idxes = np.random.choice(domain1.shape[0],
-                                                      size=(3),
-                                                      replace=False)
-                    # Show last but one batch edges
-                    writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
-                                      img_for_plot(one_hop_pred[save_idxes]),
-                                      0)
+                    if idx_batch == len(loader) - 1:
+                        if save_idxes is None:
+                            save_idxes = np.random.choice(domain1.shape[0],
+                                                          size=(3),
+                                                          replace=False)
+                        # Show last but one batch edges
+                        writer.add_images(
+                            '%s/%s' % (wtag, edge.expert1.str_id),
+                            img_for_plot(one_hop_pred[save_idxes]), 0)
 
-                l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
-                                                 domain2_gt).item()
+                    l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
+                                                     domain2_gt).item()
 
-            domain2_1hop_ens_list.append(domain2_pseudo_gt.cpu().numpy())
-            domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
-                device=device)
-            l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
+                domain2_1hop_ens_list = torch.stack(
+                    [domain2_1hop_ens_list, domain2_pseudo_gt])
+                domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list)
+                l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
 
-        return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
+            return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
 
     def eval_1hop_ensemble_valid_set(loaders, l1_per_edge, l1_ensemble1hop,
                                      edges_1hop, device, save_idxes, writer,
                                      wtag):
-        num_batches = len(loaders[0])
-        for idx_batch in range(num_batches):
-            domain2_1hop_ens_list = []
+        with torch.no_grad():
+            num_batches = len(loaders[0])
+            for idx_batch in range(num_batches):
 
-            for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
-                edge, loader = data_edge
-                domain1, domain2_gt = next(loader)
+                for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
+                    edge, loader = data_edge
+                    domain1, domain2_gt = next(loader)
 
-                assert domain1.shape[1] == edge.net.n_channels
-                assert domain2_gt.shape[1] == edge.net.n_classes
+                    assert domain1.shape[1] == edge.net.module.n_channels
+                    assert domain2_gt.shape[1] == edge.net.module.n_classes
 
-                domain1 = domain1.to(device=device, dtype=torch.float32)
-                domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+                    domain1 = domain1.to(device=device, dtype=torch.float32)
+                    domain2_gt = domain2_gt.to(device=device,
+                                               dtype=torch.float32)
 
-                with torch.no_grad():
-                    # Ensemble1Hop: 1hop preds
-                    one_hop_pred = edge.net(domain1)
-                    domain2_1hop_ens_list.append(
-                        one_hop_pred.clone().data.cpu().numpy())
+                    with torch.no_grad():
+                        # Ensemble1Hop: 1hop preds
+                        one_hop_pred = edge.net(domain1)
+                        domain2_1hop_ens_list = one_hop_pred.clone()
 
-                if idx_batch == len(loader) - 1:
-                    if save_idxes is None:
-                        save_idxes = np.random.choice(domain1.shape[0],
-                                                      size=(3),
-                                                      replace=False)
-                    # Show last but one batch edges
-                    writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
-                                      img_for_plot(one_hop_pred[save_idxes]),
-                                      0)
+                    if idx_batch == len(loader) - 1:
+                        if save_idxes is None:
+                            save_idxes = np.random.choice(domain1.shape[0],
+                                                          size=(3),
+                                                          replace=False)
+                        # Show last but one batch edges
+                        writer.add_images(
+                            '%s/%s' % (wtag, edge.expert1.str_id),
+                            img_for_plot(one_hop_pred[save_idxes]), 0)
 
-                l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
-                                                 domain2_gt).item()
+                    l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
+                                                     domain2_gt).item()
 
-            domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
-            domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
-                device=device)
-            l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
+                domain2_1hop_ens_list = torch.stack(
+                    [domain2_1hop_ens_list, domain2_gt])
+                domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list)
+                l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
 
-        return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
+            return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer, with_drop):

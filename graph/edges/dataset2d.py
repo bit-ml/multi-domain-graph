@@ -58,8 +58,8 @@ class Domain2DDataset(Dataset):
         e = time.time()
 
         # print("glob time:", e - s)
-        print("Dataset size", len(self.rgb_paths), len(self.e1_output_path),
-              len(self.e2_output_path))
+        # print("Dataset size", len(self.rgb_paths), len(self.e1_output_path),
+        #       len(self.e2_output_path))
         assert (len(self.rgb_paths) == len(self.e1_output_path) == len(
             self.e2_output_path))
         # print(self.rgb_paths[0])
@@ -93,8 +93,9 @@ taskonomy_annotations_path = r'/data/multi-domain-graph/datasets/taskonomy/tasko
 taskonomy_experts_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master-experts'
 
 
-def load_filelist_with_cache(cache_file_input, cache_file_output, cache_file_pseudo_gt, src_path,
-                             dst_path, pseudo_gt_dst_path, alt_name):
+def load_filelist_with_cache(cache_file_input, cache_file_output,
+                             cache_file_pseudo_gt, src_path, dst_path,
+                             pseudo_gt_dst_path, alt_name):
     if os.path.exists(cache_file_input) and os.path.exists(
             cache_file_output) and os.path.exists(cache_file_pseudo_gt):
         inputs_path = np.load(cache_file_input)
@@ -161,11 +162,11 @@ class DomainTestDataset(Dataset):
         cache_file_output = "%s/dataset_test_output_%s.npy" % (CACHE_NAME,
                                                                dst_expert)
         cache_file_pseudo_gt = "%s/dataset_test_input_%s.npy" % (CACHE_NAME,
-                                                               dst_expert)
+                                                                 dst_expert)
 
         self.inputs_path, self.outputs_path, self.pseudo_gt_outputs_path = load_filelist_with_cache(
-            cache_file_input, cache_file_output, cache_file_pseudo_gt, src_path, dst_path_preproc,
-            pseudo_gt_dst_path, alt_name)
+            cache_file_input, cache_file_output, cache_file_pseudo_gt,
+            src_path, dst_path_preproc, pseudo_gt_dst_path, alt_name)
 
     def __getitem__(self, index):
         if self.available == False:

@@ -50,26 +50,24 @@ def img_for_plot(img):
     return (img - min_img) / (max_img - min_img)
 
 
-def combine_maps(result_list, fct="median"):
+def combine_maps(multi_chan_maps, fct="median"):
     '''
         input list shape: (arr_m1, arr_m2, arr_m3, ...)
         result shape: (arr_all)
     '''
-    multi_chan_arr = np.array(result_list)
     if fct == "mean":
-        return torch.from_numpy(multi_chan_arr.mean(axis=0))
+        return multi_chan_maps.mean(dim=0)
     if fct == "median":
-        return median_100(multi_chan_arr)
+        return median_100(multi_chan_maps)
 
     assert ('[%s] Combination not implemented' % fct)
 
 
 def median_100(multi_chan_arr):
     ar_100 = multi_chan_arr * 100.
-    ar_100_int = ar_100.astype(np.int32)
-    med_100 = np.median(ar_100_int, axis=0).astype(np.float32)
-    med_100_th = torch.from_numpy(med_100) / 100.
-    return med_100_th
+    ar_100_int = ar_100.int()
+    med_100, _ = torch.median(ar_100_int, dim=0)
+    return med_100 / 100.
 
 
 def median_simple(multi_chan_arr):

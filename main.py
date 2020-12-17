@@ -12,6 +12,7 @@ from experts.save_output import (generate_experts_output,
 from graph.edges.graph_edges import Edge
 from graph.graph import MultiDomainGraph
 from utils import utils
+from utils.utils import DummySummaryWriter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -175,8 +176,8 @@ def load_2Dtasks(graph, epoch):
     print("Load nets from checkpoints")
     for net_idx, edge in enumerate(graph.edges):
         path = os.path.join(edge.load_model_dir, 'epoch_%05d.pth' % (epoch))
-        edge.net.load_state_dict(torch.load(path))
-        edge.net.eval()
+        edge.net.module.load_state_dict(torch.load(path))
+        edge.net.module.eval()
 
 
 ############################## 2HOPs ###############################
@@ -235,9 +236,9 @@ def main(argv):
         graph = build_space_graph(config, silent=silent, valid_shuffle=False)
         load_2Dtasks(graph, epoch=epochs)
 
-    # print("Eval 1Hop ensembles before drop")
-    # # drop_version passed as -1 -> no drop
-    # eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
+    print("Eval 1Hop ensembles before drop")
+    # drop_version passed as -1 -> no drop
+    eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
 
     # 3. Drop ill-posed connections
     drop_version = config.getint('Training', 'drop_version')
@@ -248,15 +249,15 @@ def main(argv):
     drop_version = config.getint('Training', 'drop_version')
     eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
 
-    # 5. Train/Eval 2Hop
-    print("Eval 2Hop ensembles")
-    # used only as eval
-    train_2hops_2Dtasks(graph,
-                        drop_version,
-                        epochs=1,
-                        use_expert_gt=True,
-                        silent=silent,
-                        config=config)
+    # # 5. Train/Eval 2Hop
+    # print("Eval 2Hop ensembles")
+    # # used only as eval
+    # train_2hops_2Dtasks(graph,
+    #                     drop_version,
+    #                     epochs=1,
+    #                     use_expert_gt=True,
+    #                     silent=silent,
+    #                     config=config)
 
 
 if __name__ == "__main__":
