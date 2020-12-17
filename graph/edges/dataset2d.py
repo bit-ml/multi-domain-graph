@@ -93,16 +93,19 @@ taskonomy_annotations_path = r'/data/multi-domain-graph/datasets/taskonomy/tasko
 taskonomy_experts_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master-experts'
 
 
-def load_filelist_with_cache(cache_file_input, cache_file_output, src_path,
-                             dst_path, alt_name):
-    if os.path.exists(cache_file_input) and os.path.exists(cache_file_output):
+def load_filelist_with_cache(cache_file_input, cache_file_output, cache_file_pseudo_gt, src_path,
+                             dst_path, pseudo_gt_dst_path, alt_name):
+    if os.path.exists(cache_file_input) and os.path.exists(
+            cache_file_output) and os.path.exists(cache_file_pseudo_gt):
         inputs_path = np.load(cache_file_input)
         outputs_path = np.load(cache_file_output)
-        return inputs_path, outputs_path
+        pseudo_gts_path = np.load(cache_file_pseudo_gt)
+        return inputs_path, outputs_path, pseudo_gts_path
 
     # cache paths
     inputs_path = []
     outputs_path = []
+    pseudo_gts_path = []
 
     filenames = os.listdir(dst_path)
     filenames.sort()
@@ -111,14 +114,18 @@ def load_filelist_with_cache(cache_file_input, cache_file_output, src_path,
     for filename in filenames:
         # save file list for caching
         inputs_path.append(
-            os.path.join(src_path, filename.replace('_%s.' % alt_name, '_rgb.')    ))
+            os.path.join(src_path, filename.replace('_%s.' % alt_name,
+                                                    '_rgb.')))
         outputs_path.append(os.path.join(dst_path, filename))
-
+        pseudo_gts_path.append(
+            os.path.join(pseudo_gt_dst_path,
+                         filename.replace('_%s.' % alt_name, '_rgb.')))
     # save input/output cache
     np.save(cache_file_input, np.array(inputs_path))
     np.save(cache_file_output, np.array(outputs_path))
-    return inputs_path, outputs_path
+    np.save(cache_file_pseudo_gt, np.array(pseudo_gts_path))
 
+    return inputs_path, outputs_path, pseudo_gts_path
 
 
 class DomainTestDataset(Dataset):
@@ -138,8 +145,9 @@ class DomainTestDataset(Dataset):
         src_path = os.path.join(taskonomy_experts_path, src_expert)
         index = taskonomy_dst_domains.index(dst_expert)
         alt_name = taskonomy_dst_domains_alt_names[index]
-        dst_path_preproc = os.path.join("%s-preproc" % taskonomy_annotations_path,
-                                        alt_name)
+        dst_path_preproc = os.path.join(
+            "%s-preproc" % taskonomy_annotations_path, alt_name)
+        pseudo_gt_dst_path = os.path.join(taskonomy_experts_path, dst_expert)
 
         # save preproc files
         if not os.path.exists(dst_path_preproc):
@@ -148,11 +156,16 @@ class DomainTestDataset(Dataset):
             self.__save_preprocessed__(dst_path, dst_path_preproc)
 
         # cache filenames
-        cache_file_input = "%s/dataset_test_input_%s.npy" % (CACHE_NAME, src_expert)
-        cache_file_output = "%s/dataset_test_output_%s.npy" % (CACHE_NAME, dst_expert)
-        self.inputs_path, self.outputs_path = load_filelist_with_cache(
-            cache_file_input, cache_file_output, src_path, dst_path_preproc,
-            alt_name)
+        cache_file_input = "%s/dataset_test_input_%s.npy" % (CACHE_NAME,
+                                                             src_expert)
+        cache_file_output = "%s/dataset_test_output_%s.npy" % (CACHE_NAME,
+                                                               dst_expert)
+        cache_file_pseudo_gt = "%s/dataset_test_input_%s.npy" % (CACHE_NAME,
+                                                               dst_expert)
+
+        self.inputs_path, self.outputs_path, self.pseudo_gt_outputs_path = load_filelist_with_cache(
+            cache_file_input, cache_file_output, cache_file_pseudo_gt, src_path, dst_path_preproc,
+            pseudo_gt_dst_path, alt_name)
 
     def __getitem__(self, index):
         if self.available == False:
@@ -160,8 +173,9 @@ class DomainTestDataset(Dataset):
 
         inp = np.load(self.inputs_path[index])
         outp = np.load(self.outputs_path[index])
+        pseudo_gt = np.load(self.pseudo_gt_outputs_path[index])
 
-        return inp, outp
+        return inp, outp, pseudo_gt
 
     def __len__(self):
         if self.available == False:
