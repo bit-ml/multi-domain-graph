@@ -202,7 +202,7 @@ class Edge:
         test_l1_loss = 0
 
         for batch in self.test_loader:
-            domain1, domain2_gt = batch
+            domain1, domain2_gt, _ = batch
             assert domain1.shape[1] == self.net.n_channels
             assert domain2_gt.shape[1] == self.net.n_classes
 
@@ -333,10 +333,52 @@ class Edge:
         return correlations
 
     ################ [1Hop Ensembles] ##################
+    def eval_1hop_ensemble_test_set(loaders, l1_per_edge, l1_ensemble1hop,
+                                    edges_1hop, device, save_idxes, writer,
+                                    wtag):
+        num_batches = len(loaders[0])
+        for idx_batch in range(num_batches):
+            domain2_1hop_ens_list = []
 
-    def eval_1hop_ensemble_aux(loaders, l1_per_edge, l1_ensemble1hop,
-                               edges_1hop, device, save_idxes, writer, wtag,
-                               test):
+            for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
+                edge, loader = data_edge
+                domain1, domain2_gt, domain2_pseudo_gt = next(loader)
+
+                assert domain1.shape[1] == edge.net.n_channels
+                assert domain2_gt.shape[1] == edge.net.n_classes
+
+                domain1 = domain1.to(device=device, dtype=torch.float32)
+                domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+
+                with torch.no_grad():
+                    # Ensemble1Hop: 1hop preds
+                    one_hop_pred = edge.net(domain1)
+                    domain2_1hop_ens_list.append(
+                        one_hop_pred.clone().data.cpu().numpy())
+
+                if idx_batch == len(loader) - 1:
+                    if save_idxes is None:
+                        save_idxes = np.random.choice(domain1.shape[0],
+                                                      size=(3),
+                                                      replace=False)
+                    # Show last but one batch edges
+                    writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
+                                      img_for_plot(one_hop_pred[save_idxes]),
+                                      0)
+
+                l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
+                                                 domain2_gt).item()
+
+            domain2_1hop_ens_list.append(domain2_pseudo_gt.cpu().numpy())
+            domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
+                device=device)
+            l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
+
+        return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
+
+    def eval_1hop_ensemble_valid_set(loaders, l1_per_edge, l1_ensemble1hop,
+                                     edges_1hop, device, save_idxes, writer,
+                                     wtag):
         num_batches = len(loaders[0])
         for idx_batch in range(num_batches):
             domain2_1hop_ens_list = []
@@ -369,10 +411,8 @@ class Edge:
 
                 l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
                                                  domain2_gt).item()
-            #import pdb
-            #pdb.set_trace()
-            if test == 0:
-                domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
+
+            domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
             domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
                 device=device)
             l1_ensemble1hop += edge.l1(domain2_1hop_ens, domain2_gt).item()
@@ -380,9 +420,16 @@ class Edge:
         return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
-                           writer):
-        wtag_valid = "to_%s_valid_set" % edges_1hop[0].expert2.str_id
-        wtag_test = "to_%s_test_set" % edges_1hop[0].expert2.str_id
+                           writer, with_drop):
+        if with_drop==1:
+            wtag_valid = "to_%s_valid_set_with_drop" % edges_1hop[
+                0].expert2.str_id
+            wtag_test = "to_%s_test_set_with_drop" % edges_1hop[
+                0].expert2.str_id
+        else:
+            wtag_valid = "to_%s_valid_set_no_drop" % edges_1hop[
+                0].expert2.str_id
+            wtag_test = "to_%s_test_set_no_drop" % edges_1hop[0].expert2.str_id
 
         valid_loaders = []
         l1_per_edge = []
@@ -391,9 +438,9 @@ class Edge:
             valid_loaders.append(iter(edge.valid_loader))
             l1_per_edge.append(0)
 
-        l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_aux(
+        l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_valid_set(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag_valid, 0)
+            save_idxes, writer, wtag_valid)
 
         test_loaders = []
         test_edges = []
@@ -406,9 +453,9 @@ class Edge:
                 l1_per_edge_test.append(0)
 
         if len(test_loaders) > 0:
-            l1_per_edge_test, l1_ensemble1hop_test, save_idxes_test, domain2_1hop_ens_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_aux(
+            l1_per_edge_test, l1_ensemble1hop_test, save_idxes_test, domain2_1hop_ens_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_test_set(
                 test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
-                test_edges, device, save_idxes_test, writer, wtag_test, 1)
+                test_edges, device, save_idxes_test, writer, wtag_test)
 
         # Show Ensemble
         writer.add_images('%s/ENSEMBLE' % (wtag_valid),
@@ -432,7 +479,10 @@ class Edge:
             writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_test),
                               l1_ensemble1hop_test, 0)
 
-        tag = "to_%s" % (edges_1hop[0].expert2.str_id)
+        if with_drop:
+            tag = "to_%s_with_drop" % (edges_1hop[0].expert2.str_id)
+        else:
+            tag = "to_%s_no_drop" % (edges_1hop[0].expert2.str_id)
         print("%24s  Expert  GT" % (tag))
         print("Loss %19s: %.2f   %.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))

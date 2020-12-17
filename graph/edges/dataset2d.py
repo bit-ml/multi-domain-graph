@@ -7,8 +7,8 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
-first_k = 3000
-test_samples = 9464#60#64
+first_k = 60#3000
+test_samples = 60#9464#60#64
 
 def load_with_cache(cache_file, glob_path):
     if not os.path.exists(cache_file):
@@ -97,8 +97,10 @@ class DomainTestDataset(Dataset):
         index = taskonomy_dst_domains.index(dst_expert)
         alt_name = taskonomy_dst_domains_alt_names[index]
         dst_path = os.path.join(taskonomy_annotations_path, alt_name)
+        pseudo_gt_dst_path = os.path.join(taskonomy_experts_path, dst_expert)
         self.inputs_path = []
         self.outputs_path = []
+        self.pseudo_gt_outputs_path = []
         filenames = os.listdir(dst_path)
         filenames.sort()
         if test_samples!=0:
@@ -106,13 +108,14 @@ class DomainTestDataset(Dataset):
         for filename in filenames:
             self.outputs_path.append(os.path.join(dst_path, filename))
             self.inputs_path.append(os.path.join(src_path, filename.replace('_%s.png'%alt_name, '_rgb.npy')))
-        
+            self.pseudo_gt_outputs_path.append(os.path.join(pseudo_gt_dst_path, filename.replace('_%s.png'%alt_name, '_rgb.npy')))
             
     def __getitem__(self, index):
         if self.available == False:
             return None, None
         input_path = self.inputs_path[index]
         output_path = self.outputs_path[index]
+        pseudo_gt_path = self.pseudo_gt_outputs_path[index]
 
         input = np.load(input_path)
 
@@ -127,8 +130,10 @@ class DomainTestDataset(Dataset):
             output = output / 65536.0
         if self.dst_expert == 'normals_xtc' or self.dst_expert == 'rgb':
             output = output / 255.0
+
+        pseudo_gt_output = np.load(pseudo_gt_path)
         
-        return input, output
+        return input, output, pseudo_gt_output
 
     def __len__(self):
         if self.available == False:

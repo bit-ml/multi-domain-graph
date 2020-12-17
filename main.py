@@ -42,9 +42,9 @@ def evaluate_all_edges(ending_edges):
 
 def drop_connections_correlations(space_graph, drop_version):
     for expert_idx, expert in enumerate(space_graph.experts.methods):
-        print('=======')
-        print('EXPERT %s' % expert.str_id)
-        print('=======')
+        #print('=======')
+        #print('EXPERT %s' % expert.str_id)
+        #print('=======')
 
         # get edges ending in current expert
         ending_edges = []
@@ -103,7 +103,6 @@ def drop_connections(space_graph, drop_version):
 
 
 ############################## 1HOP ###############################
-# TODO: add use_expert_gt parameter
 def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     if silent:
         writer = DummySummaryWriter()
@@ -117,6 +116,11 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             flush_secs=30)
     save_idxes = None
     save_idxes_test = None
+
+    if drop_version==-1:
+        with_drop = 0
+    else:
+        with_drop = 1
 
     for expert in space_graph.experts.methods:
         end_id = expert.str_id
@@ -132,7 +136,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
 
         # 2. Eval each ensemble
         save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
-            edges_1hop, save_idxes, save_idxes_test, device, writer)
+            edges_1hop, save_idxes, save_idxes_test, device, writer, with_drop)
 
     writer.close()
 
