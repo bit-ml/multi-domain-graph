@@ -301,13 +301,14 @@ class Edge:
         for edge in edges_1hop:
             valid_loaders.append(iter(edge.valid_loader))
 
-        correlations = np.zeros((len(edges_1hop)+1, len(edges_1hop)+1))
+        correlations = np.zeros((len(edges_1hop) + 1, len(edges_1hop) + 1))
         num_batches = len(valid_loaders[0])
         n_samples = 0
         for idx_batch in range(num_batches):
             domain2_1hop_ens_list = []
 
-            for idx_edge, data_edge in enumerate(zip(edges_1hop, valid_loaders)):
+            for idx_edge, data_edge in enumerate(zip(edges_1hop,
+                                                     valid_loaders)):
                 edge, loader = data_edge
                 domain1, domain2_gt = next(loader)
 
@@ -324,7 +325,9 @@ class Edge:
             domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
 
             # domain2_1hop_ens_list contains all data for current batch
-            correlations = utils.get_correlation_score(domain2_1hop_ens_list, correlations, drop_version)
+            correlations = utils.get_correlation_score(domain2_1hop_ens_list,
+                                                       correlations,
+                                                       drop_version)
             n_samples = n_samples + domain1.shape[0]
         correlations = correlations / n_samples
         return correlations
@@ -332,7 +335,8 @@ class Edge:
     ################ [1Hop Ensembles] ##################
 
     def eval_1hop_ensemble_aux(loaders, l1_per_edge, l1_ensemble1hop,
-                               edges_1hop, device, save_idxes, writer, wtag, test):
+                               edges_1hop, device, save_idxes, writer, wtag,
+                               test):
         num_batches = len(loaders[0])
         for idx_batch in range(num_batches):
             domain2_1hop_ens_list = []
@@ -362,11 +366,12 @@ class Edge:
                     writer.add_images('%s/%s' % (wtag, edge.expert1.str_id),
                                       img_for_plot(one_hop_pred[save_idxes]),
                                       0)
+
                 l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
                                                  domain2_gt).item()
             #import pdb
             #pdb.set_trace()
-            if test==0:
+            if test == 0:
                 domain2_1hop_ens_list.append(domain2_gt.cpu().numpy())
             domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list).to(
                 device=device)
@@ -376,7 +381,8 @@ class Edge:
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer):
-        wtag = "to_%s" % edges_1hop[0].expert2.str_id
+        wtag_valid = "to_%s_valid_set" % edges_1hop[0].expert2.str_id
+        wtag_test = "to_%s_test_set" % edges_1hop[0].expert2.str_id
 
         valid_loaders = []
         l1_per_edge = []
@@ -387,7 +393,7 @@ class Edge:
 
         l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_aux(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag, 0)
+            save_idxes, writer, wtag_valid, 0)
 
         test_loaders = []
         test_edges = []
@@ -402,31 +408,32 @@ class Edge:
         if len(test_loaders) > 0:
             l1_per_edge_test, l1_ensemble1hop_test, save_idxes_test, domain2_1hop_ens_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_aux(
                 test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
-                test_edges, device, save_idxes_test, writer, wtag, 1)
+                test_edges, device, save_idxes_test, writer, wtag_test, 1)
 
         # Show Ensemble
-        writer.add_images('%s/ENSEMBLE' % (wtag),
+        writer.add_images('%s/ENSEMBLE' % (wtag_valid),
                           img_for_plot(domain2_1hop_ens[save_idxes]), 0)
-        writer.add_images('%s/EXPERT' % (wtag),
+        writer.add_images('%s/EXPERT' % (wtag_valid),
                           img_for_plot(domain2_gt[save_idxes]), 0)
         l1_ensemble1hop = np.array(l1_ensemble1hop) / num_batches
-        writer.add_scalar('Valid_1hop_%s/L1_Loss_ensemble' % (wtag),
+        writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_valid),
                           l1_ensemble1hop, 0)
 
         # Show Ensemble - Test DB
         if len(test_loaders) > 0:
             writer.add_images(
-                '%s/ENSEMBLE_TEST' % (wtag),
+                '%s/ENSEMBLE' % (wtag_test),
                 img_for_plot(domain2_1hop_ens_test[save_idxes_test]), 0)
-            writer.add_images('%s/GT_TEST' % (wtag),
+            writer.add_images('%s/GT' % (wtag_test),
                               img_for_plot(domain2_gt_test[save_idxes_test]),
                               0)
             l1_ensemble1hop_test = np.array(
                 l1_ensemble1hop_test) / num_batches_test
-            writer.add_scalar('Test_1hop_%s/L1_Loss_ensemble' % (wtag),
+            writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_test),
                               l1_ensemble1hop_test, 0)
 
-        print("%24s  Expert  GT" % (wtag))
+        tag = "to_%s" % (edges_1hop[0].expert2.str_id)
+        print("%24s  Expert  GT" % (tag))
         print("Loss %19s: %.2f   %.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))
         print("%25s------------------" % (" "))
@@ -440,11 +447,11 @@ class Edge:
         idx_test_edge = 0
         for idx_edge, edge in enumerate(edges_1hop):
             writer.add_scalar(
-                'Valid_1hop_%s/L1_Loss_%s' % (wtag, edge.expert1.str_id),
+                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.str_id),
                 l1_per_edge[idx_edge], 0)
             if edge.test_loader != None:
                 writer.add_scalar(
-                    'Test_1hop_%s/L1_Loss_%s' % (wtag, edge.expert1.str_id),
+                    '1hop_%s/L1_Loss_%s' % (wtag_test, edge.expert1.str_id),
                     l1_per_edge_test[idx_test_edge], 0)
                 print("Loss %19s: %.2f   %.2f" %
                       (edge.expert1.str_id, l1_per_edge[idx_edge],
