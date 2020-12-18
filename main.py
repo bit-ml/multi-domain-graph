@@ -124,12 +124,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             flush_secs=30)
     save_idxes = None
     save_idxes_test = None
-
-    if drop_version == -1:
-        with_drop = 0
-    else:
-        with_drop = 1
-
+    
     for expert in space_graph.experts.methods:
         end_id = expert.str_id
         tag = "Valid_1Hop_%s" % end_id
@@ -146,7 +141,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
         if len(edges_1hop) > 0:
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
-                with_drop)
+                drop_version)
 
     writer.close()
 
