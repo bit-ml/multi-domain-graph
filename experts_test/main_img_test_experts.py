@@ -222,7 +222,7 @@ def process_and_save_samples():
                 img, _, _ = get_image(img_path)
 
             if expert == None:
-                result = np.moveaxis(img, 2, 0)
+                result = np.moveaxis(img, 2, 0) / 255
             else:
                 result = expert.apply_expert([img])[0]
 
