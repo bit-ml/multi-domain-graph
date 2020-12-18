@@ -280,8 +280,8 @@ class Edge:
 
         for batch in self.valid_loader:
             domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_gt.shape[1] == self.net.n_classes
+            assert domain1.shape[1] == self.net.module.n_channels
+            assert domain2_gt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)

@@ -93,12 +93,13 @@ def drop_connections_simple(space_graph, drop_version):
             if edge.expert2.str_id == expert.str_id:
                 ending_edges.append(edge)
 
-        l1_per_edge_per_sample = evaluate_all_edges(ending_edges)
+        l1_per_edge_per_sample = torch.from_numpy(
+            evaluate_all_edges(ending_edges))
 
         # 2. Check ensembles value vs single edge
         ensemble_l1_per_sample = utils.combine_maps(l1_per_edge_per_sample,
-                                                    fct="median").numpy()
-        mean_l1_per_edge = l1_per_edge_per_sample.mean(axis=1)
+                                                    fct="median")
+        mean_l1_per_edge = l1_per_edge_per_sample.mean(dim=1)
 
         print("\n==== End node [%19s] =====" % expert.str_id)
         for edge_idx, edge in enumerate(ending_edges):
