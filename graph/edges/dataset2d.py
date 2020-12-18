@@ -171,7 +171,6 @@ class DomainTestDataset(Dataset):
     def __getitem__(self, index):
         if self.available == False:
             return None, None
-
         inp = np.load(self.inputs_path[index])
         outp = np.load(self.outputs_path[index])
         pseudo_gt = np.load(self.pseudo_gt_outputs_path[index])

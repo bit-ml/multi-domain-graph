@@ -112,6 +112,15 @@ def drop_connections_simple(space_graph, drop_version):
 
 ############################## 1HOP ###############################
 def eval_1hop_ensembles(space_graph, drop_version, silent, config):
+    csv_path = 'results.csv'
+    if drop_version==-1:
+        csv_file = open(csv_path, 'w')
+        csv_file.write('metric: L1\n')
+        for expert in space_graph.experts.methods:
+            csv_file.write('%s,,'%(expert.str_id))
+        csv_file.write('\n')
+        csv_file.close()
+
     if silent:
         writer = DummySummaryWriter()
     else:
@@ -124,7 +133,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             flush_secs=30)
     save_idxes = None
     save_idxes_test = None
-    
+
     for expert in space_graph.experts.methods:
         end_id = expert.str_id
         tag = "Valid_1Hop_%s" % end_id
@@ -141,9 +150,13 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
         if len(edges_1hop) > 0:
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
-                drop_version)
+                drop_version, csv_path)
 
     writer.close()
+
+    csv_file = open(csv_path, 'a')
+    csv_file.write('\n')
+    csv_file.close()
 
 
 def train_2Dtasks(space_graph, epochs, silent, config):

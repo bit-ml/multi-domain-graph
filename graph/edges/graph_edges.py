@@ -426,8 +426,8 @@ class Edge:
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
-                           writer, drop_version):
-        if drop_version >=0 :
+                           writer, drop_version, csv_path):
+        if drop_version >= 0:
             wtag_valid = "to_%s_valid_set_with_drop" % edges_1hop[
                 0].expert2.str_id
             wtag_test = "to_%s_test_set_with_drop" % edges_1hop[
@@ -491,14 +491,18 @@ class Edge:
             writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_test),
                               l1_ensemble1hop_test, 0)
 
-        if drop_version>=0:
+        csv_file = open(csv_path, 'a')
+        if drop_version >= 0:
             tag = "to_%s_with_drop" % (edges_1hop[0].expert2.str_id)
         else:
             tag = "to_%s_no_drop" % (edges_1hop[0].expert2.str_id)
+        
         print("%24s  L1(ensemble, Expert)_valset  L1(ensemble, GT)_testset" %
               (tag))
+        
         print("Loss %19s: %20.2f   %20.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))
+        csv_file.write('%20.2f,%20.2f,'%(l1_ensemble1hop, l1_ensemble1hop_test))
         print("%25s-----------------------------------------------------" %
               (" "))
 
@@ -529,9 +533,10 @@ class Edge:
               (" "))
         print("Loss %-20s %20.2f   %20.2f" %
               ("average", mean_l1_per_edge, mean_l1_per_edge_test))
-
+    
         print("")
         print("")
+        csv_file.close()
         return save_idxes, save_idxes_test
 
     ################ [2Hop Ensembles] ##################
