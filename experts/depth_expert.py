@@ -1,6 +1,7 @@
 # use SGDepth code for depth expert - https://github.com/ifnspaml/SGDepth
 import os
 import torch
+import numpy as np
 
 from experts.depth.arguments import InferenceEvaluationArguments
 from experts.depth.inference import Inference
@@ -25,8 +26,17 @@ class DepthModel():
         self.domain_name = "depth"
         self.n_maps = 1
         self.str_id = "sgdepth"
-        self.identifier = "depth_sgdepth"
+        self.identifier = self.domain_name + "_" + self.str_id
 
+    def apply_expert_batch(self, batch_rgb_frames):
+        depth_maps = []
+        for idx, rgb_frame in enumerate(batch_rgb_frames):
+            depth_map, segm_map = self.model.inference(rgb_frame.numpy())
+            depth_maps.append(depth_map[0].cpu().numpy())
+        depth_maps = np.array(depth_maps).astype('float32')
+        return depth_maps
+
+    '''
     def apply_expert(self, rgb_frames):
         depth_maps = []
         for idx, rgb_frame in enumerate(rgb_frames):
@@ -43,3 +53,4 @@ class DepthModel():
         depth_map, segm_map = self.model.inference(rgb_frame)
         depth_map = depth_map.data.cpu()[0]
         return depth_map
+    '''

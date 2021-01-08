@@ -52,15 +52,21 @@ class Edge:
 
         self.load_model_dir = os.path.join(
             config.get('Edge Models', 'load_path'),
-            '%s_%s' % (expert1.str_id, expert2.str_id))
+            '%s_%s' % (expert1.identifier, expert2.identifier))
+
+        src_domain_restr = config.get('Training', 'src_domain_restr')
 
         if config.getboolean('Edge Models', 'save_models'):
             self.save_model_dir = os.path.join(
                 config.get('Edge Models', 'save_path'),
                 config.get('Run id', 'datetime'),
-                '%s_%s' % (expert1.str_id, expert2.str_id))
+                '%s_%s' % (expert1.identifier, expert2.identifier))
+
             if not os.path.exists(self.save_model_dir):
-                os.makedirs(self.save_model_dir)
+                if (config.getboolean('Training', 'restr_src_domain')
+                        and self.expert1.domain_name == src_domain_restr
+                    ) or not config.getboolean('Training', 'restr_src_domain'):
+                    os.makedirs(self.save_model_dir)
 
             self.save_epochs_distance = config.getint('Edge Models',
                                                       'save_epochs_distance')
@@ -72,7 +78,7 @@ class Edge:
     def init_edge(self, expert1, expert2, device):
         self.expert1 = expert1
         self.expert2 = expert2
-        self.name = "%s -> %s" % (expert1.domain_name, expert2.domain_name)
+        self.name = "%s -> %s" % (expert1.identifier, expert2.identifier)
         self.net = UNetGood(n_channels=self.expert1.n_maps,
                             n_classes=self.expert2.n_maps,
                             bilinear=True).to(device)
@@ -83,6 +89,9 @@ class Edge:
         EXPERTS_OUTPUT_PATH = self.config.get('Paths', 'EXPERTS_OUTPUT_PATH')
         TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
         VALID_PATH = self.config.get('Paths', 'VALID_PATH')
+
+        PREPROC_GT_PATH = self.config.get('Paths', 'PREPROC_GT_PATH')
+        TEST_PATH = self.config.get('Paths', 'TEST_PATH')
 
         experts = [self.expert1, self.expert2]
         train_ds = Domain2DDataset(RGBS_PATH, EXPERTS_OUTPUT_PATH, TRAIN_PATH,
@@ -101,8 +110,8 @@ class Edge:
             # sampler=rnd_sampler,
             num_workers=n_workers)
 
-        test_ds = DomainTestDataset(self.expert1.identifier,
-                                    self.expert2.identifier)
+        test_ds = DomainTestDataset(PREPROC_GT_PATH, EXPERTS_OUTPUT_PATH,
+                                    TEST_PATH, experts)
         if test_ds.available:
             self.test_loader = DataLoader(test_ds,
                                           batch_size=bs_test,
@@ -129,11 +138,10 @@ class Edge:
 
         train_l1_loss = 0
         train_l2_loss = 0
-
         for batch in self.train_loader:
             domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_gt.shape[1] == self.net.n_classes
+            assert domain1.shape[1] == self.net.module.n_channels
+            assert domain2_gt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
@@ -171,8 +179,8 @@ class Edge:
 
         for batch in self.valid_loader:
             domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_gt.shape[1] == self.net.n_classes
+            assert domain1.shape[1] == self.net.module.n_channels
+            assert domain2_gt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
@@ -206,8 +214,8 @@ class Edge:
 
         for batch in self.test_loader:
             domain1, domain2_gt, _ = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_gt.shape[1] == self.net.n_classes
+            assert domain1.shape[1] == self.net.module.n_channels
+            assert domain2_gt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
@@ -233,7 +241,7 @@ class Edge:
             self.test_loader) * 100
 
     def train(self, epochs, device, writer, eval_test):
-        wtag = '%s_%s' % (self.expert1.str_id, self.expert2.str_id)
+        wtag = '%s_%s' % (self.expert1.identifier, self.expert2.identifier)
         for epoch in range(epochs):
             # 1. Train
             train_l2_loss, train_l1_loss = self.train_step(
@@ -369,7 +377,7 @@ class Edge:
                                                           replace=False)
                         # Show last but one batch edges
                         writer.add_images(
-                            '%s/%s' % (wtag, edge.expert1.str_id),
+                            '%s/%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes]), 0)
 
                     l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
@@ -412,7 +420,7 @@ class Edge:
                                                           replace=False)
                         # Show last but one batch edges
                         writer.add_images(
-                            '%s/%s' % (wtag, edge.expert1.str_id),
+                            '%s/%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes]), 0)
 
                     l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
@@ -427,15 +435,12 @@ class Edge:
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer, drop_version, csv_path):
-        if drop_version >= 0:
-            wtag_valid = "to_%s_valid_set_with_drop" % edges_1hop[
-                0].expert2.str_id
-            wtag_test = "to_%s_test_set_with_drop" % edges_1hop[
-                0].expert2.str_id
-        else:
-            wtag_valid = "to_%s_valid_set_no_drop" % edges_1hop[
-                0].expert2.str_id
-            wtag_test = "to_%s_test_set_no_drop" % edges_1hop[0].expert2.str_id
+
+        drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
+        wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
+                                             drop_str)
+        wtag_test = "to_%s_test_set_%s" % (edges_1hop[0].expert2.identifier,
+                                           drop_str)
 
         valid_loaders = []
         l1_per_edge = []
@@ -449,7 +454,7 @@ class Edge:
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
             save_idxes, writer, wtag_valid)
         end = time.time()
-        print("VALID Edge.eval_1hop_ensemble_aux", end - start)
+        print("time for VALID Edge.eval_1hop_ensemble_aux", end - start)
 
         test_loaders = []
         test_edges = []
@@ -493,16 +498,17 @@ class Edge:
 
         csv_file = open(csv_path, 'a')
         if drop_version >= 0:
-            tag = "to_%s_with_drop" % (edges_1hop[0].expert2.str_id)
+            tag = "to_%s_with_drop" % (edges_1hop[0].expert2.identifier)
         else:
-            tag = "to_%s_no_drop" % (edges_1hop[0].expert2.str_id)
-        
+            tag = "to_%s_no_drop" % (edges_1hop[0].expert2.identifier)
+
         print("%24s  L1(ensemble, Expert)_valset  L1(ensemble, GT)_testset" %
               (tag))
-        
+
         print("Loss %19s: %20.2f   %20.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test))
-        csv_file.write('%20.2f,%20.2f,'%(l1_ensemble1hop, l1_ensemble1hop_test))
+        csv_file.write('%20.2f,%20.2f,' %
+                       (l1_ensemble1hop, l1_ensemble1hop_test))
         print("%25s-----------------------------------------------------" %
               (" "))
 
@@ -516,24 +522,25 @@ class Edge:
         idx_test_edge = 0
         for idx_edge, edge in enumerate(edges_1hop):
             writer.add_scalar(
-                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.str_id),
+                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
                 l1_per_edge[idx_edge], 0)
             if edge.test_loader != None:
                 writer.add_scalar(
-                    '1hop_%s/L1_Loss_%s' % (wtag_test, edge.expert1.str_id),
+                    '1hop_%s/L1_Loss_%s' %
+                    (wtag_test, edge.expert1.identifier),
                     l1_per_edge_test[idx_test_edge], 0)
                 print("Loss %19s: %20.2f   %20.2f" %
-                      (edge.expert1.str_id, l1_per_edge[idx_edge],
+                      (edge.expert1.identifier, l1_per_edge[idx_edge],
                        l1_per_edge_test[idx_test_edge]))
                 idx_test_edge = idx_test_edge + 1
             else:
                 print("Loss %19s: %.2f    - " %
-                      (edge.expert1.str_id, l1_per_edge[idx_edge]))
+                      (edge.expert1.identifier, l1_per_edge[idx_edge]))
         print("%25s-----------------------------------------------------" %
               (" "))
         print("Loss %-20s %20.2f   %20.2f" %
               ("average", mean_l1_per_edge, mean_l1_per_edge_test))
-    
+
         print("")
         print("")
         csv_file.close()
@@ -615,12 +622,13 @@ class Edge:
         eval_l2_loss = 0
         eval_l1_loss = 0
         eval_l1_loss_ensemble = 0
-        tag = 'Valid_2hop_%s_%s' % (self.expert1.str_id, self.expert2.str_id)
+        tag = 'Valid_2hop_%s_%s' % (self.expert1.identifier,
+                                    self.expert2.identifier)
 
         for idx_batch, batch in enumerate(self.valid_loader):
             domain1, domain2_expertgt = batch
-            assert domain1.shape[1] == self.net.n_channels
-            assert domain2_expertgt.shape[1] == self.net.n_classes
+            assert domain1.shape[1] == self.net.module.n_channels
+            assert domain2_expertgt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_expertgt = domain2_expertgt.to(device=device,
@@ -647,9 +655,9 @@ class Edge:
                                                size=(3),
                                                replace=False)
                     # Log
-                    experts_names = "%s-%s-%s" % (edge1.expert1.str_id,
-                                                  edge1.expert2.str_id,
-                                                  edge2.expert2.str_id)
+                    experts_names = "%s-%s-%s" % (edge1.expert1.identifier,
+                                                  edge1.expert2.identifier,
+                                                  edge2.expert2.identifier)
 
                     writer.add_images('%s/%s' % (tag, experts_names),
                                       img_for_plot(composed_out[rnd_idx]),
@@ -684,9 +692,9 @@ class Edge:
 
     def train_from_2hops_ens(self, graph, epochs, drop_version, device, writer,
                              use_expert_gt):
-        wtag = '%s_%s' % (self.expert1.str_id, self.expert2.str_id)
-        start_id = self.expert1.str_id
-        end_id = self.expert2.str_id
+        wtag = '%s_%s' % (self.expert1.identifier, self.expert2.identifier)
+        start_id = self.expert1.identifier
+        end_id = self.expert2.identifier
         edges_2hop = []
         edges_1hop = []
 
@@ -694,18 +702,18 @@ class Edge:
         for edge_xk in graph.edges:
             if edge_xk.ill_posed:
                 continue
-            if edge_xk.expert1.str_id == start_id:
-                if edge_xk.expert2.str_id == end_id:
+            if edge_xk.expert1.identifier == start_id:
+                if edge_xk.expert2.identifier == end_id:
                     continue
 
                 for edge_ky in graph.edges:
-                    if edge_ky.expert1.str_id == edge_xk.expert2.str_id and edge_ky.expert2.str_id == end_id:
+                    if edge_ky.expert1.identifier == edge_xk.expert2.identifier and edge_ky.expert2.identifier == end_id:
                         if edge_ky.ill_posed:
                             continue
                         print("\tAdding 2hop: %s, %s" % (edge_xk, edge_ky))
                         edges_2hop.append((edge_xk, edge_ky))
             else:
-                if edge_xk.expert2.str_id == end_id:
+                if edge_xk.expert2.identifier == end_id:
                     edges_1hop.append(edge_xk)
 
         if len(edges_2hop) < 1:

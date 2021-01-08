@@ -14,21 +14,32 @@ class HalftoneModel():
         # self.model = Halftone()
         self.style = style
 
-        self.domain_name = "halftone"
-        if style==0:
+        if style == 0:
             self.n_maps = 1
-            self.str_id = "halftone_gray_basic"
-        elif style==1:
+            self.domain_name = "halftone_gray"
+        elif style == 1:
             self.n_maps = 3
-            self.str_id = "halftone_rgb_basic"
-        elif style==2:
+            self.domain_name = "halftone_rgb"
+        elif style == 2:
             self.n_maps = 4
-            self.str_id = "halftone_cmyk_basic"
-        elif style==3:
+            self.domain_name = "halftone_cmyk"
+        elif style == 3:
             self.n_maps = 1
-            self.str_id = "halftone_rot_gray_basic"
-        self.identifier = self.str_id
-        
+            self.domain_name = "halftone_rot_gray"
+        self.str_id = "basic"
+        self.identifier = self.domain_name + "_" + self.str_id
+
+    def apply_expert_batch(self, batch_rgb_frames):
+        halftone_maps = []
+        for idx, rgb_frame in enumerate(batch_rgb_frames):
+            from PIL import Image
+            rgb_frame = Image.fromarray(np.uint8(rgb_frame))
+            halftone_map = self.apply_expert_one_frame(rgb_frame)
+            halftone_maps.append(np.array(halftone_map))
+        halftone_maps = np.array(halftone_maps).astype('float32')
+        return halftone_maps
+
+    '''
     def apply_expert(self, rgb_frames):
         halftone_maps = []
         for idx, rgb_frame in enumerate(rgb_frames):
@@ -56,10 +67,11 @@ class HalftoneModel():
     def apply_expert_one_frame(self, rgb_frame):
         resized_rgb_frame = rgb_frame.resize((W, H))
         halftone_map = Halftone(resized_rgb_frame, self.style).make()
-       
-        if self.style==0 or self.style==3:
-            halftone_map = np.array(halftone_map)[None,:,:]/255.
+
+        if self.style == 0 or self.style == 3:
+            halftone_map = np.array(halftone_map)[None, :, :] / 255.
         else:
-            halftone_map = np.array(halftone_map).transpose(2, 0, 1)/255.
+            halftone_map = np.array(halftone_map).transpose(2, 0, 1) / 255.
 
         return halftone_map
+    '''

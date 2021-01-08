@@ -113,11 +113,11 @@ def drop_connections_simple(space_graph, drop_version):
 ############################## 1HOP ###############################
 def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     csv_path = 'results.csv'
-    if drop_version==-1:
+    if drop_version == -1:
         csv_file = open(csv_path, 'w')
         csv_file.write('metric: L1\n')
         for expert in space_graph.experts.methods:
-            csv_file.write('%s,,'%(expert.str_id))
+            csv_file.write('%s,,' % (expert.identifier))
         csv_file.write('\n')
         csv_file.close()
 
@@ -170,7 +170,14 @@ def train_2Dtasks(space_graph, epochs, silent, config):
                                (tb_dir, tb_prefix, datetime.now()),
                                flush_secs=30)
     eval_test = config.getboolean('Training', 'eval_test_during_train')
+
+    src_domain_restr = config.get('Training', 'src_domain_restr')
+
     for net_idx, net in enumerate(space_graph.edges):
+        if config.getboolean(
+                'Training', 'restr_src_domain'
+        ) and not net.expert1.domain_name == src_domain_restr:
+            continue
         print("[%2d] Train" % net_idx, net)
 
         net.train(epochs=epochs,
@@ -185,7 +192,7 @@ def load_2Dtasks(graph, epoch):
     print("Load nets from checkpoints")
     for net_idx, edge in enumerate(graph.edges):
         path = os.path.join(edge.load_model_dir, 'epoch_%05d.pth' % (epoch))
-        edge.net.module.load_state_dict(torch.load(path))
+        edge.net.load_state_dict(torch.load(path))
         edge.net.module.eval()
 
 

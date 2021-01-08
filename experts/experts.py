@@ -26,9 +26,11 @@ class Experts:
             EdgesModel(full_experts),
         ]
 
+    '''
     def rgb_inference(self, rgb_frames):
         output_maps = []
         for expert in self.methods:
             output_map = expert.apply_expert(rgb_frames)
             output_maps.append(output_map)
         return output_maps
+    '''

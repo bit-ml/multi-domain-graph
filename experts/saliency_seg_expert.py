@@ -31,11 +31,24 @@ class SaliencySegmModel():
             self.net_bone.eval()
             self.trans_totensor = transforms.Compose([transforms.ToTensor()])
 
-        self.domain_name = "salientseg"
+        self.domain_name = "saliency_seg"
         self.n_maps = 1
         self.str_id = "egnet"
-        self.identifier = "saliency_seg_egnet"
+        self.identifier = self.domain_name + "_" + self.str_id
 
+    def apply_expert_batch(self, batch_rgb_frames):
+        edge_maps = []
+        for idx, rgb_frame in enumerate(batch_rgb_frames):
+            rgb_frame = rgb_frame.numpy()
+            rgb_frame = rgb_frame.astype('float32')
+            input_tensor = self.trans_totensor(rgb_frame)[None].to(self.device)
+            up_edge, up_sal, up_sal_f = self.net_bone(input_tensor)
+            pred = np.squeeze(torch.sigmoid(up_sal_f[-1]).cpu().data.numpy())
+            edge_maps.append(pred[None])
+        edge_maps = np.array(edge_maps).astype('float32')
+        return edge_maps
+
+    '''
     def apply_expert(self, rgb_frames):
         edge_maps = []
 
@@ -59,3 +72,4 @@ class SaliencySegmModel():
 
         # out shape: expert.n_maps x 256 x 256
         return pred[None]
+    '''

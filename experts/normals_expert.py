@@ -11,8 +11,7 @@ from experts.normals.unet import UNet
 W, H = 256, 256
 
 current_dir_name = os.path.dirname(os.path.realpath(__file__))
-normals_model_path = os.path.join(current_dir_name,
-                                  'models/normals_xtc.pth')
+normals_model_path = os.path.join(current_dir_name, 'models/normals_xtc.pth')
 
 
 class SurfaceNormalsModel():
@@ -24,16 +23,28 @@ class SurfaceNormalsModel():
             self.model.load_state_dict(model_state_dict)
             self.model.eval()
 
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.device = device
+            self.model.to(device)
+
             self.trans_totensor = transforms.Compose([
-                transforms.Resize(W * 2, interpolation=PIL.Image.BILINEAR),
-                transforms.CenterCrop(W),
+                #transforms.Resize(W * 2, interpolation=PIL.Image.BILINEAR),
+                #transforms.CenterCrop(W),
                 transforms.ToTensor()
             ])
-        self.domain_name = "surface_normals"
+        self.domain_name = "normals"
         self.n_maps = 3
-        self.str_id = "xtc_surface_normals"
-        self.identifier = "normals_xtc"
+        self.str_id = "xtc"
+        self.identifier = self.domain_name + "_" + self.str_id
 
+    def apply_expert_batch(self, batch_rgb_frames):
+        batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
+        normals_maps = self.model(batch_rgb_frames.to(self.device)).clamp(
+            min=0, max=1).data.cpu().numpy()
+        normals_maps = np.array(normals_maps).astype('float32')
+        return normals_maps
+
+    '''
     def apply_expert(self, rgb_frames):
         normals_maps = []
         for idx, rgb_frame in enumerate(rgb_frames):
@@ -54,3 +65,4 @@ class SurfaceNormalsModel():
         img_tensor = self.trans_totensor(rgb_frame)[:3].unsqueeze(0)
         output_map = self.model(img_tensor).clamp(min=0, max=1).data.cpu()[0]
         return output_map
+    '''

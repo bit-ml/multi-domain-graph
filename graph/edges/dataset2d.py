@@ -8,8 +8,9 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+# TODO change s.t. -1 means all samples
 first_k = 3000
-test_samples = 9464  #60#64
+first_k_test = 9464  #60#64
 CACHE_NAME = "my_cache"
 W, H = 256, 256
 
@@ -42,29 +43,23 @@ class Domain2DDataset(Dataset):
                                               glob_path_rgb)[:first_k]
 
         # load experts paths
-        cache_e1 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[0].str_id,
+        cache_e1 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[0].identifier,
                                         tag, pattern[-3:])
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
-            experts_path, self.experts[0].str_id, dataset_path, pattern)
+            experts_path, dataset_path, self.experts[0].identifier, pattern)
         self.e1_output_path = load_glob_with_cache(cache_e1,
                                                    glob_path_e1)[:first_k]
 
-        cache_e2 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[1].str_id,
+        cache_e2 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[1].identifier,
                                         tag, pattern[-3:])
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
-            experts_path, self.experts[1].str_id, dataset_path, pattern)
+            experts_path, dataset_path, self.experts[1].identifier, pattern)
         self.e2_output_path = load_glob_with_cache(cache_e2,
                                                    glob_path_e2)[:first_k]
         e = time.time()
 
-        # print("glob time:", e - s)
-        # print("Dataset size", len(self.rgb_paths), len(self.e1_output_path),
-        #       len(self.e2_output_path))
         assert (len(self.rgb_paths) == len(self.e1_output_path) == len(
             self.e2_output_path))
-        # print(self.rgb_paths[0])
-        # print(self.e1_output_path[0])
-        # print(self.e2_output_path[0])
 
         # TODO: precompute+save mean & std when buliding cache
 
@@ -77,134 +72,62 @@ class Domain2DDataset(Dataset):
         return len(self.rgb_paths)
 
 
-taskonomy_src_domains = [
-    'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc',
-    'halftone_cmyk_basic', 'halftone_gray_basic', 'halftone_rgb_basic',
-    'halftone_rot_gray_basic', 'saliency_seg_egnet', 'sseg_deeplabv3',
-    'sseg_fcn'
-]
-taskonomy_dst_domains = [
-    'rgb', 'depth_sgdepth', 'edges_dexined', 'normals_xtc'
-]
-taskonomy_dst_domains_alt_names = [
-    'rgb', 'depth_zbuffer', 'edge_texture', 'normal'
-]
-taskonomy_annotations_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master'
-taskonomy_experts_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master-experts'
-
-
-def load_filelist_with_cache(cache_file_input, cache_file_output,
-                             cache_file_pseudo_gt, src_path, dst_path,
-                             pseudo_gt_dst_path, alt_name):
-    if os.path.exists(cache_file_input) and os.path.exists(
-            cache_file_output) and os.path.exists(cache_file_pseudo_gt):
-        inputs_path = np.load(cache_file_input)
-        outputs_path = np.load(cache_file_output)
-        pseudo_gts_path = np.load(cache_file_pseudo_gt)
-        return inputs_path, outputs_path, pseudo_gts_path
-
-    # cache paths
-    inputs_path = []
-    outputs_path = []
-    pseudo_gts_path = []
-
-    filenames = os.listdir(dst_path)
-    filenames.sort()
-    if test_samples != 0:
-        filenames = filenames[0:test_samples]
-    for filename in filenames:
-        # save file list for caching
-        inputs_path.append(
-            os.path.join(src_path, filename.replace('_%s.' % alt_name,
-                                                    '_rgb.')))
-        outputs_path.append(os.path.join(dst_path, filename))
-        pseudo_gts_path.append(
-            os.path.join(pseudo_gt_dst_path,
-                         filename.replace('_%s.' % alt_name, '_rgb.')))
-    # save input/output cache
-    np.save(cache_file_input, np.array(inputs_path))
-    np.save(cache_file_output, np.array(outputs_path))
-    np.save(cache_file_pseudo_gt, np.array(pseudo_gts_path))
-
-    return inputs_path, outputs_path, pseudo_gts_path
-
-
 class DomainTestDataset(Dataset):
-    """Build Testing Dataset 
-    """
-    def __init__(self, src_expert, dst_expert):
+    def __init__(self, preproc_gt_path, experts_path, dataset_path, experts):
         super(DomainTestDataset, self).__init__()
-        self.src_expert = src_expert
-        self.dst_expert = dst_expert
-        if src_expert in taskonomy_src_domains and dst_expert in taskonomy_dst_domains:
+        self.experts = experts
+
+        available_experts = os.listdir(os.path.join(experts_path,
+                                                    dataset_path))
+        available_gts = os.listdir(os.path.join(preproc_gt_path, dataset_path))
+        if self.experts[0].identifier in available_experts and \
+            self.experts[1].identifier in available_experts and \
+            self.experts[1].domain_name in available_gts:
             self.available = True
         else:
             self.available = False
             return
 
-        # src/dst paths
-        src_path = os.path.join(taskonomy_experts_path, src_expert)
-        index = taskonomy_dst_domains.index(dst_expert)
-        alt_name = taskonomy_dst_domains_alt_names[index]
-        dst_path_preproc = os.path.join(
-            "%s-preproc" % taskonomy_annotations_path, alt_name)
-        pseudo_gt_dst_path = os.path.join(taskonomy_experts_path, dst_expert)
+        pattern = "*"
 
-        # save preproc files
-        if not os.path.exists(dst_path_preproc):
-            pathlib.Path(dst_path_preproc).mkdir(parents=True, exist_ok=True)
-            dst_path = os.path.join(taskonomy_annotations_path, alt_name)
-            self.__save_preprocessed__(dst_path, dst_path_preproc)
+        # get data for src expert
+        cache_e1 = "%s/test_%s_pseudo_gt.npy" % (CACHE_NAME,
+                                                 self.experts[0].identifier)
+        glob_path_e1 = "%s/%s/%s/%s.npy" % (
+            experts_path, dataset_path, self.experts[0].identifier, pattern)
+        self.e1_output_path = load_glob_with_cache(cache_e1,
+                                                   glob_path_e1)[:first_k_test]
 
-        # cache filenames
-        cache_file_input = "%s/dataset_test_input_%s.npy" % (CACHE_NAME,
-                                                             src_expert)
-        cache_file_output = "%s/dataset_test_output_%s.npy" % (CACHE_NAME,
-                                                               dst_expert)
-        cache_file_pseudo_gt = "%s/dataset_test_input_%s.npy" % (CACHE_NAME,
-                                                                 dst_expert)
+        # get data for dst expert
+        cache_e2 = "%s/test_%s_pseudo_gt.npy" % (CACHE_NAME,
+                                                 self.experts[1].identifier)
+        glob_path_e2 = "%s/%s/%s/%s.npy" % (
+            experts_path, dataset_path, self.experts[1].identifier, pattern)
+        self.e2_output_path = load_glob_with_cache(cache_e2,
+                                                   glob_path_e2)[:first_k_test]
 
-        self.inputs_path, self.outputs_path, self.pseudo_gt_outputs_path = load_filelist_with_cache(
-            cache_file_input, cache_file_output, cache_file_pseudo_gt,
-            src_path, dst_path_preproc, pseudo_gt_dst_path, alt_name)
+        # get data for domain of dst expert
+        cache_d2_gt = "%s/test_%s_gt.npy" % (CACHE_NAME,
+                                             self.experts[1].domain_name)
+        glob_path_d2_gt = "%s/%s/%s/%s.npy" % (preproc_gt_path, dataset_path,
+                                               self.experts[1].domain_name,
+                                               pattern)
+        self.d2_gt_output_path = load_glob_with_cache(
+            cache_d2_gt, glob_path_d2_gt)[:first_k_test]
+
+        # check data
+        assert (len(self.e1_output_path) == len(self.e2_output_path) == len(
+            self.d2_gt_output_path))
 
     def __getitem__(self, index):
         if self.available == False:
-            return None, None
-        inp = np.load(self.inputs_path[index])
-        outp = np.load(self.outputs_path[index])
-        pseudo_gt = np.load(self.pseudo_gt_outputs_path[index])
-
-        return inp, outp, pseudo_gt
+            return None, None, None
+        oe1 = np.load(self.e1_output_path[index])
+        oe2 = np.load(self.e2_output_path[index])
+        d2_gt = np.load(self.d2_gt_output_path[index])
+        return oe1, oe2, d2_gt
 
     def __len__(self):
         if self.available == False:
             return 0
-        return len(self.inputs_path)
-
-    def __save_preprocessed__(self, dst_path_raw, dst_path_preproc):
-        filenames = os.listdir(dst_path_raw)
-        filenames.sort()
-        if test_samples != 0:
-            filenames = filenames[0:test_samples]
-        for filename in filenames:
-            fname_path_raw = os.path.join(dst_path_raw, filename)
-
-            output = Image.open(fname_path_raw)
-            output = np.array(output)
-
-            if len(output.shape) == 2:
-                output = output[:, :, None]
-            output = torch.tensor(output, dtype=torch.float32)
-            output = output.permute(2, 0, 1)
-            output = torch.nn.functional.interpolate(output[None], (H, W))[0]
-            if self.dst_expert == 'depth_sgdepth' or self.dst_expert == 'edges_dexined':
-                output = output / 65536.0
-            if self.dst_expert == 'normals_xtc' or self.dst_expert == 'rgb':
-                output = output / 255.0
-
-            # save output
-            fname_path_preproc = os.path.join(dst_path_preproc,
-                                              filename.replace(".png", ".npy"))
-
-            np.save(fname_path_preproc, output)
+        return len(self.e1_output_path)

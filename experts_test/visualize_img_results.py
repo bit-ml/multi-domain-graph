@@ -26,6 +26,7 @@ def get_image(img_path):
 
     return img, orig_h, orig_w
 
+
 def build_display_img(frame, exp_results):
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
     max_nr_channels = 0

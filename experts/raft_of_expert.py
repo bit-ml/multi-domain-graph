@@ -13,8 +13,8 @@ DEVICE = 'cuda'
 
 #RAFT_MODEL_PATH = r'experts/raft_optical_flow/models/raft-kitti.pth'
 current_dir_name = os.path.dirname(os.path.realpath(__file__))
-RAFT_MODEL_PATH = os.path.join(current_dir_name,
-                               'models/of_raft.pth')
+RAFT_MODEL_PATH = os.path.join(current_dir_name, 'models/of_raft.pth')
+
 
 class RaftModel:
     def __init__(self, full_expert=True, fwd=1):
@@ -46,14 +46,59 @@ class RaftModel:
 
         self.fwd = fwd
 
-        self.domain_name = "optical_flow"
         self.n_maps = 2
         if fwd:
-            self.str_id = 'of_fwd_raft'
+            self.domain_name = "of_fwd"
         else:
-            self.str_id = 'of_bwd_raft'
-        self.identifier = self.str_id
+            self.domain_name = "of_bwd"
+        self.str_id = "raft"
+        self.identifier = self.domain_name + "_" + self.str_id
 
+    def apply_expert_batch(self, batch_rgb_frames):
+        if self.fwd == 1:
+            batch_rgb_frames = torch.cat(
+                (batch_rgb_frames, batch_rgb_frames[-1, :, :, :][None]), 0)
+        else:
+            batch_rgb_frames = torch.cat(
+                (batch_rgb_frames[0, :, :, :][None], batch_rgb_frames), 0)
+
+        batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2).float().cuda()
+
+        if self.fwd == 1:
+            flows = []
+            for idx in range(batch_rgb_frames.shape[0] - 1):
+                prev_img = batch_rgb_frames[idx, :, :, :][None]
+                current_img = batch_rgb_frames[idx + 1, :, :, :][None]
+
+                with torch.no_grad():
+                    padder = InputPadder(prev_img.shape)
+                    img1, img2 = padder.pad(prev_img.clone(),
+                                            current_img.clone())
+                    _, flow_up = self.model(img1,
+                                            img2,
+                                            iters=20,
+                                            test_mode=True)
+                    flows.append(flow_up[0, :, :, :].cpu().numpy())
+        else:
+            flows = []
+            for idx in range(batch_rgb_frames.shape[0] - 1):
+                prev_img = batch_rgb_frames[idx, :, :, :][None]
+                current_img = batch_rgb_frames[idx + 1, :, :, :][None]
+
+                with torch.no_grad():
+                    padder = InputPadder(prev_img.shape)
+                    img1, img2 = padder.pad(prev_img.clone(),
+                                            current_img.clone())
+                    _, flow_up = self.model(img2,
+                                            img1,
+                                            iters=20,
+                                            test_mode=True)
+                    flows.append(flow_up[0, :, :, :].cpu().numpy())
+
+        flows = np.array(flows).astype('float32')
+        return flows
+
+    '''
     def apply(self, img1, img2):
         img1 = torch.from_numpy(img1).permute(2, 0, 1).float().cuda()
         img2 = torch.from_numpy(img2).permute(2, 0, 1).float().cuda()
@@ -130,3 +175,4 @@ class RaftModel:
 
                 prev_img = current_img.clone()
         return flows
+    '''
