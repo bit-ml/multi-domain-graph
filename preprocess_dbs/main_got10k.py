@@ -39,7 +39,7 @@ main_db_path = r'/data/tracking-vot/GOT-10k/val'
 #main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/val'
 main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/val'
 '''
-'''
+
 VALID_EXPERTS_NAME = [\
     'sseg_fcn',
     'sseg_deeplabv3',
@@ -51,25 +51,7 @@ VALID_EXPERTS_NAME = [\
     'rgb',
     'of_fwd_raft', 'of_bwd_raft',
     'of_fwd_liteflownet', 'of_bwd_liteflownet']
-'''
-# started on mdg-7, for got val set
-# started on mdg-3, for got train set - will start when process on 3 finishes
 
-VALID_EXPERTS_NAME = [\
-    'sseg_fcn',
-    'sseg_deeplabv3',
-    'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_cmyk_basic', 'halftone_rot_gray_basic']
-
-# started on mdg-6, for got val set
-# started on mdg-5, for got train set
-'''
-VALID_EXPERTS_NAME = [\
-    'depth_sgdepth',
-    'edges_dexined',
-    'normals_xtc',
-    'saliency_seg_egnet',
-    'rgb']
-'''
 EXPERTS_NAME = []
 CHECK_PREV_DATA = 0
 

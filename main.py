@@ -55,23 +55,37 @@ def drop_connections_correlations(space_graph, drop_version):
 
         # get edges ending in current expert
         ending_edges = []
+        ending_edges_src_identifiers = []
         for edge in space_graph.edges:
-            if edge.expert2.str_id == expert.str_id:
+            if edge.expert2.identifier == expert.identifier:
                 ending_edges.append(edge)
-        expert_correlations = Edge.drop_1hop_connections(
-            ending_edges, device, drop_version)
+                ending_edges_src_identifiers.append(edge.expert1.identifier)
+        ending_edges_src_identifiers.append(expert.identifier)
 
-        import numpy.linalg as linalg
-        eigenValues, eigenVectors = linalg.eig(expert_correlations)
-        pos = np.argmax(eigenValues)
-        task_weights = eigenVectors[:, pos]
+        expert_correlations = Edge.drop_1hop_connections(
+            ending_edges, device, drop_version).cpu().numpy()
+
+        if drop_version == 10 or drop_version == 11 or drop_version == 14 or drop_version == 15 or drop_version == 20 or drop_version == 21:
+            import numpy.linalg as linalg
+            eigenValues, eigenVectors = linalg.eig(expert_correlations)
+            pos = np.argmax(eigenValues)
+            task_weights = eigenVectors[:, pos]
+        elif drop_version == 12 or drop_version == 13 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
+            task_weights = expert_correlations[-1, :]
+        #print(task_weights)
 
         min_val = np.min(task_weights)
         max_val = np.max(task_weights)
 
         task_weights = (task_weights - min_val) / (max_val - min_val)
+        #print(task_weights)
 
-        task_weights[task_weights < 0.5] = 0
+        if drop_version == 12 or drop_version == 13 or drop_version == 22 or drop_version == 23:
+            task_weights[task_weights <= 0] = 0
+        elif drop_version == 10 or drop_version == 11 or drop_version == 20 or drop_version == 21:  # or drop_version == 14 or drop_version == 15:
+            task_weights[task_weights < 0.5] = 0
+        elif drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17:
+            task_weights[task_weights == 0] = 0.01
 
         remove_indexes = np.argwhere(task_weights == 0)[:, 0]
         keep_indexes = np.argwhere(task_weights > 0)[:, 0]
@@ -79,9 +93,13 @@ def drop_connections_correlations(space_graph, drop_version):
         remove_indexes = remove_indexes[remove_indexes < len(ending_edges)]
         keep_indexes = keep_indexes[keep_indexes < len(ending_edges)]
 
-        for idx in remove_indexes:
-            #print("remove edge from: %s"%(ending_edges[idx].expert1.str_id))
-            ending_edges[idx].ill_posed = True
+        if drop_version == 10 or drop_version == 11 or drop_version == 12 or drop_version == 13 or drop_version == 20 or drop_version == 21 or drop_version == 22 or drop_version == 23:
+            for idx in remove_indexes:
+                #print("remove edge from: %s"%(ending_edges[idx].expert1.str_id))
+                ending_edges[idx].ill_posed = True
+        for ending_edge in ending_edges:
+            ending_edge.in_edge_weights = task_weights
+            ending_edge.in_edge_src_identifiers = ending_edges_src_identifiers
 
 
 def drop_connections_simple(space_graph, drop_version):
@@ -112,13 +130,27 @@ def drop_connections_simple(space_graph, drop_version):
 
 ############################## 1HOP ###############################
 def eval_1hop_ensembles(space_graph, drop_version, silent, config):
-    csv_path = 'results.csv'
+    csv_path = os.path.join(config.get('Logs', 'csv_results_dir'))
+    if not os.path.exists(csv_path):
+        os.mkdir(csv_path)
+    csv_path = os.path.join(
+        csv_path, 'results_%s.csv' % (config.get('Run id', 'datetime')))
     if drop_version == -1:
         csv_file = open(csv_path, 'w')
         csv_file.write('metric: L1\n')
+        csv_file.write(',')
         for expert in space_graph.experts.methods:
-            csv_file.write('%s,,' % (expert.identifier))
+            csv_file.write('to_%s,,' % (expert.identifier))
         csv_file.write('\n')
+        csv_file.write(',')
+        for expert in space_graph.experts.methods:
+            csv_file.write('valid,test,')
+        csv_file.write('\n')
+        csv_file.write('before drop,')
+        csv_file.close()
+    else:
+        csv_file = open(csv_path, 'a')
+        csv_file.write('after drop,')
         csv_file.close()
 
     if silent:
@@ -135,22 +167,38 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     save_idxes_test = None
 
     for expert in space_graph.experts.methods:
-        end_id = expert.str_id
+        end_id = expert.identifier
         tag = "Valid_1Hop_%s" % end_id
         edges_1hop = []
+        edges_1hop_weights = []
+        edges_1hop_test_weights = []
 
         # 1. Select edges that ends in end_id
         for edge_xk in space_graph.edges:
             if edge_xk.ill_posed:
                 continue
-            if edge_xk.expert2.str_id == end_id:
+            if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
+                edge_weights = edge_xk.in_edge_weights
+                edge_src_identifiers = edge_xk.in_edge_src_identifiers
+                if drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
+                    index = edge_src_identifiers.index(
+                        edge_xk.expert1.identifier)
+                    edges_1hop_weights.append(edge_weights[index])
+                    if edge_xk.test_loader != None:
+                        edges_1hop_test_weights.append(edge_weights[index])
+
+        if drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
+            # add weight of the expert pseudo gt
+            edges_1hop_weights.append(edge_weights[-1])
+            edges_1hop_test_weights.append(edge_weights[-1])
 
         # 2. Eval each ensemble
         if len(edges_1hop) > 0:
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
-                drop_version, csv_path)
+                drop_version, csv_path, edges_1hop_weights,
+                edges_1hop_test_weights)
 
     writer.close()
 
