@@ -29,16 +29,36 @@ WORKING_H = 256
 WORKING_W = 256
 
 # if -1 => will process all movies
-n_proc_videos = 3000  #-1  #180  #3000
-n_proc_frames_per_video = 3  #-1 #3
+n_proc_videos = -1  #3000  #-1  #180  #3000
+# if -1 => will process all frames
+# if 0 => sample 4 frames per video
+n_proc_frames_per_video = 0
+# number of frames per video when n_proc_frameS_per_video==0
+n_random_frames_per_video = 4
 
 main_db_path = r'/data/tracking-vot/GOT-10k/train'
-main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/train'
-# main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/train'
+#main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/train'
+main_exp_out_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/GOT-10k_samples/train'
+'''
+main_db_path = r'/data/tracking-vot/GOT-10k/val'
+#main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/val'
+main_exp_out_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/GOT-10k_samples/val'
+'''
 
-# main_db_path = r'/data/tracking-vot/GOT-10k/val'
-# main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/val'
-# # main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/val'
+# to be ignored
+'''
+VALID_EXPERTS_NAME = [\
+    'rgb', train -- mdg4
+    'halftone_gray_basic',  -- train done
+    'depth_sgdepth']   --train done 
+'''
+'''
+VALID_EXPERTS_NAME = [\
+    'edges_dexined',   -- train - mdg2 
+    'normals_xtc',   - will run on mdg2 - when reaching this, stop and restart 
+    'saliency_seg_egnet'] -- train - mdg3
+'''
+# up until here
 
 VALID_EXPERTS_NAME = [\
     'sseg_fcn',
@@ -187,16 +207,29 @@ class Dataset_ImgLevel(Dataset):
 
         filepaths = glob.glob(os.path.join(vid_in_path, '*.jpg'))
         filepaths.sort()
-        filepaths = filepaths[0:len(filepaths) if n_proc_frames_per_video ==
-                              -1 else n_proc_frames_per_video]
+        if n_proc_frames_per_video == 0:
+            indexes = np.arange(1, len(filepaths) - 1)
+            np.random.seed(0)
+            np.random.shuffle(indexes)
+            indexes = indexes[0:n_random_frames_per_video]
+            indexes = np.sort(
+                np.concatenate((indexes - 1, indexes, indexes + 1)))
+        else:
+            indexes = np.arange(
+                0,
+                len(filepaths)
+                if n_proc_frames_per_video == -1 else n_proc_frames_per_video)
+
+        filepaths = [filepaths[i] for i in indexes]
 
         self.rgbs_path = []
+        self.orig_indexes = indexes
         for filepath in filepaths:
             self.rgbs_path.append(os.path.join(vid_in_path, filepath))
 
     def __getitem__(self, index):
         rgb = get_image(self.rgbs_path[index])
-        return rgb, index
+        return rgb, index, self.orig_indexes[index]
 
     def __len__(self):
         return len(self.rgbs_path)
@@ -215,6 +248,7 @@ def get_exp_results():
                               -1 else n_proc_videos]
     batch_size = 30
     video_dataloaders = []
+    video_flow_dataloaders = []
     for video_name in videos_name:
         vid_in_path = os.path.join(main_db_path, video_name)
         dataset = Dataset_ImgLevel(vid_in_path)
@@ -224,25 +258,40 @@ def get_exp_results():
                                                  drop_last=False,
                                                  num_workers=8)
         video_dataloaders.append(dataloader)
+        if n_proc_frames_per_video == 0:
+            dataloader_flow = torch.utils.data.DataLoader(dataset,
+                                                          batch_size=3,
+                                                          shuffle=False,
+                                                          drop_last=False,
+                                                          num_workers=8)
+            video_dataloaders.append(dataloader_flow)
+        else:
+            video_flow_dataloaders.append(dataloader)
 
     for exp_name in EXPERTS_NAME:
         print("EXPERT: %20s" % exp_name)
         expert = get_expert(exp_name)
+        if 'of_' in exp_name:
+            local_video_dataloaders = video_flow_dataloaders
+        else:
+            local_video_dataloaders = video_dataloaders
 
-        for video_data in zip(videos_name, video_dataloaders):
+        for video_data in zip(videos_name, local_video_dataloaders):
             video_name, dataloader = video_data
 
             vid_out_path = os.path.join(main_exp_out_path, exp_name,
                                         video_name)
             os.makedirs(vid_out_path)
 
-            for batch_idx, (frames, indexes) in enumerate(tqdm(dataloader)):
+            for batch_idx, (frames, indexes,
+                            orig_indexes) in enumerate(tqdm(dataloader)):
                 results = expert.apply_expert_batch(frames)
 
-                for sample in zip(results, indexes):
-                    expert_res, sample_idx = sample
-                    out_path = os.path.join(vid_out_path,
-                                            '%08d.npy' % sample_idx)
+                for sample in zip(results, indexes, orig_indexes):
+                    expert_res, sample_idx, orig_sample_idx = sample
+                    out_path = os.path.join(
+                        vid_out_path,
+                        '%08d_%08d.npy' % (sample_idx, orig_sample_idx))
                     np.save(out_path, expert_res)
 
 
