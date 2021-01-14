@@ -6,7 +6,7 @@ import PIL
 import torch
 from torchvision import transforms
 
-from experts.normals.unet import UNet
+from experts.xtc.unet import UNet
 
 W, H = 256, 256
 

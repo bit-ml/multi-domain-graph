@@ -20,7 +20,14 @@ class MultiDomainGraph:
         for i_idx, expert_i in enumerate(all_experts.methods):
             for expert_j in all_experts.methods:
                 if expert_i != expert_j:
+                    train_only_for_new_expert = config.get(
+                        'Training', 'train_only_for_new_expert')
+                    if train_only_for_new_expert and train_only_for_new_expert not in [
+                            expert_i.identifier, expert_j.identifier
+                    ]:
+                        continue
                     new_edge = Edge(config, expert_i, expert_j, device,
                                     rnd_sampler, silent, valid_shuffle)
                     self.edges.append(new_edge)
-                    # print("Add edge", str(new_edge))
+                    print("Add edge", str(new_edge))
+            # break

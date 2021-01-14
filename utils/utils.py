@@ -1,16 +1,20 @@
-import sys
 import os
+import sys
+from math import exp
+
 import numpy as np
 import torch
 import torch.nn.functional as F
-from math import exp
 from scipy.stats import pearsonr
 from skimage.metrics import structural_similarity as ssim
+from tqdm import tqdm
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import utils.pytorch_ssim
+import multiprocessing
+
+import pytorch_ssim
 
 
 def get_gaussian_filter(n_channels, win_size=11, sigma=1.5):
@@ -162,6 +166,96 @@ def img_for_plot(img):
     max_img = img_view.max(axis=2)[0][:, :, None, None]
 
     return (img - min_img) / (max_img - min_img)
+
+
+def hist_vextorized_np(data, n_bins, range_limits):
+    # Setup bins and determine the bin location for each element for the bins
+    R = range_limits
+    N = data.shape[-1]
+    bins = np.linspace(R[0], R[1], n_bins + 1)
+    data2D = data.reshape(-1, N)
+    idx = np.searchsorted(bins, data2D, 'right') - 1
+
+    # Some elements would be off limits, so get a mask for those
+    bad_mask = (idx == -1) | (idx == n_bins)
+
+    # We need to use bincount to get bin based counts. To have unique IDs for
+    # each row and not get confused by the ones from other rows, we need to
+    # offset each row by a scale (using row length for this).
+    scaled_idx = n_bins * np.arange(data2D.shape[0])[:, None] + idx
+
+    # Set the bad ones to be last possible index+1 : n_bins*data2D.shape[0]
+    limit = n_bins * data2D.shape[0]
+    scaled_idx[bad_mask] = limit
+
+    # Get the counts and reshape to multi-dim
+    counts = np.bincount(scaled_idx.ravel(), minlength=limit + 1)[:-1]
+    counts.shape = data.shape[:-1] + (n_bins, )
+    return counts
+
+
+# pt 10 bins
+def histo_type_np(h_sort):
+    # h_sort = h_sort.sort(descending=True)[0]
+    h_sort[::-1].sort()
+    # total = h_sort.sum()
+
+    # total = 8
+    # 0 - one clear mode
+    if h_sort[0] >= 5 or (h_sort[0] - h_sort[1]) >= 3:
+        # print(h_sort, "0")
+        return 0
+
+    # 2 - two clear modes
+    if h_sort[0] + h_sort[1] >= 6 and (h_sort[0] - h_sort[1]) <= 1:
+        # print(h_sort, "2")
+        return 2
+
+    # 3 - noise
+    if h_sort[0:2].sum() < 4:
+        # print(h_sort, "3")
+        return 3
+
+    # 1 - several higher peaks
+    # print(h_sort, "1")
+    return 1
+
+
+def pixels_histogram(multi_chan_maps, end_id):
+    '''
+    multi_chan_maps: N_models x BS x Map_Channels x H x W
+    '''
+    minp, maxp = multi_chan_maps.min().item(), multi_chan_maps.max().item()
+    bins = 10
+    fig_name = "histograms/%dbins/%s.png" % (bins, end_id)
+
+    n_models, bs, chan, h, w = multi_chan_maps.shape
+    num_values_per_map = chan * h * w
+    maps_linearized = multi_chan_maps.view(n_models, bs, num_values_per_map)
+    pool = multiprocessing.Pool(10)
+
+    histos = []
+    for entry_idx in tqdm(range(bs)):
+        entry_histo_types = []
+
+        pixels_histo = hist_vextorized_np(
+            maps_linearized[:, entry_idx].permute(1, 0).data.cpu().numpy(),
+            bins, (minp, maxp))
+
+        entry_histo_types = list(pool.map(histo_type_np, pixels_histo))
+        counts = (entry_histo_types.count(0), entry_histo_types.count(1),
+                  entry_histo_types.count(2), entry_histo_types.count(3))
+        histos.append(counts)
+
+    histos_plot = np.array(histos).swapaxes(0, 1)
+
+    print("Pixels counts for 0 1 2 3:", histos_plot.sum(1))
+    import matplotlib.pyplot as plt
+    plt.plot(range(4), histos_plot)
+    plt.title(fig_name)
+    # plt.show()
+    plt.savefig(fig_name)
+    plt.clf()
 
 
 def combine_maps(multi_chan_maps, edges_weights, fct="median"):

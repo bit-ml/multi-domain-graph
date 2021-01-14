@@ -244,6 +244,26 @@ def load_2Dtasks(graph, epoch):
         edge.net.module.eval()
 
 
+############################## 1HOP - pdf per pixel in full ensemble ###############################
+def ensemble_1hop_histogram(space_graph, silent, config):
+    for expert in space_graph.experts.methods:
+        end_id = expert.identifier
+        edges_loaders_1hop = []
+        print("-> End_id", end_id)
+
+        # 1. Select edges that ends in end_id
+        for edge_xk in space_graph.edges:
+            if edge_xk.ill_posed:
+                continue
+            if edge_xk.expert2.identifier == end_id:
+                # print("   ---", edge_xk.expert1.identifier)
+                edges_loaders_1hop.append(
+                    (edge_xk, iter(edge_xk.valid_loader)))
+
+        # 2. Eval each ensemble
+        Edge.ensemble_histogram(edges_loaders_1hop, end_id, device)
+
+
 ############################## 2HOPs ###############################
 
 
@@ -287,6 +307,8 @@ def main(argv):
     epochs = config.getint('Edge Models', 'n_epochs')
     # 0. Generate experts output
     if config.getboolean('Preprocess', 'generate_experts_output'):
+        ## USE preprocess_dbs
+        assert (True)
         generate_experts_output(Experts(full_experts=True).methods, config)
         sys.exit(0)
 
@@ -300,28 +322,33 @@ def main(argv):
         graph = build_space_graph(config, silent=silent, valid_shuffle=False)
         load_2Dtasks(graph, epoch=epochs)
 
+    # # Per pixel histograms, inside an ensemble
+    # ensemble_1hop_histogram(graph, silent=silent, config=config)
+
     print("Eval 1Hop ensembles before drop")
-    # drop_version passed as -1 -> no drop
+    # # drop_version passed as -1 -> no drop
+    # eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
     eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
 
-    # 3. Drop ill-posed connections
-    drop_version = config.getint('Training', 'drop_version')
-    drop_connections(graph, drop_version)
+    # # 3. Drop ill-posed connections
+    # # drop_version = config.getint('Training', 'drop_version')
+    # for drop_version in [2, 3, 4, 10, 11]:
+    #     drop_connections(graph, drop_version)
 
-    # 4. Eval 1Hop
-    print("Eval 1Hop ensembles after drop (version %i)" % drop_version)
-    drop_version = config.getint('Training', 'drop_version')
-    eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
+    #     # 4. Eval 1Hop
+    #     print("Eval 1Hop ensembles after drop (version %i)" % drop_version)
+    #     drop_version = config.getint('Training', 'drop_version')
+    #     eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
 
-    # # 5. Train/Eval 2Hop
-    # print("Eval 2Hop ensembles")
-    # # used only as eval
-    # train_2hops_2Dtasks(graph,
-    #                     drop_version,
-    #                     epochs=1,
-    #                     use_expert_gt=True,
-    #                     silent=silent,
-    #                     config=config)
+    #     # 5. Train/Eval 2Hop
+    #     print("Eval 2Hop ensembles")
+    #     # used only as eval
+    #     train_2hops_2Dtasks(graph,
+    #                         drop_version,
+    #                         epochs=1,
+    #                         use_expert_gt=True,
+    #                         silent=silent,
+    #                         config=config)
 
 
 if __name__ == "__main__":

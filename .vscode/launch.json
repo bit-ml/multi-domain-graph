@@ -5,13 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Generate Expert Output",
+            "name": "Generate Expert Output GOT-10k",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "config0_generate_expert_output.ini"
+                // check_prev_data         - [0/1] - 1 check prev data & ask if to delete; 0 otherwise
+                "1",
+                "depth_xtc"
+            ]
+        },
+        {
+            "name": "Generate Expert Output Taskonomy",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                // type    - 0 create preprocessed gt samples
+                //         - 1 create preprocessed experts samples
+                // check_prev_data   - [0/1] - 1 check prev data & ask if to delete; 0 otherwise
+                "1",
+                "1",
+                "depth_xtc"
             ]
         },
         {

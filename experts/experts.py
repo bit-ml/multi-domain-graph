@@ -1,7 +1,7 @@
 # import sys
 
 # print(sys.path)
-from experts.depth_expert import DepthModel
+from experts.depth_expert import DepthModel, DepthModelXTC
 from experts.edges_expert import EdgesModel
 from experts.halftone_expert import HalftoneModel
 from experts.normals_expert import SurfaceNormalsModel
@@ -18,12 +18,13 @@ class Experts:
         self.methods = [
             RGBModel(full_experts),
             SurfaceNormalsModel(full_experts),
-            Tracking1Model(full_experts),
-            RaftModel(full_experts, 1),
             HalftoneModel(full_experts, 0),
             SaliencySegmModel(full_experts),
-            DepthModel(full_experts),
             EdgesModel(full_experts),
+            # DepthModelXTC(full_experts),
+            # Tracking1Model(full_experts),
+            # RaftModel(full_experts, 1),
+            DepthModel(full_experts),
         ]
 
     '''

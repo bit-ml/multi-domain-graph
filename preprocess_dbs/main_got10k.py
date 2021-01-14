@@ -1,50 +1,51 @@
-import os
-import sys
-import cv2
-import shutil
-import torch
 import glob
+import os
+import shutil
+import sys
+
+import cv2
 import numpy as np
+import torch
+from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from PIL import Image
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import experts.raft_of_expert
-import experts.liteflownet_of_expert
-import experts.sseg_fcn_expert
-import experts.sseg_deeplabv3_expert
-import experts.vmos_stm_expert
-import experts.halftone_expert
 import experts.depth_expert
 import experts.edges_expert
+import experts.halftone_expert
+import experts.liteflownet_of_expert
 import experts.normals_expert
-import experts.saliency_seg_expert
+import experts.raft_of_expert
 import experts.rgb_expert
+import experts.saliency_seg_expert
+import experts.sseg_deeplabv3_expert
+import experts.sseg_fcn_expert
+import experts.vmos_stm_expert
 
 WORKING_H = 256
 WORKING_W = 256
 
 # if -1 => will process all movies
-n_proc_videos = -1  #3000  #-1  #180  #3000
-n_proc_frames_per_video = -1  #3
+n_proc_videos = 3000  #-1  #180  #3000
+n_proc_frames_per_video = 3  #-1 #3
 
 main_db_path = r'/data/tracking-vot/GOT-10k/train'
-#main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/train'
-main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/train'
-'''
-main_db_path = r'/data/tracking-vot/GOT-10k/val'
-#main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/val'
-main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/val'
-'''
+main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/train'
+# main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/train'
+
+# main_db_path = r'/data/tracking-vot/GOT-10k/val'
+# main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k/val'
+# # main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/GOT-10k_full/val'
 
 VALID_EXPERTS_NAME = [\
     'sseg_fcn',
     'sseg_deeplabv3',
     'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_cmyk_basic', 'halftone_rot_gray_basic',
     'depth_sgdepth',
+    'depth_xtc',
     'edges_dexined',
     'normals_xtc',
     'saliency_seg_egnet',
@@ -55,7 +56,7 @@ VALID_EXPERTS_NAME = [\
 EXPERTS_NAME = []
 CHECK_PREV_DATA = 0
 
-usage_str = 'usage: python main_taskonomy.py check_prev_data exp1 exp2 ...'
+usage_str = 'usage: python main_got10k.py check_prev_data exp1 exp2 ...'
 #   check_prev_data         - [0/1] - 1 check prev data & ask if to delete; 0 otherwise
 #    expi                   - name of the i'th expert / domain
 #                           - should be one of the VALID_EXPERTS_NAME / VALID_GT_DOMAINS
@@ -152,6 +153,8 @@ def get_expert(exp_name):
     elif exp_name == 'depth_sgdepth':
         sys.argv = ['']
         return experts.depth_expert.DepthModel(full_expert=True)
+    elif exp_name == 'depth_xtc':
+        return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
