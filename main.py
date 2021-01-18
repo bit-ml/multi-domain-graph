@@ -116,7 +116,7 @@ def drop_connections_simple(space_graph, drop_version):
 
         # 2. Check ensembles value vs single edge
         ensemble_l1_per_sample = utils.combine_maps(l1_per_edge_per_sample,
-                                                    fct="median")
+                                                    combine_fct="median")
         mean_l1_per_edge = l1_per_edge_per_sample.mean(dim=1)
 
         print("\n==== End node [%19s] =====" % expert.str_id)
@@ -129,7 +129,11 @@ def drop_connections_simple(space_graph, drop_version):
 
 
 ############################## 1HOP ###############################
-def eval_1hop_ensembles(space_graph, drop_version, silent, config):
+def eval_1hop_ensembles(space_graph, drop_version, combine_fct, silent,
+                        config):
+    '''
+        combine_fct: 'histo', 'mean', 'median' or None
+    '''
     csv_path = os.path.join(config.get('Logs', 'csv_results_dir'))
     if not os.path.exists(csv_path):
         os.mkdir(csv_path)
@@ -198,7 +202,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
                 drop_version, csv_path, edges_1hop_weights,
-                edges_1hop_test_weights)
+                edges_1hop_test_weights, combine_fct)
 
     writer.close()
 
@@ -207,7 +211,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     csv_file.close()
 
 
-def train_2Dtasks(space_graph, epochs, silent, config):
+def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
     if silent:
         writer = DummySummaryWriter()
     else:
@@ -228,7 +232,8 @@ def train_2Dtasks(space_graph, epochs, silent, config):
             continue
         print("[%2d] Train" % net_idx, net)
 
-        net.train(epochs=epochs,
+        net.train(start_epoch=start_epoch,
+                  n_epochs=n_epochs,
                   device=device,
                   writer=writer,
                   eval_test=eval_test)
@@ -237,7 +242,7 @@ def train_2Dtasks(space_graph, epochs, silent, config):
 
 
 def load_2Dtasks(graph, epoch):
-    print("Load nets from checkpoints")
+    print("Load nets from checkpoints. From epoch: %2d" % epoch)
     for net_idx, edge in enumerate(graph.edges):
         path = os.path.join(edge.load_model_dir, 'epoch_%05d.pth' % (epoch))
         edge.net.load_state_dict(torch.load(path))
@@ -245,7 +250,7 @@ def load_2Dtasks(graph, epoch):
 
 
 ############################## 1HOP - pdf per pixel in full ensemble ###############################
-def ensemble_1hop_histogram(space_graph, silent, config):
+def plot_per_pixel_ensembles(space_graph, silent, config):
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         edges_loaders_1hop = []
@@ -304,7 +309,8 @@ def main(argv):
     config.set('Run id', 'datetime', str(datetime.now()))
 
     silent = config.getboolean('Logs', 'silent')
-    epochs = config.getint('Edge Models', 'n_epochs')
+    n_epochs = config.getint('Edge Models', 'n_epochs')
+    start_epoch = config.getint('Edge Models', 'start_epoch')
     # 0. Generate experts output
     if config.getboolean('Preprocess', 'generate_experts_output'):
         ## USE preprocess_dbs
@@ -315,20 +321,29 @@ def main(argv):
     if config.getboolean('Training', 'train_basic_edges'):
         # 1. Build graph + Train 1Hop
         graph = build_space_graph(config, silent=silent, valid_shuffle=True)
-        train_2Dtasks(graph, epochs=epochs, silent=silent, config=config)
+        if start_epoch > 0:
+            load_2Dtasks(graph, epoch=start_epoch)
+        train_2Dtasks(graph,
+                      start_epoch=start_epoch,
+                      n_epochs=n_epochs,
+                      silent=silent,
+                      config=config)
         sys.exit(0)
     else:
         # 2. Build graph + Load 1Hop edges
         graph = build_space_graph(config, silent=silent, valid_shuffle=False)
-        load_2Dtasks(graph, epoch=epochs)
+        load_2Dtasks(graph, epoch=start_epoch)
 
     # # Per pixel histograms, inside an ensemble
-    # ensemble_1hop_histogram(graph, silent=silent, config=config)
+    # plot_per_pixel_ensembles(graph, silent=silent, config=config)
 
     print("Eval 1Hop ensembles before drop")
-    # # drop_version passed as -1 -> no drop
-    # eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
-    eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
+    # drop_version passed as -1 -> no drop
+    eval_1hop_ensembles(graph,
+                        drop_version=-1,
+                        combine_fct="median",
+                        silent=silent,
+                        config=config)
 
     # # 3. Drop ill-posed connections
     # # drop_version = config.getint('Training', 'drop_version')

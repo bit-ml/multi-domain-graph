@@ -14,3 +14,4 @@ nohup.out
 histograms
 .gitignore
 experts/normals_expert.py
+csv_results*/results_*.csv

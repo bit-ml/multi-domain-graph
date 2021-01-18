@@ -14,7 +14,7 @@ sys.path.insert(0,
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import multiprocessing
 
-import pytorch_ssim
+# import pytorch_ssim
 
 
 def get_gaussian_filter(n_channels, win_size=11, sigma=1.5):
@@ -168,11 +168,10 @@ def img_for_plot(img):
     return (img - min_img) / (max_img - min_img)
 
 
-def hist_vextorized_np(data, n_bins, range_limits):
+def hist_vextorized_np(data, bins):
     # Setup bins and determine the bin location for each element for the bins
-    R = range_limits
     N = data.shape[-1]
-    bins = np.linspace(R[0], R[1], n_bins + 1)
+    n_bins = len(bins)
     data2D = data.reshape(-1, N)
     idx = np.searchsorted(bins, data2D, 'right') - 1
 
@@ -226,7 +225,8 @@ def pixels_histogram(multi_chan_maps, end_id):
     multi_chan_maps: N_models x BS x Map_Channels x H x W
     '''
     minp, maxp = multi_chan_maps.min().item(), multi_chan_maps.max().item()
-    bins = 10
+    n_bins = 10
+    bins = np.linspace(minp, maxp, n_bins + 1)
     fig_name = "histograms/%dbins/%s.png" % (bins, end_id)
 
     n_models, bs, chan, h, w = multi_chan_maps.shape
@@ -240,7 +240,7 @@ def pixels_histogram(multi_chan_maps, end_id):
 
         pixels_histo = hist_vextorized_np(
             maps_linearized[:, entry_idx].permute(1, 0).data.cpu().numpy(),
-            bins, (minp, maxp))
+            bins)
 
         entry_histo_types = list(pool.map(histo_type_np, pixels_histo))
         counts = (entry_histo_types.count(0), entry_histo_types.count(1),
@@ -258,7 +258,54 @@ def pixels_histogram(multi_chan_maps, end_id):
     plt.clf()
 
 
-def combine_maps(multi_chan_maps, edges_weights, fct="median"):
+def mean_mode_histo(multi_chan_maps):
+    '''
+    multi_chan_maps: N_models x BS x Map_Channels x H x W
+    output         : BS x Map_Channels x H x W
+    '''
+    # import matplotlib.pyplot as plt
+    n_models, bs, chan, h, w = multi_chan_maps.shape
+    num_values_per_map = chan * h * w
+    maps_linearized = multi_chan_maps.view(n_models, bs, num_values_per_map)
+    result = torch.zeros_like(multi_chan_maps[0])
+    # pool = multiprocessing.Pool(10)
+    # with multiprocessing.Pool(10) as pool:
+    #     print(p.map(f, [1, 2, 3]))
+
+    # TODO: se poate face oare paralelizat si pe batch
+    for entry_idx in tqdm(range(bs)):
+        crt_entry_maps = maps_linearized[:, entry_idx].permute(1, 0)
+
+        minp, maxp = crt_entry_maps.min().item(), crt_entry_maps.max().item()
+        n_bins = int((maxp - minp) / 0.1)
+        bins = np.linspace(minp, maxp, n_bins)
+        # print("MIN-MAX %.2f - %.2f" % (minp, maxp))
+
+        pixels_histo = hist_vextorized_np(crt_entry_maps.data.cpu().numpy(),
+                                          bins)
+        # print(bins, minp, maxp)
+        idx_max = np.argmax(pixels_histo, 1)
+        th1 = torch.from_numpy(bins[idx_max]).cuda()
+        th2 = torch.from_numpy(bins[idx_max + 1]).cuda()
+
+        crt_entry_maps[crt_entry_maps < th1[:, None]] = 0
+        crt_entry_maps[crt_entry_maps > th2[:, None]] = 0
+        mean_in_mode = crt_entry_maps.sum(1) / (
+            (crt_entry_maps != 0).sum(1) + 0.00000001)
+        result[entry_idx] = mean_in_mode.view(chan, h, w)
+        # plt.imshow(result[entry_idx].permute(1, 2, 0).data.cpu().numpy())
+        # plt.show()
+        # plt.imshow(multi_chan_maps[0, entry_idx].permute(1, 2,
+        #                                                  0).data.cpu().numpy())
+        # plt.show()
+        # plt.imshow(multi_chan_maps[1, entry_idx].permute(1, 2,
+        #                                                  0).data.cpu().numpy())
+        # plt.show()
+        # plt.clf()
+    return result
+
+
+def combine_maps(multi_chan_maps, edges_weights, combine_fct="median"):
     '''
         input list shape: (arr_m1, arr_m2, arr_m3, ...)
         result shape: (arr_all)
@@ -270,23 +317,29 @@ def combine_maps(multi_chan_maps, edges_weights, fct="median"):
         edges_weights = torch.tensor(edges_weights, dtype=torch.float32).cuda()
         multi_chan_maps = multi_chan_maps * edges_weights
         return multi_chan_maps.mean(dim=0)
-    if fct == "mean":
+    if combine_fct == "mean":
         return multi_chan_maps.mean(dim=0)
-    if fct == "median":
+    if combine_fct == "median":
         return median_100(multi_chan_maps)
+    if combine_fct == "histo":
+        return mean_mode_histo(multi_chan_maps)
 
-    assert ('[%s] Combination not implemented' % fct)
+    assert ('[%s] Combination not implemented' % combine_fct)
 
 
-def median_100(multi_chan_arr):
-    ar_100 = multi_chan_arr * 100.
+def median_100(multi_chan_maps):
+    '''
+    multi_chan_maps : N_models x BS x Map_Channels x H x W
+    med_100         : BS x Map_Channels x H x W
+    '''
+    ar_100 = multi_chan_maps * 100.
     ar_100_int = ar_100.int()
     med_100, _ = torch.median(ar_100_int, dim=0)
     return med_100 / 100.
 
 
-def median_simple(multi_chan_arr):
-    med = torch.from_numpy(np.median(multi_chan_arr, axis=0))
+def median_simple(multi_chan_maps):
+    med = torch.from_numpy(np.median(multi_chan_maps, axis=0))
     return med
 
 

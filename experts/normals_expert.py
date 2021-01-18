@@ -14,7 +14,7 @@ current_dir_name = os.path.dirname(os.path.realpath(__file__))
 normals_model_path = os.path.join(current_dir_name, 'models/normals_xtc.pth')
 
 
-class SurfaceNormalsModel():
+class SurfaceNormalsXTC():
     def __init__(self, full_expert=True):
         if full_expert:
             model_path = normals_model_path  #"experts/models/rgb2normal_consistency.pth"

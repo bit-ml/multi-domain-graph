@@ -174,7 +174,7 @@ def get_expert(exp_name):
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return experts.normals_expert.SurfaceNormalsModel(full_expert=True)
+        return experts.normals_expert.SurfaceNormalsXTC(full_expert=True)
     elif exp_name == 'saliency_seg_egnet':
         return experts.saliency_seg_expert.SaliencySegmModel(full_expert=True)
     elif exp_name == 'rgb':

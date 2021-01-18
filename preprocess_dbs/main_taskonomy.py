@@ -27,9 +27,13 @@ import experts.vmos_stm_expert
 WORKING_H = 256
 WORKING_W = 256
 
-main_db_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master'
-main_gt_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_gt/taskonomy/sample-model'
-main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/taskonomy/sample-model'
+# main_db_path = r'/data/multi-domain-graph/datasets/taskonomy/taskonomy-sample-model-1-master'
+# main_gt_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_gt/taskonomy/sample-model'
+# main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/taskonomy/sample-model'
+
+main_db_path = r'/data/multi-domain-graph-3/datasets/Taskonomy/tiny-test'
+main_gt_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_gt/taskonomy/tiny-test'
+main_exp_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_exp/taskonomy/tiny-test'
 
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']
@@ -38,6 +42,7 @@ VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']
 VALID_GT_DOMAINS = ['rgb', 'depth', 'edges', 'normals']
 
 VALID_EXPERTS_NAME = [\
+    'prdimp50',
     'sseg_fcn',
     'sseg_deeplabv3',
     'halftone_gray_basic', 'halftone_rgb_basic', 'halftone_cmyk_basic', 'halftone_rot_gray_basic',
@@ -226,7 +231,7 @@ def get_expert(exp_name):
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return experts.normals_expert.SurfaceNormalsModel(full_expert=True)
+        return experts.normals_expert.SurfaceNormalsXTC(full_expert=True)
     elif exp_name == 'saliency_seg_egnet':
         return experts.saliency_seg_expert.SaliencySegmModel(full_expert=True)
     elif exp_name == 'rgb':
@@ -380,7 +385,7 @@ class Dataset_ImgLevel(Dataset):
 
 def get_exp_results():
     rgbs_path = os.path.join(main_db_path, 'rgb')
-    batch_size = 30
+    batch_size = 25
     dataset = Dataset_ImgLevel(rgbs_path)
     dataloader = torch.utils.data.DataLoader(dataset,
                                              batch_size=batch_size,

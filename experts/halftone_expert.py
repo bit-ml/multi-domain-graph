@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import torch
 from PIL import Image
+
 from experts.halftone.halftone import Halftone
 
 W, H = 256, 256
@@ -39,6 +40,17 @@ class HalftoneModel():
         halftone_maps = np.array(halftone_maps).astype('float32')
         return halftone_maps
 
+    def apply_expert_one_frame(self, rgb_frame):
+        resized_rgb_frame = rgb_frame.resize((W, H))
+        halftone_map = Halftone(resized_rgb_frame, self.style).make()
+
+        if self.style == 0 or self.style == 3:
+            halftone_map = np.array(halftone_map)[None, :, :] / 255.
+        else:
+            halftone_map = np.array(halftone_map).transpose(2, 0, 1) / 255.
+
+        return halftone_map
+
     '''
     def apply_expert(self, rgb_frames):
         halftone_maps = []
@@ -64,14 +76,5 @@ class HalftoneModel():
         #return torch.from_numpy(halftone_maps)
         return halftone_maps
 
-    def apply_expert_one_frame(self, rgb_frame):
-        resized_rgb_frame = rgb_frame.resize((W, H))
-        halftone_map = Halftone(resized_rgb_frame, self.style).make()
 
-        if self.style == 0 or self.style == 3:
-            halftone_map = np.array(halftone_map)[None, :, :] / 255.
-        else:
-            halftone_map = np.array(halftone_map).transpose(2, 0, 1) / 255.
-
-        return halftone_map
     '''

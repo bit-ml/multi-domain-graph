@@ -22,6 +22,9 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0",
+            },
             "args": [
                 // type    - 0 create preprocessed gt samples
                 //         - 1 create preprocessed experts samples
