@@ -9,10 +9,26 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 # TODO change s.t. -1 means all samples
-first_k = 3000
+first_k = -1  #3000
 first_k_test = 9464  #60#64
 CACHE_NAME = "my_cache"
 W, H = 256, 256
+
+
+def load_glob_with_cache_multiple_patterns(cache_file, glob_paths):
+    if not os.path.exists(cache_file):
+        all_paths = sorted(glob.glob(glob_paths[0]))
+        for i in np.arange(1, len(glob_paths)):
+            all_paths = all_paths + glob.glob(glob_paths[i])
+        all_paths = sorted(all_paths)
+
+        save_folder = os.path.dirname(cache_file)
+        if not os.path.exists(save_folder):
+            pathlib.Path(save_folder).mkdir(parents=True, exist_ok=True)
+        np.save(cache_file, all_paths)
+    else:
+        all_paths = np.load(cache_file)
+    return all_paths
 
 
 def load_glob_with_cache(cache_file, glob_path):
@@ -32,34 +48,44 @@ class Domain2DDataset(Dataset):
         super(Domain2DDataset, self).__init__()
         self.experts = experts
 
-        pattern = "/*/*00001"
-        s = time.time()
+        patterns = ["/*/*00001"]
+        #patterns = [
+        #    "/*/00000001_*", "/*/00000004_*", "/*/00000007_*", "/*/00000010_*"
+        #]
 
+        s = time.time()
         tag = pathlib.Path(dataset_path).parts[-1]
-        # load all rgbs paths
-        cache_rgb = "%s/rgbs_paths_%s_%s.npy" % (CACHE_NAME, tag, pattern[-3:])
-        glob_path_rgb = "%s/%s/%s.jpg" % (rgbs_path, dataset_path, pattern)
-        self.rgb_paths = load_glob_with_cache(cache_rgb,
-                                              glob_path_rgb)[:first_k]
 
         # load experts paths
-        cache_e1 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[0].identifier,
-                                        tag, pattern[-3:])
-        glob_path_e1 = "%s/%s/%s/%s.npy" % (
-            experts_path, dataset_path, self.experts[0].identifier, pattern)
-        self.e1_output_path = load_glob_with_cache(cache_e1,
-                                                   glob_path_e1)[:first_k]
+        cache_e1 = "%s/%s_%s_%d_patterns.npy" % (
+            CACHE_NAME, self.experts[0].identifier, tag, len(patterns))
+        glob_paths_e1 = [
+            "%s/%s/%s/%s.npy" %
+            (experts_path, dataset_path, self.experts[0].identifier, pattern)
+            for pattern in patterns
+        ]
 
-        cache_e2 = "%s/%s_%s_%s.npy" % (CACHE_NAME, self.experts[1].identifier,
-                                        tag, pattern[-3:])
-        glob_path_e2 = "%s/%s/%s/%s.npy" % (
-            experts_path, dataset_path, self.experts[1].identifier, pattern)
-        self.e2_output_path = load_glob_with_cache(cache_e2,
-                                                   glob_path_e2)[:first_k]
+        self.e1_output_path = load_glob_with_cache_multiple_patterns(
+            cache_e1, glob_paths_e1)
+        self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
+                                                       ) if first_k ==
+                                                  -1 else first_k]
+
+        cache_e2 = "%s/%s_%s_%d_patterns.npy" % (
+            CACHE_NAME, self.experts[1].identifier, tag, len(patterns))
+        glob_paths_e2 = [
+            "%s/%s/%s/%s.npy" %
+            (experts_path, dataset_path, self.experts[1].identifier, pattern)
+            for pattern in patterns
+        ]
+        self.e2_output_path = load_glob_with_cache_multiple_patterns(
+            cache_e2, glob_paths_e2)
+        self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
+                                                       ) if first_k ==
+                                                  -1 else first_k]
         e = time.time()
 
-        assert (len(self.rgb_paths) == len(self.e1_output_path) == len(
-            self.e2_output_path))
+        assert (len(self.e1_output_path) == len(self.e2_output_path))
 
         # TODO: precompute+save mean & std when buliding cache
 
@@ -69,7 +95,7 @@ class Domain2DDataset(Dataset):
         return oe1, oe2
 
     def __len__(self):
-        return len(self.rgb_paths)
+        return len(self.e1_output_path)
 
 
 class DomainTestDataset(Dataset):

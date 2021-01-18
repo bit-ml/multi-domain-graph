@@ -7,6 +7,7 @@ from datetime import datetime
 
 import numpy as np
 import torch
+import torchvision
 from graph.edges.dataset2d import Domain2DDataset, DomainTestDataset
 from graph.edges.unet.unet_model import UNetGood
 from torch import nn
@@ -92,7 +93,9 @@ class Edge:
         TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
         VALID_PATH = self.config.get('Paths', 'VALID_PATH')
 
-        PREPROC_GT_PATH = self.config.get('Paths', 'PREPROC_GT_PATH')
+        PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
+        EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
+                                                   'EXPERTS_OUTPUT_PATH_TEST')
         TEST_PATH = self.config.get('Paths', 'TEST_PATH')
 
         experts = [self.expert1, self.expert2]
@@ -112,8 +115,9 @@ class Edge:
             # sampler=rnd_sampler,
             num_workers=n_workers)
 
-        test_ds = DomainTestDataset(PREPROC_GT_PATH, EXPERTS_OUTPUT_PATH,
-                                    TEST_PATH, experts)
+        test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
+                                    EXPERTS_OUTPUT_PATH_TEST, TEST_PATH,
+                                    experts)
         if test_ds.available:
             self.test_loader = DataLoader(test_ds,
                                           batch_size=bs_test,
@@ -352,7 +356,8 @@ class Edge:
     ################ [1Hop Ensembles] ##################
     def eval_1hop_ensemble_test_set(loaders, l1_per_edge, l1_ensemble1hop,
                                     l1_expert, edges_1hop, device, save_idxes,
-                                    writer, wtag, edges_1hop_weights):
+                                    writer, wtag, edges_1hop_weights,
+                                    ensemble_fct):
         with torch.no_grad():
             num_batches = len(loaders[0])
             for idx_batch in tqdm(range(num_batches)):
@@ -387,25 +392,40 @@ class Edge:
                         writer.add_images(
                             '%s/%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes]), 0)
+                        ''''
+                        # save SSIM maps to tensorboard 
+                        pred = one_hop_pred[save_idxes]
+                        exp_res = domain2_exp_gt[save_idxes]
+                        ssim_maps = utils.get_btw_tasks_ssim_score(
+                            exp_res, pred)
+                        ssim_maps = ssim_maps[:, 0, None, :, :]
+                        pred = img_for_plot(pred)
+                        ssim_maps = ssim_maps.repeat(1, pred.shape[1], 1, 1)
+                        to_disp = torch.cat((pred, ssim_maps), 2)
+                        # Show last but one batch edges
+                        writer.add_images(
+                            '%s/%s' % (wtag, edge.expert1.identifier), to_disp,
+                            0)
+                        '''
 
-                    l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
-                                                     domain2_gt).item()
+                    l1_per_edge[idx_edge] += 100 * edge.l1(
+                        one_hop_pred, domain2_gt).item()
 
-                # with_expert
-                domain2_1hop_ens_list.append(domain2_exp_gt)  #.cpu())
+                domain2_1hop_ens_list.append(domain2_exp_gt)
+
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
-                                                      edges_1hop_weights)
-                l1_ensemble1hop += edge.l1(
-                    domain2_1hop_ens,  #.to(device=device, dtype=torch.float32),
-                    domain2_gt).item()
-                l1_expert += edge.l1(domain2_exp_gt, domain2_gt).item()
+                                                      edges_1hop_weights,
+                                                      fct=ensemble_fct)
+                l1_expert += 100 * edge.l1(domain2_exp_gt, domain2_gt).item()
+                l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
+                                                 domain2_gt).item()
 
             return l1_per_edge, l1_ensemble1hop, l1_expert, save_idxes, domain2_1hop_ens, domain2_exp_gt, domain2_gt, num_batches
 
     def eval_1hop_ensemble_valid_set(loaders, l1_per_edge, l1_ensemble1hop,
                                      edges_1hop, device, save_idxes, writer,
-                                     wtag, edges_1hop_weights):
+                                     wtag, edges_1hop_weights, ensemble_fct):
         with torch.no_grad():
             num_batches = len(loaders[0])
             for idx_batch in range(num_batches):
@@ -424,8 +444,7 @@ class Edge:
                     with torch.no_grad():
                         # Ensemble1Hop: 1hop preds
                         one_hop_pred = edge.net(domain1)
-                        domain2_1hop_ens_list.append(
-                            one_hop_pred.clone())  #.cpu())
+                        domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -436,24 +455,41 @@ class Edge:
                         writer.add_images(
                             '%s/%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes]), 0)
+                        # save SSIM maps to tensorboard
+                        '''
+                        pred = one_hop_pred[save_idxes]
+                        exp_res = domain2_exp_gt[save_idxes]
+                        ssim_maps = utils.get_btw_tasks_ssim_score(
+                            exp_res, pred)
+                        ssim_maps = ssim_maps[:, 0, None, :, :]
+                        pred = img_for_plot(pred)
+                        ssim_maps = ssim_maps.repeat(1, pred.shape[1], 1, 1)
+                        to_disp = torch.cat((pred, ssim_maps), 2)
+                        # Show last but one batch edges
+                        writer.add_images(
+                            '%s/%s' % (wtag, edge.expert1.identifier), to_disp,
+                            0)
+                        '''
 
-                    l1_per_edge[idx_edge] += edge.l1(one_hop_pred,
-                                                     domain2_exp_gt).item()
+                    l1_per_edge[idx_edge] += 100 * edge.l1(
+                        one_hop_pred, domain2_exp_gt).item()
 
                 # with_expert
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
-                                                      edges_1hop_weights)
-                l1_ensemble1hop += edge.l1(domain2_1hop_ens,
-                                           domain2_exp_gt).item()
+                                                      edges_1hop_weights,
+                                                      ensemble_fct)
+
+                l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
+                                                 domain2_exp_gt).item()
 
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer, drop_version, csv_path, edges_1hop_weights,
-                           edges_1hop_test_weights):
+                           edges_1hop_test_weights, ensemble_fct):
 
         drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
         wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
@@ -471,7 +507,7 @@ class Edge:
         start = time.time()
         l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_valid_set(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag_valid, edges_1hop_weights)
+            save_idxes, writer, wtag_valid, edges_1hop_weights, ensemble_fct)
         end = time.time()
         print("time for VALID Edge.eval_1hop_ensemble_aux", end - start)
 
@@ -488,10 +524,10 @@ class Edge:
 
         start = time.time()
         if len(test_loaders) > 0:
-            l1_per_edge_test, l1_ensemble1hop_test, l1_expert_test, save_idxes_test, domain2_1hop_ens_test, domain2_exp_gt, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_test_set(
+            l1_per_edge_test, l1_ensemble1hop_test, l1_expert_test, save_idxes_test, domain2_1hop_ens_test, domain2_exp_gt_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_test_set(
                 test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
                 l1_expert_test, test_edges, device, save_idxes_test, writer,
-                wtag_test, edges_1hop_test_weights)
+                wtag_test, edges_1hop_test_weights, ensemble_fct)
         end = time.time()
         print("time for TEST Edge.eval_1hop_ensemble_test_set", end - start)
 
@@ -509,10 +545,9 @@ class Edge:
             writer.add_images(
                 '%s/ENSEMBLE' % (wtag_test),
                 img_for_plot(domain2_1hop_ens_test[save_idxes_test]), 0)
-
-            writer.add_images('%s/EXPERT' % (wtag_test),
-                              img_for_plot(domain2_exp_gt[save_idxes_test]), 0)
-
+            writer.add_images(
+                '%s/EXPERT' % (wtag_test),
+                img_for_plot(domain2_exp_gt_test[save_idxes_test]), 0)
             writer.add_images('%s/GT' % (wtag_test),
                               img_for_plot(domain2_gt_test[save_idxes_test]),
                               0)
