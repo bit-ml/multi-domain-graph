@@ -488,7 +488,7 @@ class Edge:
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
-                           writer, drop_version, csv_path, edges_1hop_weights,
+                           writer, drop_version, edges_1hop_weights,
                            edges_1hop_test_weights, ensemble_fct):
 
         drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
@@ -557,7 +557,6 @@ class Edge:
             writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_test),
                               l1_ensemble1hop_test, 0)
 
-        csv_file = open(csv_path, 'a')
         tag = "to_%s_%s" % (edges_1hop[0].expert2.identifier, drop_str)
 
         print(
@@ -567,14 +566,10 @@ class Edge:
         print("Loss %19s: %30.2f   %30.2f %20.2f" %
               ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test,
                l1_expert_test))
-        csv_file.write('%30.2f,%30.2f,' %
-                       (l1_ensemble1hop, l1_ensemble1hop_test))
         print(
             "%25s-------------------------------------------------------------------------------------"
             % (" "))
 
-        #import pdb
-        #pdb.set_trace()
         # Show Individual Losses
         l1_per_edge = np.array(l1_per_edge) / num_batches
         mean_l1_per_edge = np.mean(l1_per_edge)
@@ -607,7 +602,6 @@ class Edge:
 
         print("")
         print("")
-        csv_file.close()
         return save_idxes, save_idxes_test
 
     def ensemble_histogram(edges_loaders_1hop, end_id, device):

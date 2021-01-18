@@ -161,29 +161,6 @@ def drop_connections_simple(space_graph, drop_version):
 
 ############################## 1HOP ###############################
 def eval_1hop_ensembles(space_graph, drop_version, silent, config):
-    csv_path = os.path.join(config.get('Logs', 'csv_results_dir'))
-    if not os.path.exists(csv_path):
-        os.mkdir(csv_path)
-    csv_path = os.path.join(
-        csv_path, 'results_%s.csv' % (config.get('Run id', 'datetime')))
-    if drop_version == -1:
-        csv_file = open(csv_path, 'w')
-        csv_file.write('metric: L1\n')
-        csv_file.write(',')
-        for expert in space_graph.experts.methods:
-            csv_file.write('to_%s,,' % (expert.identifier))
-        csv_file.write('\n')
-        csv_file.write(',')
-        for expert in space_graph.experts.methods:
-            csv_file.write('valid,test,')
-        csv_file.write('\n')
-        csv_file.write('before drop,')
-        csv_file.close()
-    else:
-        csv_file = open(csv_path, 'a')
-        csv_file.write('after drop,')
-        csv_file.close()
-
     if silent:
         writer = DummySummaryWriter()
     else:
@@ -228,14 +205,10 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
         if len(edges_1hop) > 0:
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
-                drop_version, csv_path, edges_1hop_weights,
-                edges_1hop_test_weights, ensemble_fct)
+                drop_version, edges_1hop_weights, edges_1hop_test_weights,
+                ensemble_fct)
 
     writer.close()
-
-    csv_file = open(csv_path, 'a')
-    csv_file.write('\n')
-    csv_file.close()
 
 
 def train_2Dtasks(space_graph, epochs, silent, config):
