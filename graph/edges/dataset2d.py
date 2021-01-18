@@ -44,14 +44,14 @@ def load_glob_with_cache(cache_file, glob_path):
 
 
 class Domain2DDataset(Dataset):
-    def __init__(self, rgbs_path, experts_path, dataset_path, experts):
+    def __init__(self, experts_path, dataset_path, experts):
         super(Domain2DDataset, self).__init__()
         self.experts = experts
 
-        # patterns = ["/*/*00001"]
-        patterns = [
-            "/*/00000001_*", "/*/00000004_*", "/*/00000007_*", "/*/00000010_*"
-        ]
+        patterns = ["/*/*00001"]
+        #patterns = [
+        #    "/*/00000001_*", "/*/00000004_*", "/*/00000007_*", "/*/00000010_*"
+        #]
 
         s = time.time()
         tag = pathlib.Path(dataset_path).parts[-1]

@@ -6,15 +6,14 @@ import numpy as np
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "tracking/pytracking"))
 
-#from experts.tracking_expert_iface import TrackingModel
+from experts.tracking_expert_iface import TrackingModel
 
 W, H = 256, 256
 
 
-#class Tracking1Model(TrackingModel):
-class Tracking1Model():
+class Tracking1Model(TrackingModel):
     def __init__(self, full_expert=True):
-        tracker_name, tracker_param = "dimp", "prdimp18"
+        tracker_name, tracker_param = "dimp", "prdimp50"
         # tracker_name, tracker_param = "dimp", "dimp18"
         # param config should be in pytracking/parameter
         # checkpoint .pth should be in pytracking/networks folder
@@ -22,8 +21,8 @@ class Tracking1Model():
         #super().__init__(tracker_name, tracker_param)
         self.domain_name = "tracking"
         self.n_maps = 1
-        self.str_id = "tracking_prdimp18"
-        self.identifier = "tracking_prdimp18"
+        self.str_id = "tracking_prdimp50"
+        self.identifier = "tracking_prdimp50"
 
     def apply_expert(self, rgb_frames, start_bbox=(80, 60, 160, 250)):
         '''

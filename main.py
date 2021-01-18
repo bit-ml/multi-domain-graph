@@ -7,8 +7,6 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from experts.experts import Experts
-from experts.save_output import (generate_experts_output,
-                                 generate_experts_output_with_time)
 from graph.edges.graph_edges import Edge
 from graph.graph import MultiDomainGraph
 from utils import utils
@@ -21,6 +19,7 @@ import configparser
 
 def build_space_graph(config, silent, valid_shuffle):
     all_experts = Experts(full_experts=False)
+
     md_graph = MultiDomainGraph(config,
                                 all_experts,
                                 device,
@@ -49,10 +48,6 @@ def drop_connections(space_graph, drop_version):
 
 def drop_connections_correlations(space_graph, drop_version):
     for expert_idx, expert in enumerate(space_graph.experts.methods):
-        #print('=======')
-        #print('EXPERT %s' % expert.str_id)
-        #print('=======')
-
         # get edges ending in current expert
         ending_edges = []
         ending_edges_src_identifiers = []
@@ -65,25 +60,50 @@ def drop_connections_correlations(space_graph, drop_version):
         expert_correlations = Edge.drop_1hop_connections(
             ending_edges, device, drop_version).cpu().numpy()
 
+        if drop_version == 21 or drop_version == 23:
+            min_v = np.min(expert_correlations)
+            max_v = np.max(expert_correlations)
+            expert_correlations = (expert_correlations - min_v) / (max_v -
+                                                                   min_v)
+            expert_correlations = 1 - expert_correlations
         if drop_version == 10 or drop_version == 11 or drop_version == 14 or drop_version == 15 or drop_version == 20 or drop_version == 21:
             import numpy.linalg as linalg
             eigenValues, eigenVectors = linalg.eig(expert_correlations)
+            '''
+            s_indexes = np.flip(np.argsort(eigenValues))
+            eigenVectors = eigenVectors[s_indexes, :]
+            min_v = np.min(eigenVectors, 0)[None, :]
+            max_v = np.max(eigenVectors, 0)[None, :]
+            diff = max_v - min_v
+            diff[diff < 0.0000001] = 1
+            eigenVectors = (eigenVectors - min_v) / (max_v - min_v)
+            cl_pos = np.argwhere(eigenVectors[-1, :] >= 0.5)
+            if len(cl_pos) > 0:
+                task_weights = eigenVectors[:, cl_pos[0]]
+            else:
+                task_weights = np.ones((eigenVectors.shape[0], ))
+            '''
             pos = np.argmax(eigenValues)
             task_weights = eigenVectors[:, pos]
         elif drop_version == 12 or drop_version == 13 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
             task_weights = expert_correlations[-1, :]
-        #print(task_weights)
 
         min_val = np.min(task_weights)
         max_val = np.max(task_weights)
 
         task_weights = (task_weights - min_val) / (max_val - min_val)
-        #print(task_weights)
 
         if drop_version == 12 or drop_version == 13 or drop_version == 22 or drop_version == 23:
-            task_weights[task_weights <= 0] = 0
+            indexes = np.argsort(task_weights)
+            indexes = indexes[0:len(task_weights) - 4]
+            task_weights[indexes] = 0
+            #task_weights[task_weights <= 0] = 0
         elif drop_version == 10 or drop_version == 11 or drop_version == 20 or drop_version == 21:  # or drop_version == 14 or drop_version == 15:
+            # if current task is not part of the main cluster => abort
+            #if task_weights[-1] >= 0.5:
             task_weights[task_weights < 0.5] = 0
+            #else:
+            #    task_weights[task_weights == 0] = 0.0001
         elif drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17:
             task_weights[task_weights == 0] = 0.01
 
@@ -101,6 +121,15 @@ def drop_connections_correlations(space_graph, drop_version):
             ending_edge.in_edge_weights = task_weights
             ending_edge.in_edge_src_identifiers = ending_edges_src_identifiers
 
+        print('EXPERT: %20s' % expert.identifier)
+        for i in range(len(ending_edges_src_identifiers)):
+            if i < len(ending_edges) and ending_edges[i].ill_posed:
+                drop_str = 'drop'
+            else:
+                drop_str = ''
+            print('--%20s %20.10f - %s' %
+                  (ending_edges_src_identifiers[i], task_weights[i], drop_str))
+
 
 def drop_connections_simple(space_graph, drop_version):
     # for each node domain (= expert in our case)
@@ -116,7 +145,7 @@ def drop_connections_simple(space_graph, drop_version):
 
         # 2. Check ensembles value vs single edge
         ensemble_l1_per_sample = utils.combine_maps(l1_per_edge_per_sample,
-                                                    combine_fct="median")
+                                                    fct="median")
         mean_l1_per_edge = l1_per_edge_per_sample.mean(dim=1)
 
         print("\n==== End node [%19s] =====" % expert.str_id)
@@ -129,11 +158,7 @@ def drop_connections_simple(space_graph, drop_version):
 
 
 ############################## 1HOP ###############################
-def eval_1hop_ensembles(space_graph, drop_version, combine_fct, silent,
-                        config):
-    '''
-        combine_fct: 'histo', 'mean', 'median' or None
-    '''
+def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     csv_path = os.path.join(config.get('Logs', 'csv_results_dir'))
     if not os.path.exists(csv_path):
         os.mkdir(csv_path)
@@ -157,19 +182,21 @@ def eval_1hop_ensembles(space_graph, drop_version, combine_fct, silent,
         csv_file.write('after drop,')
         csv_file.close()
 
+
+def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     if silent:
         writer = DummySummaryWriter()
     else:
         tb_dir = config.get('Logs', 'tensorboard_dir')
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
-
-        writer = SummaryWriter(
-            log_dir=f'%s/%s_1hop_ens_dropV%d_%s' %
-            (tb_dir, tb_prefix, drop_version, datetime.now()),
-            flush_secs=30)
+        datetime = config.get('Run id', 'datetime')
+        writer = SummaryWriter(log_dir=f'%s/%s_1hop_ens_dropV%d_%s' %
+                               (tb_dir, tb_prefix, drop_version, datetime),
+                               flush_secs=30)
     save_idxes = None
     save_idxes_test = None
 
+    ensemble_fct = config.get('Ensemble', 'ensemble_fct')
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         tag = "Valid_1Hop_%s" % end_id
@@ -201,14 +228,10 @@ def eval_1hop_ensembles(space_graph, drop_version, combine_fct, silent,
         if len(edges_1hop) > 0:
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
-                drop_version, csv_path, edges_1hop_weights,
-                edges_1hop_test_weights, combine_fct)
+                drop_version, edges_1hop_weights, edges_1hop_test_weights,
+                ensemble_fct)
 
     writer.close()
-
-    csv_file = open(csv_path, 'a')
-    csv_file.write('\n')
-    csv_file.close()
 
 
 def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
@@ -217,10 +240,11 @@ def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
     else:
         tb_dir = config.get('Logs', 'tensorboard_dir')
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
-
-        writer = SummaryWriter(log_dir=f'%s/%s_train_2Dtasks_%s' %
-                               (tb_dir, tb_prefix, datetime.now()),
-                               flush_secs=30)
+        datetime = config.get('Run id', 'datetime')
+        writer = SummaryWriter(
+            log_dir=f'%s/%s_train_2Dtasks_%s' %
+            (tb_dir, tb_prefix, datetime),  #datetime.now()),
+            flush_secs=30)
     eval_test = config.getboolean('Training', 'eval_test_during_train')
 
     src_domain_restr = config.get('Training', 'src_domain_restr')
@@ -283,10 +307,10 @@ def train_2hops_2Dtasks(space_graph, drop_version, epochs, use_expert_gt,
     else:
         tb_dir = config.get('Logs', 'tensorboard_dir')
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
-
+        datetime = config.get('Run id', 'datetime')
         writer = SummaryWriter(
             log_dir=f'%s/%s_2hops_ens_dropV%d_%s' %
-            (tb_dir, tb_prefix, drop_version, datetime.now()),
+            (tb_dir, tb_prefix, drop_version, datetime),  #datetime.now()),
             flush_secs=30)
 
     for net_idx, net in enumerate(space_graph.edges):
@@ -311,12 +335,6 @@ def main(argv):
     silent = config.getboolean('Logs', 'silent')
     n_epochs = config.getint('Edge Models', 'n_epochs')
     start_epoch = config.getint('Edge Models', 'start_epoch')
-    # 0. Generate experts output
-    if config.getboolean('Preprocess', 'generate_experts_output'):
-        ## USE preprocess_dbs
-        assert (True)
-        generate_experts_output(Experts(full_experts=True).methods, config)
-        sys.exit(0)
 
     if config.getboolean('Training', 'train_basic_edges'):
         # 1. Build graph + Train 1Hop
@@ -339,11 +357,7 @@ def main(argv):
 
     print("Eval 1Hop ensembles before drop")
     # drop_version passed as -1 -> no drop
-    eval_1hop_ensembles(graph,
-                        drop_version=-1,
-                        combine_fct="median",
-                        silent=silent,
-                        config=config)
+    eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
 
     # # 3. Drop ill-posed connections
     # # drop_version = config.getint('Training', 'drop_version')

@@ -20,9 +20,11 @@ class MultiDomainGraph:
         for i_idx, expert_i in enumerate(all_experts.methods):
             for expert_j in all_experts.methods:
                 if expert_i != expert_j:
+                    train_only_for_new_expert_b = config.getboolean(
+                        'Training', 'train_only_for_new_expert')
                     train_only_for_new_expert = config.get(
                         'Training', 'train_only_for_new_expert')
-                    if train_only_for_new_expert and train_only_for_new_expert not in [
+                    if train_only_for_new_expert_b and train_only_for_new_expert not in [
                             expert_i.identifier, expert_j.identifier
                     ]:
                         continue

@@ -14,10 +14,9 @@ sys.path.insert(0,
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import multiprocessing
 
-# import pytorch_ssim
-
 
 def get_gaussian_filter(n_channels, win_size=11, sigma=1.5):
+    # build gaussian filter for SSIM
     h_win_size = win_size // 2
     yy, xx = torch.meshgrid([
         torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
@@ -29,7 +28,15 @@ def get_gaussian_filter(n_channels, win_size=11, sigma=1.5):
     return g_filter
 
 
-def get_ssim_score(batch1, batch2, g_filter, n_channels, win_size):
+def get_ssim_score(batch1,
+                   batch2,
+                   g_filter,
+                   n_channels,
+                   win_size,
+                   reduction=True):
+    # compute SSIM score between 2 batches of data
+    # default behavior => return a value per sample (reduction=True)
+
     mu1 = torch.nn.functional.conv2d(batch1,
                                      g_filter,
                                      padding=win_size // 2,
@@ -45,9 +52,13 @@ def get_ssim_score(batch1, batch2, g_filter, n_channels, win_size):
     sigma1_sq = torch.nn.functional.conv2d(
         batch1 * batch1, g_filter, padding=win_size // 2,
         groups=n_channels) - mu1_sq
+    sigma1_sq = torch.abs(sigma1_sq)
+
     sigma2_sq = torch.nn.functional.conv2d(
         batch2 * batch2, g_filter, padding=win_size // 2,
         groups=n_channels) - mu2_sq
+    sigma2_sq = torch.abs(sigma2_sq)
+
     sigma12 = torch.nn.functional.conv2d(
         batch1 * batch2, g_filter, padding=win_size // 2,
         groups=n_channels) - mu1_mu2
@@ -58,8 +69,11 @@ def get_ssim_score(batch1, batch2, g_filter, n_channels, win_size):
     ssim_map = ((2 * mu1_mu2 + C1) *
                 (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) *
                                        (sigma1_sq + sigma2_sq + C2))
-    res = ssim_map.view((ssim_map.shape[0], ssim_map.shape[1],
-                         -1)).mean(2).mean(1).sum()  #.mean()
+    if reduction:
+        res = ssim_map.view(
+            (ssim_map.shape[0], ssim_map.shape[1], -1)).mean(2).mean(1).sum()
+    else:
+        res = ssim_map
     return res
 
 
@@ -72,14 +86,15 @@ def get_correlation_score_ssim(batch_results, correlations, drop_version):
     n_tasks = batch_results.shape[0]
 
     if drop_version == 10 or drop_version == 12 or drop_version == 14 or drop_version == 16:
-        win_size = 255
+        win_size = 1
     elif drop_version == 11 or drop_version == 13 or drop_version == 15 or drop_version == 17:
-        win_size = 11
+        win_size = 255
 
     sigma = win_size / 7
     g_filter = get_gaussian_filter(n_channels=batch_results.shape[2],
                                    win_size=win_size,
                                    sigma=sigma).cuda()
+    g_filter = g_filter / torch.sum(g_filter)
 
     for i in range(n_tasks):
         result = get_ssim_score(batch_results[i], batch_results[i], g_filter,
@@ -167,6 +182,112 @@ def img_for_plot(img):
 
     return (img - min_img) / (max_img - min_img)
 
+
+def get_btw_tasks_ssim_score(expert_res, pred):
+    win_size = 11
+    sigma = win_size / 7
+    g_filter = get_gaussian_filter(n_channels=expert_res.shape[1],
+                                   win_size=win_size,
+                                   sigma=sigma).cuda()
+    g_filter = g_filter / torch.sum(g_filter)
+    ssim_map = get_ssim_score(expert_res,
+                              pred,
+                              g_filter,
+                              expert_res.shape[1],
+                              win_size,
+                              reduction=False)
+    ssim_map[ssim_map < 0] = 0
+    return ssim_map
+
+
+def combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean"):
+    n_tasks = multi_chan_maps.shape[0]
+    n_channels = multi_chan_maps.shape[2]
+    win_size = 11
+    sigma = win_size / 7
+    g_filter = get_gaussian_filter(n_channels=multi_chan_maps.shape[2],
+                                   win_size=win_size,
+                                   sigma=sigma).cuda()
+    g_filter = g_filter / torch.sum(g_filter)
+
+    all_correlations = torch.zeros(multi_chan_maps.shape,
+                                   dtype=torch.float32).cuda()
+    correlations = torch.zeros(multi_chan_maps.shape,
+                               dtype=torch.float32).cuda()
+    for i in range(n_tasks):
+
+        for j in range(n_tasks):
+            ssim_map = get_ssim_score_no_red(multi_chan_maps[i],
+                                             multi_chan_maps[j], g_filter,
+                                             n_channels, win_size)
+            correlations[j] = ssim_map
+        all_correlations[i] = torch.mean(correlations, 0)
+    all_correlations = torch.clamp(all_correlations, min=0)
+
+    if combine == "mean":
+        multi_chan_maps = multi_chan_maps * all_correlations
+        ensemble_res = torch.mean(multi_chan_maps, 0)
+    if combine == "median_w":
+        torch.nn.functional.threshold(all_correlations, 0.5, float('NaN'),
+                                      True)
+        multi_chan_maps = multi_chan_maps * all_correlations
+        ensemble_res = np.nanmedian(multi_chan_maps.cpu().numpy(), 0)
+        ensemble_res = torch.tensor(ensemble_res).cuda()
+        ensemble_res[ensemble_res != ensemble_res] = 0
+    if combine == "median":
+        torch.nn.functional.threshold(all_correlations, 0.5, float('NaN'),
+                                      True)
+        all_correlations = 1 - all_correlations
+        torch.nn.functional.threshold(all_correlations, 0.5, 1, True)
+        multi_chan_maps = multi_chan_maps * all_correlations
+        ensemble_res = np.nanmedian(multi_chan_maps.cpu().numpy(), 0)
+        ensemble_res = torch.tensor(ensemble_res).cuda()
+        ensemble_res[ensemble_res != ensemble_res] = 0
+
+    return ensemble_res
+
+
+def combine_maps_ssim_twd_expert(multi_chan_maps, combine="mean"):
+    n_tasks = multi_chan_maps.shape[0]
+    win_size = 11
+    sigma = win_size / 7
+    g_filter = get_gaussian_filter(n_channels=multi_chan_maps.shape[2],
+                                   win_size=win_size,
+                                   sigma=sigma).cuda()
+    g_filter = g_filter / torch.sum(g_filter)
+
+    ssim_maps = []
+    for i in range(n_tasks):
+        ssim_map = get_ssim_score(multi_chan_maps[-1],
+                                  multi_chan_maps[i],
+                                  g_filter,
+                                  multi_chan_maps.shape[2],
+                                  win_size,
+                                  reduction=False)
+        ssim_maps.append(ssim_map)
+
+    ssim_maps = torch.stack(ssim_maps, 0)
+    ssim_maps = torch.clamp(ssim_maps, min=0)
+
+    if combine == "mean":
+        multi_chan_maps = multi_chan_maps * ssim_maps
+        ensemble_res = torch.mean(multi_chan_maps, 0)
+    if combine == "median_w":
+        torch.nn.functional.threshold(ssim_maps, 0.5, float('NaN'), True)
+        multi_chan_maps = multi_chan_maps * ssim_maps
+        ensemble_res = np.nanmedian(multi_chan_maps.cpu().numpy(), 0)  #[0]
+        ensemble_res = torch.tensor(ensemble_res).cuda()
+        ensemble_res[ensemble_res != ensemble_res] = 0
+    if combine == "median":
+        torch.nn.functional.threshold(ssim_maps, 0.5, float('NaN'), True)
+        ssim_maps = 1 - ssim_maps
+        torch.nn.functional.threshold(ssim_maps, 0.5, 1, True)
+        multi_chan_maps = multi_chan_maps * ssim_maps
+        ensemble_res = np.nanmedian(multi_chan_maps.cpu().numpy(), 0)  #[0]
+        ensemble_res = torch.tensor(ensemble_res).cuda()
+        ensemble_res[ensemble_res != ensemble_res] = 0
+
+    return ensemble_res
 
 def hist_vextorized_np(data, bins):
     # Setup bins and determine the bin location for each element for the bins
@@ -305,7 +426,7 @@ def mean_mode_histo(multi_chan_maps):
     return result
 
 
-def combine_maps(multi_chan_maps, edges_weights, combine_fct="median"):
+def combine_maps(multi_chan_maps, edges_weights, fct="median"):
     '''
         input list shape: (arr_m1, arr_m2, arr_m3, ...)
         result shape: (arr_all)
@@ -317,14 +438,29 @@ def combine_maps(multi_chan_maps, edges_weights, combine_fct="median"):
         edges_weights = torch.tensor(edges_weights, dtype=torch.float32).cuda()
         multi_chan_maps = multi_chan_maps * edges_weights
         return multi_chan_maps.mean(dim=0)
-    if combine_fct == "mean":
+    if fct == "mean":
         return multi_chan_maps.mean(dim=0)
-    if combine_fct == "median":
+    if fct == "median":
         return median_100(multi_chan_maps)
-    if combine_fct == "histo":
+    if fct == "histo":
         return mean_mode_histo(multi_chan_maps)
+    if fct == "median10":
+        return median_10(multi_chan_maps)
+    if fct == "ssim_maps_twd_exp_mean":
+        return combine_maps_ssim_twd_expert(multi_chan_maps, combine="mean")
+    if fct == "ssim_maps_twd_exp_median_w":
+        return combine_maps_ssim_twd_expert(multi_chan_maps,
+                                            combine="median_w")
+    if fct == "ssim_maps_twd_exp_median":
+        return combine_maps_ssim_twd_expert(multi_chan_maps, combine="median")
+    if fct == "ssim_maps_btw_tasks_mean":
+        return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean")
+    if fct == "ssim_maps_btw_tasks_median_w":
+        return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="median_w")
+    if fct == "ssim_maps_btw_tasks_median":
+        return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="median")
 
-    assert ('[%s] Combination not implemented' % combine_fct)
+    assert ('[%s] Combination not implemented' % fct)
 
 
 def median_100(multi_chan_maps):
@@ -338,8 +474,15 @@ def median_100(multi_chan_maps):
     return med_100 / 100.
 
 
-def median_simple(multi_chan_maps):
-    med = torch.from_numpy(np.median(multi_chan_maps, axis=0))
+def median_10(multi_chan_arr):
+    ar_100 = multi_chan_arr * 10.
+    ar_100_int = ar_100.int()
+    med_100, _ = torch.median(ar_100_int, dim=0)
+    return med_100 / 10.
+
+
+def median_simple(multi_chan_arr):
+    med = torch.from_numpy(np.median(multi_chan_arr, axis=0))
     return med
 
 
