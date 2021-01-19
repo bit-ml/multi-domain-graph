@@ -524,8 +524,9 @@ class Edge:
         print("")
         print("")
         csv_path = os.path.join(
-            csv_results_path, 'to__%s__epoch_%s.csv' %
-            (edges_1hop[0].expert2.identifier, epoch_str))
+            csv_results_path, 'to__%s__valid_%s_test_%s_epoch_%s.csv' %
+            (edges_1hop[0].expert2.identifier, valid_set_str, test_set_str,
+             epoch_str))
         csv_file = open(csv_path, 'w')
         idx_test_edge = 0
         csv_file.write('model, dataset, src_domain, dst_domain,\n')
