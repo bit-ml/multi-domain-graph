@@ -8,7 +8,7 @@ import numpy as np
 
 main_csvs_path = r'./trained_18.01.2021_got10k_4_frames_per_video'
 final_csv_path = r'trained_18.01.2021_got10k_4_frames_per_video.csv'
-fig_path = r'trained_18.01.2021_got10k_4_frames_per_video.png'
+fig_path = r'trained_18.01.2021_got10k_4_frames_per_video.svg'
 
 
 def generate_common_csv(main_csvs_path, final_csv_path):
@@ -36,9 +36,9 @@ def generate_plots(final_csv_path, fig_path):
     all_datasets = df['dataset'].unique()
     for dataset in all_datasets:
         df_dataset = df.loc[df['dataset'] == dataset]
-        db_fig_path = fig_path.replace('.png', '_%s.png' % dataset)
+        db_fig_path = fig_path.replace('.svg', '_%s.svg' % dataset)
 
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=(10, 10))
         sns.set()
         sns.set_style('white')
         sns.set_context('paper')
@@ -47,6 +47,12 @@ def generate_plots(final_csv_path, fig_path):
                      data=df_dataset,
                      style='src_domain',
                      hue='dst_domain')
+        sns.scatterplot(x='model',
+                        y='l1',
+                        data=df_dataset,
+                        style='src_domain',
+                        hue='dst_domain')
+
         plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
         plt.savefig(db_fig_path, bbox_inches='tight')
         plt.close()
