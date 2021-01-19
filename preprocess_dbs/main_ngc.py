@@ -36,11 +36,9 @@ main_gt_out_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/ngc
 main_exp_out_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/ngc/evaluation_set'
 
 # dataset domain names
-#VALID_ORIG_GT_DOMAINS = ['rgb', 'normal', 'depth', 'wireframe']
-VALID_ORIG_GT_DOMAINS = ['wireframe']
+VALID_ORIG_GT_DOMAINS = ['rgb', 'normal', 'depth', 'wireframe']
 # our internal domain names
-#VALID_GT_DOMAINS = ['rgb', 'normals', 'depth', 'edges']
-VALID_GT_DOMAINS = ['edges']
+VALID_GT_DOMAINS = ['rgb', 'normals', 'depth', 'edges']
 '''
 VALID_EXPERTS_NAME = [
     'sseg_fcn', 'sseg_deeplabv3', 'halftone_gray_basic', 'halftone_rgb_basic',
@@ -48,10 +46,11 @@ VALID_EXPERTS_NAME = [
     'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb'
 ]
 '''
-VALID_EXPERTS_NAME = [
-    'halftone_gray_basic', 'depth_sgdepth', 'edges_dexined', 'normals_xtc',
-    'saliency_seg_egnet', 'rgb'
-]
+VALID_EXPERTS_NAME = ['depth_xtc']
+
+# 'halftone_gray_basic', 'depth_sgdepth', 'edges_dexined', 'normals_xtc',
+#    'saliency_seg_egnet', 'rgb'
+#]
 RUN_TYPE = []
 EXPERTS_NAME = []
 ORIG_DOMAINS = []
@@ -246,10 +245,12 @@ def get_expert(exp_name):
     elif exp_name == 'depth_sgdepth':
         sys.argv = ['']
         return experts.depth_expert.DepthModel(full_expert=True)
+    elif exp_name == 'depth_xtc':
+        return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return experts.normals_expert.SurfaceNormalsModel(full_expert=True)
+        return experts.normals_expert.SurfaceNormalsXTC(full_expert=True)
     elif exp_name == 'saliency_seg_egnet':
         return experts.saliency_seg_expert.SaliencySegmModel(full_expert=True)
     elif exp_name == 'rgb':
