@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 
 # TODO change s.t. -1 means all samples
 first_k = -1  #3000
-first_k_test = 9464  #60#64
+first_k_test = -1  #9464  #60#64
 CACHE_NAME = "my_cache"
 W, H = 256, 256
 
@@ -55,10 +55,12 @@ class Domain2DDataset(Dataset):
 
         s = time.time()
         tag = pathlib.Path(dataset_path).parts[-1]
-
+        pos = dataset_path.find('/')
+        db_name = dataset_path[0:pos] if pos > 0 else dataset_path
         # load experts paths
-        cache_e1 = "%s/%s_%s_%d_patterns.npy" % (
-            CACHE_NAME, self.experts[0].identifier, tag, len(patterns))
+        cache_e1 = "%s/%s_%s_%d_patterns_%s.npy" % (
+            CACHE_NAME, self.experts[0].identifier, tag, len(patterns),
+            db_name)
         glob_paths_e1 = [
             "%s/%s/%s/%s.npy" %
             (experts_path, dataset_path, self.experts[0].identifier, pattern)
@@ -71,8 +73,9 @@ class Domain2DDataset(Dataset):
                                                        ) if first_k ==
                                                   -1 else first_k]
 
-        cache_e2 = "%s/%s_%s_%d_patterns.npy" % (
-            CACHE_NAME, self.experts[1].identifier, tag, len(patterns))
+        cache_e2 = "%s/%s_%s_%d_patterns_%s.npy" % (
+            CACHE_NAME, self.experts[1].identifier, tag, len(patterns),
+            db_name)
         glob_paths_e2 = [
             "%s/%s/%s/%s.npy" %
             (experts_path, dataset_path, self.experts[1].identifier, pattern)
@@ -115,31 +118,37 @@ class DomainTestDataset(Dataset):
             return
 
         pattern = "*"
-
+        pos = dataset_path.find('/')
+        db_name = dataset_path[0:pos] if pos > 0 else dataset_path
         # get data for src expert
-        cache_e1 = "%s/test_%s_pseudo_gt.npy" % (CACHE_NAME,
-                                                 self.experts[0].identifier)
+        cache_e1 = "%s/test_%s_pseudo_gt_%s.npy" % (
+            CACHE_NAME, self.experts[0].identifier, db_name)
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[0].identifier, pattern)
-        self.e1_output_path = load_glob_with_cache(cache_e1,
-                                                   glob_path_e1)[:first_k_test]
+        self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
+        self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
+                                                       ) if first_k_test ==
+                                                  -1 else first_k_test]
 
         # get data for dst expert
-        cache_e2 = "%s/test_%s_pseudo_gt.npy" % (CACHE_NAME,
-                                                 self.experts[1].identifier)
+        cache_e2 = "%s/test_%s_pseudo_gt_%s.npy" % (
+            CACHE_NAME, self.experts[1].identifier, db_name)
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[1].identifier, pattern)
-        self.e2_output_path = load_glob_with_cache(cache_e2,
-                                                   glob_path_e2)[:first_k_test]
-
+        self.e2_output_path = load_glob_with_cache(cache_e2, glob_path_e2)
+        self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
+                                                       ) if first_k_test ==
+                                                  -1 else first_k_test]
         # get data for domain of dst expert
-        cache_d2_gt = "%s/test_%s_gt.npy" % (CACHE_NAME,
-                                             self.experts[1].domain_name)
+        cache_d2_gt = "%s/test_%s_gt_%s.npy" % (
+            CACHE_NAME, self.experts[1].domain_name, db_name)
         glob_path_d2_gt = "%s/%s/%s/%s.npy" % (preproc_gt_path, dataset_path,
                                                self.experts[1].domain_name,
                                                pattern)
-        self.d2_gt_output_path = load_glob_with_cache(
-            cache_d2_gt, glob_path_d2_gt)[:first_k_test]
+        self.d2_gt_output_path = load_glob_with_cache(cache_d2_gt,
+                                                      glob_path_d2_gt)
+        self.d2_gt_output_path = self.d2_gt_output_path[:len(
+            self.d2_gt_output_path) if first_k_test == -1 else first_k_test]
 
         # check data
         assert (len(self.e1_output_path) == len(self.e2_output_path) == len(
