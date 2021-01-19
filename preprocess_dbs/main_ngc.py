@@ -36,6 +36,7 @@ main_gt_out_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/ngc
 main_exp_out_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/ngc/evaluation_set'
 
 # dataset domain names
+
 VALID_ORIG_GT_DOMAINS = ['rgb', 'normal', 'depth', 'wireframe']
 # our internal domain names
 VALID_GT_DOMAINS = ['rgb', 'normals', 'depth', 'edges']
@@ -189,7 +190,7 @@ def process_data(in_path, dom_name, out_path):
     for path in all_paths:
         img = get_image(path)
         img = img.astype('float32')
-        if dom_name == 'edges':
+        if dom_name == 'wireframe':
             img = img[:, :, 0, None]
 
         if dom_name == 'depth':
@@ -198,9 +199,6 @@ def process_data(in_path, dom_name, out_path):
             img = 1 - img
             img = img[:, :, None]
             img = np.moveaxis(img, 2, 0)
-        elif dom_name == 'edges':
-            img = img[:, :, 0, None]
-            img = np.moveaxis(img, 2, 0) / 255
         else:
             img = np.moveaxis(img, 2, 0) / 255
         out_img_path = os.path.join(out_path, '%08d.npy' % idx)

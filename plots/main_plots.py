@@ -33,6 +33,7 @@ def generate_common_csv(main_csvs_path, final_csv_path):
 
 def generate_plots(final_csv_path, fig_path):
     df = pd.read_csv(final_csv_path)
+    df.drop_duplicates()
     all_datasets = df['dataset'].unique()
     for dataset in all_datasets:
         df_dataset = df.loc[df['dataset'] == dataset]

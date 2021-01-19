@@ -8,9 +8,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-# TODO change s.t. -1 means all samples
 first_k = -1  #3000
-first_k_test = -1  #9464  #60#64
+first_k_test = -1  #9464
 CACHE_NAME = "my_cache"
 W, H = 256, 256
 
@@ -160,6 +159,7 @@ class DomainTestDataset(Dataset):
         oe1 = np.load(self.e1_output_path[index])
         oe2 = np.load(self.e2_output_path[index])
         d2_gt = np.load(self.d2_gt_output_path[index])
+
         return oe1, oe2, d2_gt
 
     def __len__(self):
