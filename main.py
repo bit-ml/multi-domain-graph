@@ -37,6 +37,49 @@ def evaluate_all_edges(ending_edges):
     return np.array(metrics)
 
 
+def eval_1hop(space_graph, silent, config, epoch_idx):
+    csv_results_path = config.get('Logs', 'csv_results')
+    if not os.path.exists(csv_results_path):
+        os.mkdir(csv_results_path)
+
+    if silent:
+        writer = DummySummaryWriter()
+    else:
+        tb_dir = config.get('Logs', 'tensorboard_dir')
+        tb_prefix = config.get('Logs', 'tensorboard_prefix')
+        datetime = config.get('Run id', 'datetime')
+
+        valid_set_str = config.get('Paths', 'valid_set_str')
+        test_set_str = config.get('Paths', 'test_set_str')
+        writer = SummaryWriter(
+            log_dir=f'%s/%s_1hop_edges_e%d_valid_%s_test_%s_%s' %
+            (tb_dir, tb_prefix, epoch_idx, valid_set_str, test_set_str,
+             datetime),
+            flush_secs=30)
+    save_idxes = None
+    save_idxes_test = None
+
+    for expert in space_graph.experts.methods:
+        end_id = expert.identifier
+
+        edges_1hop = []
+
+        # 1. Select edges that ends in end_id
+        for edge_xk in space_graph.edges:
+            if edge_xk.ill_posed:
+                continue
+            if edge_xk.expert2.identifier == end_id:
+                edges_1hop.append(edge_xk)
+
+        # 2. Eval all edges towards end_id
+        if len(edges_1hop) > 0:
+            save_idxes, save_idxes_test = Edge.eval_1hop(
+                edges_1hop, save_idxes, save_idxes_test, device, writer,
+                valid_set_str, test_set_str, csv_results_path, epoch_idx)
+
+    writer.close()
+
+
 ############################## drop connections ###############################
 def drop_connections(space_graph, drop_version):
     if drop_version > 0:
@@ -158,31 +201,6 @@ def drop_connections_simple(space_graph, drop_version):
 
 
 ############################## 1HOP ###############################
-def eval_1hop_ensembles(space_graph, drop_version, silent, config):
-    csv_path = os.path.join(config.get('Logs', 'csv_results_dir'))
-    if not os.path.exists(csv_path):
-        os.mkdir(csv_path)
-    csv_path = os.path.join(
-        csv_path, 'results_%s.csv' % (config.get('Run id', 'datetime')))
-    if drop_version == -1:
-        csv_file = open(csv_path, 'w')
-        csv_file.write('metric: L1\n')
-        csv_file.write(',')
-        for expert in space_graph.experts.methods:
-            csv_file.write('to_%s,,' % (expert.identifier))
-        csv_file.write('\n')
-        csv_file.write(',')
-        for expert in space_graph.experts.methods:
-            csv_file.write('valid,test,')
-        csv_file.write('\n')
-        csv_file.write('before drop,')
-        csv_file.close()
-    else:
-        csv_file = open(csv_path, 'a')
-        csv_file.write('after drop,')
-        csv_file.close()
-
-
 def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     if silent:
         writer = DummySummaryWriter()
@@ -335,7 +353,20 @@ def main(argv):
     silent = config.getboolean('Logs', 'silent')
     n_epochs = config.getint('Edge Models', 'n_epochs')
     start_epoch = config.getint('Edge Models', 'start_epoch')
-
+    '''
+    # Eval 1hop models
+    if config.getboolean('Testing', 'test_1hop_edges'):
+        min_epoch = config.getint('Testing', 'test_min_epoch')
+        max_epoch = config.getint('Testing', 'test_max_epoch')
+        epoch_step = config.getint('Testing', 'test_epoch_step')
+        for t_epoch in np.arange(min_epoch, max_epoch + 1, epoch_step):
+            graph = build_space_graph(config,
+                                      silent=silent,
+                                      valid_shuffle=False)
+            load_2Dtasks(graph, epoch=t_epoch)
+            eval_1hop(graph, silent=silent, config=config, epoch_idx=t_epoch)
+        return
+    '''
     if config.getboolean('Training', 'train_basic_edges'):
         # 1. Build graph + Train 1Hop
         graph = build_space_graph(config, silent=silent, valid_shuffle=True)
