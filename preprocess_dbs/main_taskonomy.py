@@ -31,9 +31,9 @@ WORKING_W = 256
 # main_gt_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_gt/taskonomy/sample-model'
 # main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/taskonomy/sample-model'
 
-main_db_path = r'/data/multi-domain-graph-3/datasets/Taskonomy/tiny-test'
-main_gt_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_gt/taskonomy/tiny-test'
-main_exp_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_exp/taskonomy/tiny-test'
+main_db_path = r'/data/multi-domain-graph-3/datasets/Taskonomy/tiny-train'
+main_gt_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_gt/taskonomy/tiny-train'
+main_exp_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_exp/taskonomy/tiny-train'
 
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']
@@ -119,6 +119,8 @@ def check_arguments(argv):
                     DOMAINS.append(dom_name)
         else:
             potential_domains = argv[3:]
+            print("potential_domains", potential_domains)
+            print("VALID_GT_DOMAINS", VALID_GT_DOMAINS)
             ORIG_DOMAINS = []
             DOMAINS = []
             for i in range(len(potential_domains)):
@@ -140,9 +142,12 @@ def check_arguments(argv):
                         DOMAINS.append(dom_name)
                 elif not CHECK_PREV_DATA and os.path.exists(dom_out_path):
                     shutil.rmtree(dom_out_path)
+                    ORIG_DOMAINS.append(orig_dom_name)
+                    DOMAINS.append(dom_name)
                 else:
                     ORIG_DOMAINS.append(orig_dom_name)
                     DOMAINS.append(dom_name)
+        print("ORIG_DOMAINS", ORIG_DOMAINS)
         return 1, ''
     else:
         if argv[3] == 'all':
@@ -350,6 +355,7 @@ def process_surface_normals(in_path, out_path):
 
 
 def get_gt_domains():
+    print(ORIG_DOMAINS)
     for doms in zip(ORIG_DOMAINS, DOMAINS):
         orig_dom_name, dom_name = doms
 
@@ -398,6 +404,22 @@ def get_exp_results():
         expert = get_expert(exp_name)
         exp_out_path = os.path.join(main_exp_out_path, exp_name)
         os.makedirs(exp_out_path)
+
+        # Find what was wrong with tar -xf
+        # filenames = os.listdir(rgbs_path)
+        # filenames.sort()
+        # filenames = filenames[:]
+        # for i, filename in enumerate(filenames):
+        #     img_path = os.path.join(rgbs_path, filename)
+        #     img = cv2.imread(img_path)
+        #     try:
+        #         # print(i, img_path)
+        #         print(img.shape, img.dtype)
+        #     except:
+        #         print("ERR, ", i, img_path)
+
+        #     img = cv2.resize(img, (WORKING_W, WORKING_H), cv2.INTER_CUBIC)
+        #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         for batch_idx, (frames, indexes) in enumerate(tqdm(dataloader)):
             results = expert.apply_expert_batch(frames)

@@ -8,9 +8,6 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-# TODO change s.t. -1 means all samples
-first_k = -1  #3000
-first_k_test = 9464  #60#64
 CACHE_NAME = "my_cache"
 W, H = 256, 256
 
@@ -44,24 +41,19 @@ def load_glob_with_cache(cache_file, glob_path):
 
 
 class Domain2DDataset(Dataset):
-    def __init__(self, experts_path, dataset_path, experts):
+    def __init__(self, dataset_path, experts, patterns, first_k):
         super(Domain2DDataset, self).__init__()
         self.experts = experts
-
-        patterns = ["/*/*00001"]
-        #patterns = [
-        #    "/*/00000001_*", "/*/00000004_*", "/*/00000007_*", "/*/00000010_*"
-        #]
 
         s = time.time()
         tag = pathlib.Path(dataset_path).parts[-1]
 
         # load experts paths
-        cache_e1 = "%s/%s_%s_%d_patterns.npy" % (
-            CACHE_NAME, self.experts[0].identifier, tag, len(patterns))
+        cache_e1 = "%s/%s_%s_%d.npy" % (
+            CACHE_NAME, tag, self.experts[0].identifier, len(patterns))
         glob_paths_e1 = [
-            "%s/%s/%s/%s.npy" %
-            (experts_path, dataset_path, self.experts[0].identifier, pattern)
+            "%s/%s/%s.npy" %
+            (dataset_path, self.experts[0].identifier, pattern)
             for pattern in patterns
         ]
 
@@ -71,11 +63,11 @@ class Domain2DDataset(Dataset):
                                                        ) if first_k ==
                                                   -1 else first_k]
 
-        cache_e2 = "%s/%s_%s_%d_patterns.npy" % (
-            CACHE_NAME, self.experts[1].identifier, tag, len(patterns))
+        cache_e2 = "%s/%s_%s_%d.npy" % (
+            CACHE_NAME, tag, self.experts[1].identifier, len(patterns))
         glob_paths_e2 = [
-            "%s/%s/%s/%s.npy" %
-            (experts_path, dataset_path, self.experts[1].identifier, pattern)
+            "%s/%s/%s.npy" %
+            (dataset_path, self.experts[1].identifier, pattern)
             for pattern in patterns
         ]
         self.e2_output_path = load_glob_with_cache_multiple_patterns(
@@ -99,7 +91,8 @@ class Domain2DDataset(Dataset):
 
 
 class DomainTestDataset(Dataset):
-    def __init__(self, preproc_gt_path, experts_path, dataset_path, experts):
+    def __init__(self, preproc_gt_path, experts_path, dataset_path, experts,
+                 first_k):
         super(DomainTestDataset, self).__init__()
         self.experts = experts
 
@@ -122,7 +115,7 @@ class DomainTestDataset(Dataset):
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[0].identifier, pattern)
         self.e1_output_path = load_glob_with_cache(cache_e1,
-                                                   glob_path_e1)[:first_k_test]
+                                                   glob_path_e1)[:first_k]
 
         # get data for dst expert
         cache_e2 = "%s/test_%s_pseudo_gt.npy" % (CACHE_NAME,
@@ -130,7 +123,7 @@ class DomainTestDataset(Dataset):
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[1].identifier, pattern)
         self.e2_output_path = load_glob_with_cache(cache_e2,
-                                                   glob_path_e2)[:first_k_test]
+                                                   glob_path_e2)[:first_k]
 
         # get data for domain of dst expert
         cache_d2_gt = "%s/test_%s_gt.npy" % (CACHE_NAME,
@@ -139,7 +132,7 @@ class DomainTestDataset(Dataset):
                                                self.experts[1].domain_name,
                                                pattern)
         self.d2_gt_output_path = load_glob_with_cache(
-            cache_d2_gt, glob_path_d2_gt)[:first_k_test]
+            cache_d2_gt, glob_path_d2_gt)[:first_k]
 
         # check data
         assert (len(self.e1_output_path) == len(self.e2_output_path) == len(

@@ -3,6 +3,7 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
+    "justMyCode": false,
     "configurations": [
         {
             "name": "Generate Expert Output GOT-10k",
@@ -23,15 +24,15 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0",
+                "CUDA_VISIBLE_DEVICES": "1",
             },
             "args": [
                 // type    - 0 create preprocessed gt samples
                 //         - 1 create preprocessed experts samples
                 // check_prev_data   - [0/1] - 1 check prev data & ask if to delete; 0 otherwise
-                "1",
-                "1",
-                "depth_xtc"
+                "0",
+                "0",
+                "depth"
             ]
         },
         {

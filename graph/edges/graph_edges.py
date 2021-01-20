@@ -10,13 +10,16 @@ import torch
 import torchvision
 from graph.edges.dataset2d import Domain2DDataset, DomainTestDataset
 from graph.edges.unet.unet_model import UNetGood
-from torch import nn
-from torch.optim import AdamW
+from torch import nn, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 from utils.utils import img_for_plot
+
+first_k_train = -1  #-1 #3000
+first_k_val = 3000  #-1 #180 #720
+first_k_test = 10  #60#64
 
 
 class Edge:
@@ -28,20 +31,27 @@ class Edge:
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=100 * torch.cuda.device_count(),
-                          bs_test=150 * torch.cuda.device_count(),
+                          bs_test=230 * torch.cuda.device_count(),
                           n_workers=8,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle)
 
-        self.lr = 5e-4
-        self.optimizer = AdamW(self.net.parameters(),
-                               lr=self.lr,
-                               weight_decay=0.001)
+        self.lr = 5e-2
+        self.optimizer = optim.SGD(self.net.parameters(),
+                                   lr=self.lr,
+                                   weight_decay=1e-8,
+                                   nesterov=True,
+                                   momentum=0.9)
+        # self.lr = 1e-1
+        # self.optimizer = optim.Adam(self.net.parameters(),
+        #                             lr=self.lr,
+        #                             weight_decay=1e-8)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
-                                           patience=10,
-                                           factor=0.5,
-                                           threshold=0.005,
+                                           patience=5,
+                                           factor=0.1,
+                                           threshold=0.03,
                                            min_lr=5e-5)
+        print("optimizer", self.optimizer)
         self.l2 = nn.MSELoss()
         self.l1 = nn.L1Loss()
 
@@ -86,11 +96,16 @@ class Edge:
                             n_classes=self.expert2.n_maps,
                             bilinear=True).to(device)
         self.net = nn.DataParallel(self.net)
+        total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        print("Number of parameters %.2fM (Trainable %.2fM)" %
+              (total_params, trainable_params))
 
     def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle):
-        EXPERTS_OUTPUT_PATH = self.config.get('Paths', 'EXPERTS_OUTPUT_PATH')
         TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
         VALID_PATH = self.config.get('Paths', 'VALID_PATH')
+        TRAIN_PATTERNS = self.config.get('Paths', 'TRAIN_PATTERNS').split(",")
+        VALID_PATTERNS = self.config.get('Paths', 'VALID_PATTERNS').split(",")
 
         PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
         EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
@@ -98,8 +113,10 @@ class Edge:
         TEST_PATH = self.config.get('Paths', 'TEST_PATH')
 
         experts = [self.expert1, self.expert2]
-        train_ds = Domain2DDataset(EXPERTS_OUTPUT_PATH, TRAIN_PATH, experts)
-        valid_ds = Domain2DDataset(EXPERTS_OUTPUT_PATH, VALID_PATH, experts)
+        train_ds = Domain2DDataset(TRAIN_PATH, experts, TRAIN_PATTERNS,
+                                   first_k_train)
+        valid_ds = Domain2DDataset(VALID_PATH, experts, VALID_PATTERNS,
+                                   first_k_val)
         print("Train ds", len(train_ds))
         print("Valid ds", len(valid_ds))
 
@@ -116,7 +133,7 @@ class Edge:
 
         test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
                                     EXPERTS_OUTPUT_PATH_TEST, TEST_PATH,
-                                    experts)
+                                    experts, first_k_test)
         print("Test ds", len(test_ds))
 
         if test_ds.available:
@@ -156,15 +173,18 @@ class Edge:
 
             domain2_pred = self.net(domain1)
             l2_loss = self.l2(domain2_pred, domain2_gt)
+            l1_loss = self.l1(domain2_pred, domain2_gt)
+
             train_l2_loss += l2_loss.item()
 
-            with torch.no_grad():
-                train_l1_loss += self.l1(domain2_pred, domain2_gt).item()
+            # with torch.no_grad():
+            train_l1_loss += l1_loss.item()
             # print("-----train_loss", train_loss, domain2_pred.shape)
 
             # Optimizer
             self.optimizer.zero_grad()
-            l2_loss.backward()
+            all_losses = l1_loss + l2_loss
+            all_losses.backward()
             self.optimizer.step()
 
         writer.add_images('Train_%s/Input' % (wtag), img_for_plot(domain1[:3]),
@@ -279,7 +299,12 @@ class Edge:
                                   self.global_step)
 
             # Scheduler
+            print(
+                "[%d epoch] VAL [l2_loss %.2f   l1_loss %.2f]       TRAIN [l2_loss %.2f   l1_loss %.2f]"
+                % (epoch, val_l2_loss, val_l1_loss, train_l2_loss,
+                   train_l1_loss))
             self.scheduler.step(val_l2_loss)
+            print("> LR", self.optimizer.param_groups[0]['lr'])
             writer.add_scalar('Train_%s/LR' % wtag,
                               self.optimizer.param_groups[0]['lr'],
                               self.global_step)
@@ -456,21 +481,6 @@ class Edge:
                         writer.add_images(
                             '%s/%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes]), 0)
-                        # save SSIM maps to tensorboard
-                        '''
-                        pred = one_hop_pred[save_idxes]
-                        exp_res = domain2_exp_gt[save_idxes]
-                        ssim_maps = utils.get_btw_tasks_ssim_score(
-                            exp_res, pred)
-                        ssim_maps = ssim_maps[:, 0, None, :, :]
-                        pred = img_for_plot(pred)
-                        ssim_maps = ssim_maps.repeat(1, pred.shape[1], 1, 1)
-                        to_disp = torch.cat((pred, ssim_maps), 2)
-                        # Show last but one batch edges
-                        writer.add_images(
-                            '%s/%s' % (wtag, edge.expert1.identifier), to_disp,
-                            0)
-                        '''
 
                     l1_per_edge[idx_edge] += 100 * edge.l1(
                         one_hop_pred, domain2_exp_gt).item()

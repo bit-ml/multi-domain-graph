@@ -16,12 +16,12 @@ class Experts:
         # self.methods = [DepthModel(), EdgesModel(), HalftoneModel(), Tracking1Model(), SurfaceNormalsXTC()]
         # self.methods = [SurfaceNormalsXTC(), HalftoneModel()]
         self.methods = [
+            RGBModel(full_experts),
+            DepthModelXTC(full_experts),
             SurfaceNormalsXTC(full_experts),
             EdgesModel(full_experts),
-            DepthModelXTC(full_experts),
-            RGBModel(full_experts),
-            HalftoneModel(full_experts, 0),
             SaliencySegmModel(full_experts),
+            HalftoneModel(full_experts, 0),
 
             # Tracking1Model(full_experts),
             # RaftModel(full_experts, 1),
