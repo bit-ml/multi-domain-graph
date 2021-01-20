@@ -353,7 +353,7 @@ def main(argv):
     silent = config.getboolean('Logs', 'silent')
     n_epochs = config.getint('Edge Models', 'n_epochs')
     start_epoch = config.getint('Edge Models', 'start_epoch')
-    '''
+
     # Eval 1hop models
     if config.getboolean('Testing', 'test_1hop_edges'):
         min_epoch = config.getint('Testing', 'test_min_epoch')
@@ -366,7 +366,7 @@ def main(argv):
             load_2Dtasks(graph, epoch=t_epoch)
             eval_1hop(graph, silent=silent, config=config, epoch_idx=t_epoch)
         return
-    '''
+
     if config.getboolean('Training', 'train_basic_edges'):
         # 1. Build graph + Train 1Hop
         graph = build_space_graph(config, silent=silent, valid_shuffle=True)
