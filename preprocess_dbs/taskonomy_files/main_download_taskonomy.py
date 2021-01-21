@@ -9,10 +9,10 @@ pattern_val = ['0', '1', '0']
 pattern_test = ['0', '0', '1']
 
 # 1. choose split: train or val or test
-chosen_split = "train"
+chosen_split = "test"
 
 # 2. change pattern: pattern_train or pattern_val or pattern_test
-pattern = pattern_train
+pattern = pattern_test
 
 # 3. choose tiny, medium, full, fullplus
 main_splits_file = r'/data/multi-domain-graph-3/datasets/Taskonomy_info/splits_taskonomy/train_val_test_tiny.csv'

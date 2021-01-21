@@ -24,15 +24,15 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "env": {
-                "CUDA_VISIBLE_DEVICES": "1",
+                "CUDA_VISIBLE_DEVICES": "0",
             },
             "args": [
                 // type    - 0 create preprocessed gt samples
                 //         - 1 create preprocessed experts samples
-                // check_prev_data   - [0/1] - 1 check prev data & ask if to delete; 0 otherwise
-                "0",
-                "0",
-                "depth"
+                // gt: ['rgb', 'depth', 'edges', 'normals']
+                // exp: ['halftone_gray_basic', 'depth_xtc', 'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb']
+                "1",
+                "depth_xtc"
             ]
         },
         {

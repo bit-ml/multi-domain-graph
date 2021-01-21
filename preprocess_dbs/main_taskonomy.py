@@ -1,6 +1,6 @@
 import os
-import shutil
 import sys
+import traceback
 
 import cv2
 import numpy as np
@@ -31,9 +31,9 @@ WORKING_W = 256
 # main_gt_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_gt/taskonomy/sample-model'
 # main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/taskonomy/sample-model'
 
-main_db_path = r'/data/multi-domain-graph-3/datasets/Taskonomy/tiny-train'
-main_gt_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_gt/taskonomy/tiny-train'
-main_exp_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_exp/taskonomy/tiny-train'
+main_db_path = r'/data/multi-domain-graph-4/datasets/Taskonomy/tiny-train'
+main_gt_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_gt/taskonomy/tiny-train-ok'
+main_exp_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_exp/taskonomy/tiny-train-ok'
 
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']
@@ -71,54 +71,39 @@ RUN_TYPE = []
 EXPERTS_NAME = []
 ORIG_DOMAINS = []
 DOMAINS = []
-CHECK_PREV_DATA = 0
 
-usage_str = 'usage: python main_taskonomy.py type check_prev_data exp1 exp2 ...'
+usage_str = 'usage: python main_taskonomy.py type exp1 exp2 ...'
 #    type                   - [0/1] - 0 create preprocessed gt samples
 #                                   - 1 create preprocessed experts samples
-#   check_prev_data         - [0/1] - 1 check prev data & ask if to delete; 0 otherwise
 #    expi                   - name of the i'th expert / domain
 #                           - should be one of the VALID_EXPERTS_NAME / VALID_GT_DOMAINS
 #                           - 'all' to run all available experts / domains
 
 
-def check_arguments(argv):
+def check_arguments_without_delete(argv):
     global RUN_TYPE
     global EXPERTS_NAME
     global ORIG_DOMAINS
     global DOMAINS
-    global CHECK_PREV_DATA
 
-    if len(argv) < 4:
+    if len(argv) < 3:
         return 0, 'incorrect usage'
 
     RUN_TYPE = np.int32(argv[1])
     if not (RUN_TYPE == 0 or RUN_TYPE == 1):
         return 0, 'incorrect run type: %d' % RUN_TYPE
-    CHECK_PREV_DATA = np.int32(argv[2])
 
     if RUN_TYPE == 0:
-        if argv[3] == 'all':
+        if argv[2] == 'all':
             ORIG_DOMAINS = []
             DOMAINS = []
             for doms in zip(VALID_ORIG_GT_DOMAINS, VALID_GT_DOMAINS):
                 orig_dom_name, dom_name = doms
                 dom_out_path = os.path.join(main_gt_out_path, dom_name)
-                if CHECK_PREV_DATA and os.path.exists(dom_out_path):
-                    value = input(
-                        'Domain %s already exists. Proceed with deleating previous info (%s)?[y/n]'
-                        % (dom_name, dom_out_path))
-                    if value == 'y':
-                        shutil.rmtree(dom_out_path)
-                        ORIG_DOMAINS.append(orig_dom_name)
-                        DOMAINS.append(dom_name)
-                elif not CHECK_PREV_DATA and os.path.exists(dom_out_path):
-                    shutil.rmtree(dom_out_path)
-                else:
-                    ORIG_DOMAINS.append(orig_dom_name)
-                    DOMAINS.append(dom_name)
+                ORIG_DOMAINS.append(orig_dom_name)
+                DOMAINS.append(dom_name)
         else:
-            potential_domains = argv[3:]
+            potential_domains = argv[2:]
             print("potential_domains", potential_domains)
             print("VALID_GT_DOMAINS", VALID_GT_DOMAINS)
             ORIG_DOMAINS = []
@@ -127,46 +112,24 @@ def check_arguments(argv):
                 dom_name = potential_domains[i]
                 if not dom_name in VALID_GT_DOMAINS:
                     status = 0
-                    status_code = 'Domain %s is not valid' % orig_dom_name
+                    status_code = 'Domain %s is not valid' % dom_name
                     return status, status_code
                 orig_dom_name = VALID_ORIG_GT_DOMAINS[VALID_GT_DOMAINS.index(
                     dom_name)]
                 dom_out_path = os.path.join(main_gt_out_path, dom_name)
-                if CHECK_PREV_DATA and os.path.exists(dom_out_path):
-                    value = input(
-                        'Domain %s already exists. Proceed with deleating previous info (%s)?[y/n]'
-                        % (dom_name, dom_out_path))
-                    if value == 'y':
-                        shutil.rmtree(dom_out_path)
-                        ORIG_DOMAINS.append(orig_dom_name)
-                        DOMAINS.append(dom_name)
-                elif not CHECK_PREV_DATA and os.path.exists(dom_out_path):
-                    shutil.rmtree(dom_out_path)
-                    ORIG_DOMAINS.append(orig_dom_name)
-                    DOMAINS.append(dom_name)
-                else:
-                    ORIG_DOMAINS.append(orig_dom_name)
-                    DOMAINS.append(dom_name)
+
+                ORIG_DOMAINS.append(orig_dom_name)
+                DOMAINS.append(dom_name)
         print("ORIG_DOMAINS", ORIG_DOMAINS)
         return 1, ''
     else:
-        if argv[3] == 'all':
+        if argv[2] == 'all':
             EXPERTS_NAME = []
             for exp_name in VALID_EXPERTS_NAME:
                 exp_out_path = os.path.join(main_exp_out_path, exp_name)
-                if CHECK_PREV_DATA and os.path.exists(exp_out_path):
-                    value = input(
-                        'Domain %s already exists. Proceed with deleating previous info (%s)?[y/n]'
-                        % (exp_name, exp_out_path))
-                    if value == 'y':
-                        shutil.rmtree(exp_out_path)
-                        EXPERTS_NAME.append(exp_name)
-                elif not CHECK_PREV_DATA and os.path.exists(exp_out_path):
-                    shutil.rmtree(exp_out_path)
-                else:
-                    EXPERTS_NAME.append(exp_name)
+                EXPERTS_NAME.append(exp_name)
         else:
-            potential_experts = argv[3:]
+            potential_experts = argv[2:]
             EXPERTS_NAME = []
             for i in range(len(potential_experts)):
                 exp_name = potential_experts[i]
@@ -175,17 +138,7 @@ def check_arguments(argv):
                     status_code = 'Expert %s is not valid' % exp_name
                     return status, status_code
                 exp_out_path = os.path.join(main_exp_out_path, exp_name)
-                if CHECK_PREV_DATA and os.path.exists(exp_out_path):
-                    value = input(
-                        'Domain %s already exists. Proceed with deleating previous info (%s)?[y/n]'
-                        % (exp_name, exp_out_path))
-                    if value == 'y':
-                        shutil.rmtree(exp_out_path)
-                        EXPERTS_NAME.append(exp_name)
-                elif not CHECK_PREV_DATA and os.path.exists(exp_out_path):
-                    shutil.rmtree(exp_out_path)
-                else:
-                    EXPERTS_NAME.append(exp_name)
+                EXPERTS_NAME.append(exp_name)
         return 1, ''
 
 
@@ -243,20 +196,32 @@ def get_expert(exp_name):
         return experts.rgb_expert.RGBModel(full_expert=True)
 
 
-def get_data_range(in_path):
+def get_data_range(in_path, right_dtype):
     filenames = os.listdir(in_path)
     filenames.sort()
     min_values = []
     max_values = []
-    for filename in filenames:
+    # filenames = filenames[35964:]
+    for idx, filename in enumerate(tqdm(filenames)):
         data_path = os.path.join(in_path, filename)
-        data = Image.open(data_path)
-        data = np.array(data)
-        min_values.append(np.min(data))
-        max_values.append(np.max(data))
-    min_value = np.min(np.array(min_values))
+        try:
+            data = Image.open(data_path)
+            data = np.array(data)
+            if not data.dtype == right_dtype:
+                print("ALTA ERROARE::: path", data_path, "index", idx,
+                      "process_rgb", data.dtype)
+                data = np.zeros((5, 5), dtype=right_dtype)
+        except:
+            # traceback.print_exc()
+            print("ERROARE::: path", data_path, "index", idx, "process_rgb")
+            data = np.zeros((5, 5), dtype=right_dtype)
+
+        min_values.append(data.min())
+        max_values.append(data.max())
+    min_value = min(min_values)
+    max_value = max(max_values)
+
     max_values = np.array(max_values)
-    max_value = np.max(max_values)
     max_values[max_values == 65535] = 0
     second_max_value = np.max(max_values)
     print('range: -- min: %20.10f max: %20.10f second_max: %20.10f' %
@@ -265,97 +230,126 @@ def get_data_range(in_path):
 
 
 def process_rgb(in_path, out_path):
-    os.makedirs(out_path)
+    os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
-    idx = 0
-    for filename in filenames:
-        img = get_image(os.path.join(in_path, filename))
-        img = img.astype('float32')
-        img = np.moveaxis(img, 2, 0) / 255
+    for idx, filename in enumerate(tqdm(filenames)):
+        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
+        if os.path.exists(out_img_path):
+            continue
+        try:
+            img_path = os.path.join(in_path, filename)
+            img = get_image(img_path)
+        except:
+            traceback.print_exc()
+            print("ERROARE::: path", img_path, "index", idx, "process_rgb")
+            img = np.zeros((WORKING_W, WORKING_H, 3), dtype=np.uint8)
+
+        img = img.astype('float32').transpose(2, 0, 1) / 255.
         out_img_path = os.path.join(out_path, '%08d.npy' % idx)
         np.save(out_img_path, img)
-        idx = idx + 1
 
 
 def process_depth(in_path, out_path):
-    os.makedirs(out_path)
+    os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
-    min_value, max_value, second_max_value = get_data_range(in_path)
+    min_value, max_value, second_max_value = get_data_range(in_path, np.int32)
     #min_value = 102
     #max_value = 65535
     #second_max_value = 7683
     idx = 0
-    for filename in filenames:
+    for idx, filename in enumerate(filenames):
+        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
+        if os.path.exists(out_img_path):
+            continue
+
         data_path = os.path.join(in_path, filename)
-        data = Image.open(data_path)
-        data = np.array(data)
-        data = data.astype('float32')
-        data = data[:, :, None]
-        data = torch.tensor(data, dtype=torch.float32)
-        data = data.permute(2, 0, 1)
+        try:
+            data = Image.open(data_path)
+            data = np.array(data)
+        except:
+            traceback.print_exc()
+            print("ERROARE::: path", data_path, "index", idx, "process_depth")
+            data = np.zeros((WORKING_W, WORKING_H), dtype=np.float32)
+
+        data = torch.from_numpy(data[None]).float()
         data = torch.nn.functional.interpolate(data[None],
                                                (WORKING_H, WORKING_W))[0]
         data[data == max_value] = (min_value + second_max_value) / 2
         data = (data - min_value) / second_max_value
         data = 1 - data
         data = data.numpy()
-        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
         np.save(out_img_path, data)
-        idx = idx + 1
 
 
 def process_edges(in_path, out_path):
-    os.makedirs(out_path)
+    os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
     idx = 0
-    _, max_value, _ = get_data_range(in_path)
+    _, max_value, _ = get_data_range(in_path, np.int32)
     # max_value = 11355
-    for filename in filenames:
+    for idx, filename in enumerate(tqdm(filenames)):
+        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
+        if os.path.exists(out_img_path):
+            continue
+
         data_path = os.path.join(in_path, filename)
-        data = Image.open(data_path)
-        data = np.array(data)
-        data = data.astype('float32')
-        data = data[:, :, None]
-        data = torch.tensor(data, dtype=torch.float32)
-        data = data.permute(2, 0, 1)
+        try:
+            data = Image.open(data_path)
+            data = np.array(data)
+            if not data.dtype is np.dtype('int32'):
+                print("ALTA ERROARE::: path", data_path, "index", idx,
+                      "process_rgb")
+                data = np.zeros((WORKING_W, WORKING_H), dtype=np.float32)
+        except:
+            # traceback.print_exc()
+            print("ERROARE::: path", data_path, "index", idx, "process_edges")
+            data = np.zeros((WORKING_W, WORKING_H), dtype=np.float32)
+
+        data = torch.from_numpy(data[None]).float()
         data = torch.nn.functional.interpolate(data[None],
                                                (WORKING_H, WORKING_W))[0]
         data = data / max_value
         data = data.numpy()
-        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
+
         np.save(out_img_path, data)
-        idx = idx + 1
 
 
 def process_surface_normals(in_path, out_path):
-    os.makedirs(out_path)
+    os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
-    _, max_value, _ = get_data_range(in_path)
+    _, max_value, _ = get_data_range(in_path, np.uint8)
     # min_value = 0
     # max_value = 255
     idx = 0
-    for filename in filenames:
+    for idx, filename in enumerate(filenames):
+        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
+        if os.path.exists(out_img_path):
+            continue
         data_path = os.path.join(in_path, filename)
-        data = Image.open(data_path)
-        data = np.array(data)
-        data = data.astype('float32')
-        data = torch.tensor(data, dtype=torch.float32)
+        try:
+            data = Image.open(data_path)
+            data = np.array(data)
+        except:
+            traceback.print_exc()
+            print("ERROARE::: path", data_path, "index", idx,
+                  "process_surface_normals")
+            data = np.zeros((WORKING_W, WORKING_H, 3), dtype=np.float32)
+
+        data = torch.from_numpy(data).float()
         data = data.permute(2, 0, 1)
         data = torch.nn.functional.interpolate(data[None],
                                                (WORKING_H, WORKING_W))[0]
         data = data / max_value
         data = data.numpy()
-        out_img_path = os.path.join(out_path, '%08d.npy' % idx)
         np.save(out_img_path, data)
-        idx = idx + 1
 
 
 def get_gt_domains():
-    print(ORIG_DOMAINS)
+    print("get_gt_domains", ORIG_DOMAINS)
     for doms in zip(ORIG_DOMAINS, DOMAINS):
         orig_dom_name, dom_name = doms
 
@@ -375,6 +369,7 @@ def get_gt_domains():
 class Dataset_ImgLevel(Dataset):
     def __init__(self, rgbs_path):
         super(Dataset_ImgLevel, self).__init__()
+
         filenames = os.listdir(rgbs_path)
         filenames.sort()
         self.rgbs_path = []
@@ -382,7 +377,13 @@ class Dataset_ImgLevel(Dataset):
             self.rgbs_path.append(os.path.join(rgbs_path, filename))
 
     def __getitem__(self, index):
-        rgb = get_image(self.rgbs_path[index])
+        try:
+            rgb = get_image(self.rgbs_path[index])
+        except:
+            traceback.print_exc()
+            print("ERROARE::: path", self.rgbs_path[index], "index", index)
+            rgb = np.zeros((WORKING_W, WORKING_H, 3), dtype=np.uint8)
+
         return rgb, index
 
     def __len__(self):
@@ -403,35 +404,31 @@ def get_exp_results():
         print('EXPERT: %20s' % exp_name)
         expert = get_expert(exp_name)
         exp_out_path = os.path.join(main_exp_out_path, exp_name)
-        os.makedirs(exp_out_path)
-
-        # Find what was wrong with tar -xf
-        # filenames = os.listdir(rgbs_path)
-        # filenames.sort()
-        # filenames = filenames[:]
-        # for i, filename in enumerate(filenames):
-        #     img_path = os.path.join(rgbs_path, filename)
-        #     img = cv2.imread(img_path)
-        #     try:
-        #         # print(i, img_path)
-        #         print(img.shape, img.dtype)
-        #     except:
-        #         print("ERR, ", i, img_path)
-
-        #     img = cv2.resize(img, (WORKING_W, WORKING_H), cv2.INTER_CUBIC)
-        #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        os.makedirs(exp_out_path, exist_ok=True)
 
         for batch_idx, (frames, indexes) in enumerate(tqdm(dataloader)):
+            already_exists = 0
+            for check_idx in indexes:
+                out_path = os.path.join(exp_out_path, '%08d.npy' % check_idx)
+                if os.path.exists(out_path):
+                    already_exists += 1
+            if already_exists == len(indexes):
+                continue
+
             results = expert.apply_expert_batch(frames)
 
             for sample in zip(results, indexes):
                 expert_res, sample_idx = sample
+
                 out_path = os.path.join(exp_out_path, '%08d.npy' % sample_idx)
+                if os.path.exists(out_path):
+                    continue
+
                 np.save(out_path, expert_res)
 
 
 if __name__ == "__main__":
-    status, status_code = check_arguments(sys.argv)
+    status, status_code = check_arguments_without_delete(sys.argv)
     if status == 0:
         sys.exit(status_code + '\n' + usage_str)
 
