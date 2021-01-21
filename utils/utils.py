@@ -1,7 +1,7 @@
 import os
 import sys
 from math import exp
-
+import time
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -200,6 +200,62 @@ def get_btw_tasks_ssim_score(expert_res, pred):
     return ssim_map
 
 
+def compute_median(data, mask):
+    # mask - indicates values to be ignored
+    n_exps, bs, n_chs, h, w = data.shape
+
+    data = data.view(n_exps, bs * n_chs * h * w)
+    data = data.permute(1, 0)
+    mask = mask.view(n_exps, bs * n_chs * h * w)
+    mask = mask.permute(1, 0)
+
+    lower_values = torch.sum(mask, 1)
+    to_keep_values = n_exps - lower_values
+    to_keep_values = to_keep_values % 2
+    to_keep_values = 1 - to_keep_values
+
+    data[mask] = float('NaN')
+    data = torch.sort(data, 1)[0]
+
+    s_idx = (n_exps - lower_values - 1) // 2 + lower_values
+    s_idx_ = s_idx + to_keep_values
+    s_idx[s_idx >= n_exps] = 0
+    s_idx_[s_idx_ >= n_exps] = 0
+
+    s_idx = s_idx + torch.arange(0, bs * n_chs * h * w).cuda() * n_exps
+    s_idx_ = s_idx_ + torch.arange(0, bs * n_chs * h * w).cuda() * n_exps
+    data = data.contiguous().view(n_exps * bs * n_chs * h * w)
+    ensemble_res = (data[s_idx].view(bs, n_chs, h, w) +
+                    data[s_idx_].view(bs, n_chs, h, w)) * 0.5
+    ensemble_res[ensemble_res != ensemble_res] = 0
+    return ensemble_res
+
+
+def compute_median_histo(data, mask):
+    # mask - indicates values to be ignored
+    n_elems, n_exps = data.shape
+
+    lower_values = torch.sum(mask, 1)
+    to_keep_values = n_exps - lower_values
+    to_keep_values = to_keep_values % 2
+    to_keep_values = 1 - to_keep_values
+
+    data[mask] = float('NaN')
+    data = torch.sort(data, 1)[0]
+
+    s_idx = (n_exps - lower_values - 1) // 2 + lower_values
+    s_idx_ = s_idx + to_keep_values
+    s_idx[s_idx >= n_exps] = 0
+    s_idx_[s_idx_ >= n_exps] = 0
+
+    s_idx = s_idx + torch.arange(0, n_elems).cuda() * n_exps
+    s_idx_ = s_idx_ + torch.arange(0, n_elems).cuda() * n_exps
+    data = data.contiguous().view(n_exps * n_elems)
+    ensemble_res = (data[s_idx] + data[s_idx_]) * 0.5
+    ensemble_res[ensemble_res != ensemble_res] = 0
+    return ensemble_res
+
+
 def combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean"):
     n_tasks = multi_chan_maps.shape[0]
     n_channels = multi_chan_maps.shape[2]
@@ -217,9 +273,12 @@ def combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean"):
     for i in range(n_tasks):
 
         for j in range(n_tasks):
-            ssim_map = get_ssim_score_no_red(multi_chan_maps[i],
-                                             multi_chan_maps[j], g_filter,
-                                             n_channels, win_size)
+            ssim_map = get_ssim_score(multi_chan_maps[i],
+                                      multi_chan_maps[j],
+                                      g_filter,
+                                      n_channels,
+                                      win_size,
+                                      reduction=False)
             correlations[j] = ssim_map
         all_correlations[i] = torch.mean(correlations, 0)
     all_correlations = torch.clamp(all_correlations, min=0)
@@ -243,6 +302,8 @@ def combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean"):
         ensemble_res = np.nanmedian(multi_chan_maps.cpu().numpy(), 0)
         ensemble_res = torch.tensor(ensemble_res).cuda()
         ensemble_res[ensemble_res != ensemble_res] = 0
+    if combine == "median_faster":
+        ensemble_res = compute_median(multi_chan_maps, all_correlations < 0.5)
 
     return ensemble_res
 
@@ -286,8 +347,11 @@ def combine_maps_ssim_twd_expert(multi_chan_maps, combine="mean"):
         ensemble_res = np.nanmedian(multi_chan_maps.cpu().numpy(), 0)  #[0]
         ensemble_res = torch.tensor(ensemble_res).cuda()
         ensemble_res[ensemble_res != ensemble_res] = 0
+    if combine == "median_faster":
+        ensemble_res = compute_median(multi_chan_maps, ssim_maps < 0.5)
 
     return ensemble_res
+
 
 def hist_vextorized_np(data, bins):
     # Setup bins and determine the bin location for each element for the bins
@@ -379,6 +443,50 @@ def pixels_histogram(multi_chan_maps, end_id):
     plt.clf()
 
 
+def mean_mode_histo_median(multi_chan_maps):
+    '''
+    multi_chan_maps: N_models x BS x Map_Channels x H x W
+    output         : BS x Map_Channels x H x W
+    '''
+    n_models, bs, chan, h, w = multi_chan_maps.shape
+    num_values_per_map = chan * h * w
+    maps_linearized = multi_chan_maps.view(n_models, bs, num_values_per_map)
+    result = torch.zeros_like(multi_chan_maps[0])
+
+    #for entry_idx in tqdm(range(bs)):
+    for entry_idx in range(bs):
+        crt_entry_maps = maps_linearized[:, entry_idx].permute(1, 0)
+
+        minp, maxp = crt_entry_maps.min().item(), crt_entry_maps.max().item()
+        n_bins = int((maxp - minp) / 0.1)
+        n_bins = max(
+            n_bins, 1
+        )  # added to avoid 0 bins (e.g. when diff between maxp & minp is too small)
+        bins = np.linspace(minp, maxp, n_bins)
+        bins = np.append(bins,
+                         maxp + 1)  # added to avoid elements in the last bin
+        bins = np.linspace(minp, maxp, n_bins)
+        bins = np.append(bins,
+                         maxp + 1)  # added to avoid elements in the last bin
+        # print("MIN-MAX %.2f - %.2f" % (minp, maxp))
+
+        pixels_histo = hist_vextorized_np(crt_entry_maps.data.cpu().numpy(),
+                                          bins)
+        # print(bins, minp, maxp)
+        idx_max = np.argmax(pixels_histo, 1)
+
+        th1 = torch.from_numpy(bins[idx_max]).cuda()
+        th2 = torch.from_numpy(bins[idx_max + 1]).cuda()
+
+        mask = (crt_entry_maps < th1[:, None]) & (crt_entry_maps > th2[:,
+                                                                       None])
+        median_in_mode = compute_median_histo(crt_entry_maps, mask)
+
+        result[entry_idx] = torch.tensor(median_in_mode).view(chan, h, w)
+
+    return result
+
+
 def mean_mode_histo(multi_chan_maps):
     '''
     multi_chan_maps: N_models x BS x Map_Channels x H x W
@@ -394,18 +502,26 @@ def mean_mode_histo(multi_chan_maps):
     #     print(p.map(f, [1, 2, 3]))
 
     # TODO: se poate face oare paralelizat si pe batch
-    for entry_idx in tqdm(range(bs)):
+
+    #for entry_idx in tqdm(range(bs)):
+    for entry_idx in range(bs):
         crt_entry_maps = maps_linearized[:, entry_idx].permute(1, 0)
 
         minp, maxp = crt_entry_maps.min().item(), crt_entry_maps.max().item()
         n_bins = int((maxp - minp) / 0.1)
+        n_bins = max(
+            n_bins, 1
+        )  # added to avoid 0 bins (e.g. when diff between maxp & minp is too small)
         bins = np.linspace(minp, maxp, n_bins)
+        bins = np.append(bins,
+                         maxp + 1)  # added to avoid elements in the last bin
         # print("MIN-MAX %.2f - %.2f" % (minp, maxp))
 
         pixels_histo = hist_vextorized_np(crt_entry_maps.data.cpu().numpy(),
                                           bins)
         # print(bins, minp, maxp)
         idx_max = np.argmax(pixels_histo, 1)
+
         th1 = torch.from_numpy(bins[idx_max]).cuda()
         th2 = torch.from_numpy(bins[idx_max + 1]).cuda()
 
@@ -444,6 +560,8 @@ def combine_maps(multi_chan_maps, edges_weights, fct="median"):
         return median_100(multi_chan_maps)
     if fct == "histo":
         return mean_mode_histo(multi_chan_maps)
+    if fct == "histo_median":
+        return mean_mode_histo_median(multi_chan_maps)
     if fct == "median10":
         return median_10(multi_chan_maps)
     if fct == "ssim_maps_twd_exp_mean":
@@ -453,12 +571,18 @@ def combine_maps(multi_chan_maps, edges_weights, fct="median"):
                                             combine="median_w")
     if fct == "ssim_maps_twd_exp_median":
         return combine_maps_ssim_twd_expert(multi_chan_maps, combine="median")
+    if fct == "ssim_maps_twd_exp_median_faster":
+        return combine_maps_ssim_twd_expert(multi_chan_maps,
+                                            combine="median_faster")
     if fct == "ssim_maps_btw_tasks_mean":
         return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean")
     if fct == "ssim_maps_btw_tasks_median_w":
         return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="median_w")
     if fct == "ssim_maps_btw_tasks_median":
         return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="median")
+    if fct == "ssim_maps_btw_tasks_median_faster":
+        return combine_maps_ssim_btw_tasks(multi_chan_maps,
+                                           combine="median_faster")
 
     assert ('[%s] Combination not implemented' % fct)
 

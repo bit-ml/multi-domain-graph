@@ -47,11 +47,9 @@ class Domain2DDataset(Dataset):
 
         s = time.time()
         tag = pathlib.Path(dataset_path).parts[-1]
-        pos = dataset_path.find('/')
-        db_name = dataset_path[0:pos] if pos > 0 else dataset_path
         # load experts paths
-        cache_e1 = "%s/%s_%s_%d_%s.npy" % (
-            CACHE_NAME, tag, self.experts[0].identifier, len(patterns), db_name)
+        cache_e1 = "%s/%s_%s_%d.npy" % (
+            CACHE_NAME, tag, self.experts[0].identifier, len(patterns))
         glob_paths_e1 = [
             "%s/%s/%s.npy" %
             (dataset_path, self.experts[0].identifier, pattern)
@@ -64,8 +62,8 @@ class Domain2DDataset(Dataset):
                                                        ) if first_k ==
                                                   -1 else first_k]
 
-        cache_e2 = "%s/%s_%s_%d_%s.npy" % (
-            CACHE_NAME, tag, self.experts[1].identifier, len(patterns), db_name)
+        cache_e2 = "%s/%s_%s_%d.npy" % (
+            CACHE_NAME, tag, self.experts[1].identifier, len(patterns))
         glob_paths_e2 = [
             "%s/%s/%s.npy" %
             (dataset_path, self.experts[1].identifier, pattern)
@@ -96,7 +94,7 @@ class DomainTestDataset(Dataset):
                  first_k):
         super(DomainTestDataset, self).__init__()
         self.experts = experts
-
+        tag = pathlib.Path(dataset_path).parts[-1]
         available_experts = os.listdir(os.path.join(experts_path,
                                                     dataset_path))
         available_gts = os.listdir(os.path.join(preproc_gt_path, dataset_path))
@@ -109,11 +107,10 @@ class DomainTestDataset(Dataset):
             return
 
         pattern = "*"
-        pos = dataset_path.find('/')
-        db_name = dataset_path[0:pos] if pos > 0 else dataset_path
+
         # get data for src expert
-        cache_e1 = "%s/test_%s_pseudo_gt_%s.npy" % (
-            CACHE_NAME, self.experts[0].identifier, db_name)
+        cache_e1 = "%s/%s_test_%s_pseudo_gt.npy" % (CACHE_NAME, tag,
+                                                    self.experts[0].identifier)
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[0].identifier, pattern)
         self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
@@ -122,8 +119,8 @@ class DomainTestDataset(Dataset):
                                                   -1 else first_k]
 
         # get data for dst expert
-        cache_e2 = "%s/test_%s_pseudo_gt_%s.npy" % (
-            CACHE_NAME, self.experts[1].identifier, db_name)
+        cache_e2 = "%s/%s_test_%s_pseudo_gt.npy" % (CACHE_NAME, tag,
+                                                    self.experts[1].identifier)
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[1].identifier, pattern)
         self.e2_output_path = load_glob_with_cache(cache_e2, glob_path_e2)
@@ -131,8 +128,8 @@ class DomainTestDataset(Dataset):
                                                        ) if first_k ==
                                                   -1 else first_k]
         # get data for domain of dst expert
-        cache_d2_gt = "%s/test_%s_gt_%s.npy" % (
-            CACHE_NAME, self.experts[1].domain_name, db_name)
+        cache_d2_gt = "%s/%s_test_%s_gt.npy" % (CACHE_NAME, tag,
+                                                self.experts[1].domain_name)
         glob_path_d2_gt = "%s/%s/%s/%s.npy" % (preproc_gt_path, dataset_path,
                                                self.experts[1].domain_name,
                                                pattern)
