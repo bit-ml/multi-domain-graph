@@ -651,7 +651,7 @@ class Edge:
                                      wtag, edges_1hop_weights, ensemble_fct):
         with torch.no_grad():
             num_batches = len(loaders[0])
-            for idx_batch in range(num_batches):
+            for idx_batch in tqdm(range(num_batches)):
                 domain2_1hop_ens_list = []
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge

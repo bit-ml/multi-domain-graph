@@ -12,21 +12,35 @@ from experts.tracking1_expert import Tracking1Model
 
 
 class Experts:
-    def __init__(self, full_experts=True):
+    def __init__(self, full_experts=True, use_rgb_to_tsk=True):
         # self.methods = [DepthModel(), EdgesModel(), HalftoneModel(), Tracking1Model(), SurfaceNormalsXTC()]
         # self.methods = [SurfaceNormalsXTC(), HalftoneModel()]
-        self.methods = [
-            RGBModel(full_experts),
-            DepthModelXTC(full_experts),
-            SurfaceNormalsXTC(full_experts),
-            EdgesModel(full_experts),
-            SaliencySegmModel(full_experts),
-            HalftoneModel(full_experts, 0),
+        if use_rgb_to_tsk:
+            self.methods = [
+                RGBModel(full_experts),
+                DepthModelXTC(full_experts),
+                SurfaceNormalsXTC(full_experts),
+                EdgesModel(full_experts),
+                SaliencySegmModel(full_experts),
+                HalftoneModel(full_experts, 0),
 
-            # Tracking1Model(full_experts),
-            # RaftModel(full_experts, 1),
-            # DepthModel(full_experts),
-        ]
+                # Tracking1Model(full_experts),
+                # RaftModel(full_experts, 1),
+                # DepthModel(full_experts),
+            ]
+        else:
+            self.methods = [
+                #RGBModel(full_experts),
+                DepthModelXTC(full_experts),
+                SurfaceNormalsXTC(full_experts),
+                EdgesModel(full_experts),
+                SaliencySegmModel(full_experts),
+                HalftoneModel(full_experts, 0),
+
+                # Tracking1Model(full_experts),
+                # RaftModel(full_experts, 1),
+                # DepthModel(full_experts),
+            ]
 
     '''
     def rgb_inference(self, rgb_frames):

@@ -18,7 +18,8 @@ import configparser
 
 
 def build_space_graph(config, silent, valid_shuffle):
-    all_experts = Experts(full_experts=False)
+    use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
+    all_experts = Experts(full_experts=False, use_rgb_to_tsk=use_rgb_to_tsk)
 
     md_graph = MultiDomainGraph(config,
                                 all_experts,
