@@ -32,8 +32,8 @@ WORKING_W = 256
 # main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/taskonomy/sample-model'
 
 main_db_path = r'/data/multi-domain-graph-4/datasets/Taskonomy/tiny-train'
-main_gt_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_gt/taskonomy/tiny-train-ok'
-main_exp_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_exp/taskonomy/tiny-train-ok'
+main_gt_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_gt/taskonomy/tiny-train0.5-ok'
+main_exp_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_exp/taskonomy/tiny-train0.5-ok'
 
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']

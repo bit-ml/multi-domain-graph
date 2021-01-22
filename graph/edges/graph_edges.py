@@ -18,8 +18,8 @@ from utils import utils
 from utils.utils import img_for_plot
 
 first_k_train = -1  #-1 #3000
-first_k_val = 3000  #-1 #180 #720
-first_k_test = 10  #60#64
+first_k_val = -1  #-1 #180 #720
+first_k_test = -1  #60#64
 
 
 class Edge:
@@ -51,7 +51,7 @@ class Edge:
                                            factor=0.1,
                                            threshold=0.03,
                                            min_lr=5e-5)
-        print("optimizer", self.optimizer)
+        # print("optimizer", self.optimizer)
         self.l2 = nn.MSELoss()
         self.l1 = nn.L1Loss()
 
@@ -269,6 +269,7 @@ class Edge:
             self.test_loader) * 100
 
     def train(self, start_epoch, n_epochs, device, writer, eval_test):
+        self.global_step = start_epoch
         wtag = '%s_%s' % (self.expert1.identifier, self.expert2.identifier)
         for epoch in range(n_epochs):
             # 1. Train
