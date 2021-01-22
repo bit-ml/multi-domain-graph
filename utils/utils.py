@@ -1,7 +1,10 @@
 import os
 import sys
-from math import exp
 import time
+from math import exp
+
+import lpips
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -13,6 +16,14 @@ sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import multiprocessing
+
+EPSILON = 0.00001
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+LPIPS_NETS = {}
+# LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True).to(device)
+LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
+                                          spatial=True).to(device)
 
 
 def get_gaussian_filter(n_channels, win_size=11, sigma=1.5):
@@ -308,6 +319,42 @@ def combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean"):
     return ensemble_res
 
 
+def psnr_fcn(map1, map2):
+    # if threshold:
+    #     y_pred = _binarize(y_pred, threshold)
+    mse = (map1 - map2)**2
+    norm_dist = torch.log10(1 / (mse + EPSILON))
+    return 1 - norm_dist / (norm_dist.max() + EPSILON)
+
+
+def lpips_fcn(map1, map2):
+    distance = LPIPS_NETS['lpips_squeeze'].forward(map1, map2)
+    return 1 - distance
+
+
+def combine_maps_twd_expert(multi_chan_maps, score_function):
+    '''
+    n_tasks x BS x n_chan x H x W: multi_chan_maps
+    '''
+    n_tasks = multi_chan_maps.shape[0]
+    n_chan = multi_chan_maps.shape[2]
+
+    corr_maps = []
+    for i in range(n_tasks):
+        corr_map = score_function(multi_chan_maps[-1], multi_chan_maps[i])
+        corr_maps.append(corr_map)
+
+    corr_maps = torch.stack(corr_maps, 0)
+    corr_maps = torch.clamp(corr_maps, min=0)
+
+    sim_maps = (corr_maps < 0.5).repeat(1, 1,
+                                        (int)(n_chan / corr_maps.shape[2]), 1,
+                                        1)
+    ensemble_res = compute_median(multi_chan_maps, sim_maps)
+
+    return ensemble_res
+
+
 def combine_maps_ssim_twd_expert(multi_chan_maps, combine="mean"):
     n_tasks = multi_chan_maps.shape[0]
     win_size = 11
@@ -583,6 +630,11 @@ def combine_maps(multi_chan_maps, edges_weights, fct="median"):
     if fct == "ssim_maps_btw_tasks_median_faster":
         return combine_maps_ssim_btw_tasks(multi_chan_maps,
                                            combine="median_faster")
+    if fct[:5] == "lpips":
+        return combine_maps_twd_expert(multi_chan_maps, lpips_fcn)
+
+    if fct == "psnr":
+        return combine_maps_twd_expert(multi_chan_maps, psnr_fcn)
 
     assert ('[%s] Combination not implemented' % fct)
 
