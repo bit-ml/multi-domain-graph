@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "justMyCode": false,
     "configurations": [
+        
+        {
+            "name": "Run current file (without args)",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+        },
         {
             "name": "Generate Expert Output GOT-10k",
             "type": "python",
@@ -31,8 +39,8 @@
                 //         - 1 create preprocessed experts samples
                 // gt: ['rgb', 'depth', 'edges', 'normals']
                 // exp: ['halftone_gray_basic', 'depth_xtc', 'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb']
-                "1",
-                "depth_xtc"
+                "0",
+                "normals"
             ]
         },
         {

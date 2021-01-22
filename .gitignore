@@ -16,3 +16,4 @@ histograms
 experts/normals_expert.py
 csv_results*/results_*.csv
 notebooks/*
+nohup*.out

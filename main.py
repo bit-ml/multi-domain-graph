@@ -295,6 +295,21 @@ def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
     writer.close()
 
 
+def check_models_exists(config, epoch):
+    print("Load nets from checkpoints. From epoch: %2d" % epoch)
+    all_experts = Experts(full_experts=False)
+    for expert_i in all_experts.methods:
+        for expert_j in all_experts.methods:
+            if expert_i != expert_j:
+                load_path = os.path.join(
+                    config.get('Edge Models',
+                               'load_path'), '%s_%s/epoch_%05d.pth' %
+                    (expert_i.identifier, expert_j.identifier, epoch))
+                if not os.path.exists(load_path):
+                    print("NU Exista: %15s ---> %15s (epoch %d)" %
+                          (expert_i.identifier, expert_j.identifier, epoch))
+
+
 def load_2Dtasks(graph, epoch):
     print("Load nets from checkpoints. From epoch: %2d" % epoch)
     for net_idx, edge in enumerate(graph.edges):
@@ -382,6 +397,7 @@ def main(argv):
                                       valid_shuffle=False)
             load_2Dtasks(graph, epoch=t_epoch)
             eval_1hop(graph, silent=silent, config=config, epoch_idx=t_epoch)
+            # check_models_exists(config, epoch=t_epoch)
         return
 
     if config.getboolean('Training', 'train_basic_edges'):
