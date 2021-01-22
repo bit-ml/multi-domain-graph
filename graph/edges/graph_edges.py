@@ -18,8 +18,8 @@ from utils import utils
 from utils.utils import img_for_plot
 
 first_k_train = -1  #-1 #3000
-first_k_val = -1  #-1 #180 #720
-first_k_test = -1  #60#64
+first_k_val = -1  #1000  #-1  #30  #-1  #3000  #-1 #180 #720
+first_k_test = -1  #1000  #-1  #30  #-1  #10  #60#64
 
 
 class Edge:
@@ -30,11 +30,12 @@ class Edge:
         self.silent = silent
 
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=100 * torch.cuda.device_count(),
-                          bs_test=230 * torch.cuda.device_count(),
-                          n_workers=8,
-                          rnd_sampler=rnd_sampler,
-                          valid_shuffle=valid_shuffle)
+        self.init_loaders(
+            bs=100,  # * torch.cuda.device_count(),
+            bs_test=100,  # * torch.cuda.device_count(),
+            n_workers=8,
+            rnd_sampler=rnd_sampler,
+            valid_shuffle=valid_shuffle)
 
         self.lr = 5e-2
         self.optimizer = optim.SGD(self.net.parameters(),
@@ -62,6 +63,8 @@ class Edge:
         self.ill_posed = False
         self.in_edge_weights = []
         self.in_edge_src_identifiers = []
+
+        self.trained = False
 
         self.load_model_dir = os.path.join(
             config.get('Edge Models', 'load_path'),
@@ -386,7 +389,7 @@ class Edge:
                        wtag, save_idxes, device):
         with torch.no_grad():
             num_batches = len(loaders[0])
-            for idx_batch in range(num_batches):
+            for idx_batch in tqdm(range(num_batches)):
 
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
@@ -417,7 +420,7 @@ class Edge:
                             img_for_plot(one_hop_pred[save_idxes]), 0)
 
                     l1_per_edge[idx_edge] += 100 * edge.l1(
-                        one_hop_pred, domain2_exp_gt).item()
+                        one_hop_pred, domain2_gt).item()
                 l1_expert += 100 * edge.l1(domain2_exp_gt, domain2_gt).item()
             l1_per_edge = np.array(l1_per_edge) / num_batches
             l1_expert = np.array(l1_expert) / num_batches
@@ -427,7 +430,7 @@ class Edge:
                         save_idxes, device):
         with torch.no_grad():
             num_batches = len(loaders[0])
-            for idx_batch in range(num_batches):
+            for idx_batch in tqdm(range(num_batches)):
 
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
@@ -649,7 +652,7 @@ class Edge:
                                      wtag, edges_1hop_weights, ensemble_fct):
         with torch.no_grad():
             num_batches = len(loaders[0])
-            for idx_batch in range(num_batches):
+            for idx_batch in tqdm(range(num_batches)):
                 domain2_1hop_ens_list = []
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge

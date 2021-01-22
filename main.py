@@ -18,7 +18,8 @@ import configparser
 
 
 def build_space_graph(config, silent, valid_shuffle):
-    all_experts = Experts(full_experts=False)
+    use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
+    all_experts = Experts(full_experts=False, use_rgb_to_tsk=use_rgb_to_tsk)
 
     md_graph = MultiDomainGraph(config,
                                 all_experts,
@@ -68,6 +69,8 @@ def eval_1hop(space_graph, silent, config, epoch_idx):
         for edge_xk in space_graph.edges:
             if edge_xk.ill_posed:
                 continue
+            if not edge_xk.trained:
+                continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
 
@@ -76,6 +79,8 @@ def eval_1hop(space_graph, silent, config, epoch_idx):
             save_idxes, save_idxes_test = Edge.eval_1hop(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
                 valid_set_str, test_set_str, csv_results_path, epoch_idx)
+        else:
+            print('--------dst: %s === NOT TESTED' % end_id)
 
     writer.close()
 
@@ -226,6 +231,8 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
         for edge_xk in space_graph.edges:
             if edge_xk.ill_posed:
                 continue
+            if not edge_xk.trained:
+                continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
                 edge_weights = edge_xk.in_edge_weights
@@ -279,6 +286,7 @@ def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
                   device=device,
                   writer=writer,
                   eval_test=eval_test)
+        net.trained = True
 
     writer.close()
 
@@ -302,8 +310,13 @@ def load_2Dtasks(graph, epoch):
     print("Load nets from checkpoints. From epoch: %2d" % epoch)
     for net_idx, edge in enumerate(graph.edges):
         path = os.path.join(edge.load_model_dir, 'epoch_%05d.pth' % (epoch))
-        edge.net.load_state_dict(torch.load(path))
-        edge.net.module.eval()
+        if os.path.exists(path):
+            edge.net.load_state_dict(torch.load(path))
+            edge.net.module.eval()
+            edge.trained = True
+        else:
+            print('model %s_%s UNAVAILABLE' %
+                  (edge.expert1.domain_name, edge.expert2.domain_name))
 
 
 ############################## 1HOP - pdf per pixel in full ensemble ###############################
