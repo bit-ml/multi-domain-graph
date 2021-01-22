@@ -1,7 +1,7 @@
 import os
 import sys
 from datetime import datetime
-
+import pathlib
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -50,8 +50,12 @@ def eval_1hop(space_graph, silent, config, epoch_idx):
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
         datetime = config.get('Run id', 'datetime')
 
-        valid_set_str = config.get('Paths', 'valid_set_str')
-        test_set_str = config.get('Paths', 'test_set_str')
+        valid_dataset = config.get('Paths', 'VALID_PATH')
+        valid_set_str = pathlib.Path(valid_dataset).parts[-1]
+
+        test_dataset = config.get('Paths', 'TEST_PATH')
+        test_set_str = pathlib.Path(test_dataset).parts[-1]
+
         writer = SummaryWriter(
             log_dir=f'%s/%s_1hop_edges_e%d_valid_%s_test_%s_%s' %
             (tb_dir, tb_prefix, epoch_idx, valid_set_str, test_set_str,
