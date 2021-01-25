@@ -222,14 +222,13 @@ def compute_median(data, mask):
 
     lower_values = torch.sum(mask, 1)
     to_keep_values = n_exps - lower_values
-    to_keep_values = to_keep_values % 2
-    to_keep_values = 1 - to_keep_values
+    even_nr_elems = 1 - (to_keep_values % 2)
 
     data[mask] = float('NaN')
     data = torch.sort(data, 1)[0]
 
-    s_idx = (n_exps - lower_values - 1) // 2 + lower_values
-    s_idx_ = s_idx + to_keep_values
+    s_idx = (n_exps - lower_values - 1) // 2
+    s_idx_ = s_idx + even_nr_elems
     s_idx[s_idx >= n_exps] = 0
     s_idx_[s_idx_ >= n_exps] = 0
 
@@ -248,14 +247,13 @@ def compute_median_histo(data, mask):
 
     lower_values = torch.sum(mask, 1)
     to_keep_values = n_exps - lower_values
-    to_keep_values = to_keep_values % 2
-    to_keep_values = 1 - to_keep_values
+    even_nr_elems = 1 - (to_keep_values % 2)
 
     data[mask] = float('NaN')
     data = torch.sort(data, 1)[0]
 
-    s_idx = (n_exps - lower_values - 1) // 2 + lower_values
-    s_idx_ = s_idx + to_keep_values
+    s_idx = (n_exps - lower_values - 1) // 2
+    s_idx_ = s_idx + even_nr_elems
     s_idx[s_idx >= n_exps] = 0
     s_idx_[s_idx_ >= n_exps] = 0
 
