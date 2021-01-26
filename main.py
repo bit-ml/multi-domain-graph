@@ -1,7 +1,8 @@
 import os
+import pathlib
 import sys
 from datetime import datetime
-import pathlib
+
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -17,15 +18,18 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 import configparser
 
 
-def build_space_graph(config, silent, valid_shuffle):
+def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
     all_experts = Experts(full_experts=False, use_rgb_to_tsk=use_rgb_to_tsk)
 
-    md_graph = MultiDomainGraph(config,
-                                all_experts,
-                                device,
-                                silent=silent,
-                                valid_shuffle=valid_shuffle)
+    md_graph = MultiDomainGraph(
+        config,
+        all_experts,
+        device,
+        iter_no=iter_no,
+        silent=silent,
+        valid_shuffle=valid_shuffle,
+    )
     return md_graph
 
 
@@ -258,7 +262,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
                 drop_version, edges_1hop_weights, edges_1hop_test_weights,
-                ensemble_fct)
+                ensemble_fct, config)
 
     writer.close()
 
@@ -410,38 +414,81 @@ def main(argv):
                       n_epochs=n_epochs,
                       silent=silent,
                       config=config)
-        sys.exit(0)
-    else:
-        # 2. Build graph + Load 1Hop edges
-        graph = build_space_graph(config, silent=silent, valid_shuffle=False)
+        return
+
+    if config.getboolean('Training2Iters', 'train_2_iters'):
+        use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
+        all_experts = Experts(full_experts=False,
+                              use_rgb_to_tsk=use_rgb_to_tsk)
+        for expert in all_experts.methods:
+            save_to_dir = "%s/%s" % (config.get(
+                'Training2Iters', 'save_next_iter_dir'), expert.identifier)
+            os.makedirs(save_to_dir, exist_ok=True)
+
+        # 00. Build graph
+        graph = build_space_graph(config,
+                                  silent=silent,
+                                  valid_shuffle=False,
+                                  iter_no=1)
         load_2Dtasks(graph, epoch=start_epoch)
+
+        # ; 1. Run eval on trainingset2 + save outputs
+        eval_1hop_ensembles(graph,
+                            drop_version=-1,
+                            silent=silent,
+                            config=config)
+
+        # ; 2. Train on trainset2 using previously saved outputs
+        # 00. Build graph
+        graph = build_space_graph(config,
+                                  silent=silent,
+                                  valid_shuffle=False,
+                                  iter_no=2)
+        load_2Dtasks(graph, epoch=start_epoch)
+        train_2Dtasks(graph,
+                      start_epoch=start_epoch,
+                      n_epochs=n_epochs,
+                      silent=silent,
+                      config=config)
+
+        # ; 3. Run eval on testset
+        eval_1hop_ensembles(graph,
+                            drop_version=-1,
+                            silent=silent,
+                            config=config)
+        return
+
+    # 2. Build graph
+    graph = build_space_graph(config, silent=silent, valid_shuffle=False)
+
+    # 3. Load 1Hop edges
+    load_2Dtasks(graph, epoch=start_epoch)
 
     # # Per pixel histograms, inside an ensemble
     # plot_per_pixel_ensembles(graph, silent=silent, config=config)
 
-    print("Eval 1Hop ensembles before drop")
     # drop_version passed as -1 -> no drop
+    print("Eval 1Hop ensembles before drop")
     eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
 
     # # 3. Drop ill-posed connections
-    # # drop_version = config.getint('Training', 'drop_version')
-    # for drop_version in [2, 3, 4, 10, 11]:
-    #     drop_connections(graph, drop_version)
+    # drop_version = config.getint('Training', 'drop_version')
+    # drop_connections(graph, drop_version)
 
-    #     # 4. Eval 1Hop
-    #     print("Eval 1Hop ensembles after drop (version %i)" % drop_version)
-    #     drop_version = config.getint('Training', 'drop_version')
-    #     eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
+    # # 4. Eval 1Hop
+    # print("Eval 1Hop ensembles after drop (version %i)" % drop_version)
+    # drop_version = config.getint('Training', 'drop_version')
+    # eval_1hop_ensembles(graph, drop_version, silent=silent, config=config)
 
-    #     # 5. Train/Eval 2Hop
-    #     print("Eval 2Hop ensembles")
-    #     # used only as eval
-    #     train_2hops_2Dtasks(graph,
-    #                         drop_version,
-    #                         epochs=1,
-    #                         use_expert_gt=True,
-    #                         silent=silent,
-    #                         config=config)
+    # # 5. Train/Eval 2Hop
+    # print("Eval 2Hop ensembles")
+    # # used only as eval
+    # train_2hops_2Dtasks(graph,
+    #                     drop_version,
+    #                     epochs=1,
+    #                     use_expert_gt=True,
+    #                     silent=silent,
+    #                     config=config)
 
 
 if __name__ == "__main__":

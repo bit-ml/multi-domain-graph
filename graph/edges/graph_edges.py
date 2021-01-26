@@ -8,7 +8,8 @@ from datetime import datetime
 import numpy as np
 import torch
 import torchvision
-from graph.edges.dataset2d import Domain2DDataset, DomainTestDataset
+from graph.edges.dataset2d import (Domain2DDataset, DomainTestDataset,
+                                   DomainTrainNextIterDataset)
 from graph.edges.unet.unet_model import UNetGood
 from torch import nn, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -24,18 +25,18 @@ first_k_test = -1  #1000  #-1  #30  #-1  #10  #60#64
 
 class Edge:
     def __init__(self, config, expert1, expert2, device, rnd_sampler, silent,
-                 valid_shuffle):
+                 valid_shuffle, iter_no):
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
 
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(
-            bs=100,  # * torch.cuda.device_count(),
-            bs_test=100,  # * torch.cuda.device_count(),
-            n_workers=8,
-            rnd_sampler=rnd_sampler,
-            valid_shuffle=valid_shuffle)
+        self.init_loaders(bs=100 * torch.cuda.device_count(),
+                          bs_test=200 * torch.cuda.device_count(),
+                          n_workers=8,
+                          rnd_sampler=rnd_sampler,
+                          valid_shuffle=valid_shuffle,
+                          iter_no=iter_no)
 
         self.lr = 5e-2
         self.optimizer = optim.SGD(self.net.parameters(),
@@ -104,10 +105,32 @@ class Edge:
         print("Number of parameters %.2fM (Trainable %.2fM)" %
               (total_params, trainable_params))
 
-    def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle):
-        TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
+    def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle,
+                     iter_no):
+        experts = [self.expert1, self.expert2]
+
+        if iter_no == 2:
+            PREPROC_GT_PATH_TRAIN = self.config.get('Training2Iters',
+                                                    'PREPROC_GT_PATH_TRAIN')
+            EXPERTS_OUTPUT_PATH_TRAIN = self.config.get(
+                'Training2Iters', 'EXPERTS_OUTPUT_PATH_TRAIN')
+            TRAIN_PATH = self.config.get('Training2Iters', 'TRAIN_PATH')
+            train_ds = DomainTrainNextIterDataset(PREPROC_GT_PATH_TRAIN,
+                                                  EXPERTS_OUTPUT_PATH_TRAIN,
+                                                  TRAIN_PATH,
+                                                  experts,
+                                                  first_k_val,
+                                                  iter_no=iter_no)
+        else:
+            TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
+            TRAIN_PATTERNS = self.config.get('Paths',
+                                             'TRAIN_PATTERNS').split(",")
+            train_ds = Domain2DDataset(TRAIN_PATH,
+                                       experts,
+                                       TRAIN_PATTERNS,
+                                       first_k_train,
+                                       iter_no=iter_no)
         VALID_PATH = self.config.get('Paths', 'VALID_PATH')
-        TRAIN_PATTERNS = self.config.get('Paths', 'TRAIN_PATTERNS').split(",")
         VALID_PATTERNS = self.config.get('Paths', 'VALID_PATTERNS').split(",")
 
         PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
@@ -115,11 +138,11 @@ class Edge:
                                                    'EXPERTS_OUTPUT_PATH_TEST')
         TEST_PATH = self.config.get('Paths', 'TEST_PATH')
 
-        experts = [self.expert1, self.expert2]
-        train_ds = Domain2DDataset(TRAIN_PATH, experts, TRAIN_PATTERNS,
-                                   first_k_train)
-        valid_ds = Domain2DDataset(VALID_PATH, experts, VALID_PATTERNS,
-                                   first_k_val)
+        valid_ds = Domain2DDataset(VALID_PATH,
+                                   experts,
+                                   VALID_PATTERNS,
+                                   first_k_val,
+                                   iter_no=iter_no)
         print("Train ds", len(train_ds))
         print("Valid ds", len(valid_ds))
 
@@ -135,8 +158,11 @@ class Edge:
             num_workers=n_workers)
 
         test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
-                                    EXPERTS_OUTPUT_PATH_TEST, TEST_PATH,
-                                    experts, first_k_test)
+                                    EXPERTS_OUTPUT_PATH_TEST,
+                                    TEST_PATH,
+                                    experts,
+                                    first_k_test,
+                                    iter_no=1)
         print("Test ds", len(test_ds))
 
         if test_ds.available:
@@ -649,8 +675,10 @@ class Edge:
 
     def eval_1hop_ensemble_valid_set(loaders, l1_per_edge, l1_ensemble1hop,
                                      edges_1hop, device, save_idxes, writer,
-                                     wtag, edges_1hop_weights, ensemble_fct):
+                                     wtag, edges_1hop_weights, ensemble_fct,
+                                     config):
         with torch.no_grad():
+            crt_idx = 0
             num_batches = len(loaders[0])
             for idx_batch in tqdm(range(num_batches)):
                 domain2_1hop_ens_list = []
@@ -691,14 +719,29 @@ class Edge:
                                                       edges_1hop_weights,
                                                       ensemble_fct)
 
+                # Save output for second iteration
+                if config.getboolean('Training2Iters', 'train_2_iters'):
+                    save_dir = "%s/%s" % (config.get(
+                        'Training2Iters',
+                        'save_next_iter_dir'), edge.expert2.identifier)
+
+                    for elem_idx in range(domain2_1hop_ens.shape[0]):
+                        save_path = "%s/%08d.npy" % (save_dir,
+                                                     crt_idx + elem_idx)
+                        np.save(save_path,
+                                domain2_1hop_ens[elem_idx].data.cpu().numpy())
+                    crt_idx += domain2_1hop_ens.shape[0]
+
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
                                                  domain2_exp_gt).item()
 
+            if config.getboolean('Training2Iters', 'train_2_iters'):
+                print("[Iter2] Supervision Saved to:", save_dir)
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer, drop_version, edges_1hop_weights,
-                           edges_1hop_test_weights, ensemble_fct):
+                           edges_1hop_test_weights, ensemble_fct, config):
 
         drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
         wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
@@ -716,7 +759,8 @@ class Edge:
         start = time.time()
         l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_valid_set(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag_valid, edges_1hop_weights, ensemble_fct)
+            save_idxes, writer, wtag_valid, edges_1hop_weights, ensemble_fct,
+            config)
         end = time.time()
         print("time for VALID Edge.eval_1hop_ensemble_aux", end - start)
 

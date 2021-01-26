@@ -31,9 +31,13 @@ WORKING_W = 256
 # main_gt_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_gt/taskonomy/sample-model'
 # main_exp_out_path = r'/data/multi-domain-graph/datasets/datasets_preproc_exp/taskonomy/sample-model'
 
-main_db_path = r'/data/multi-domain-graph-4/datasets/Taskonomy/tiny-train'
-main_gt_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_gt/taskonomy/tiny-train0.5-ok'
-main_exp_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_exp/taskonomy/tiny-train0.5-ok'
+# main_db_path = r'/data/multi-domain-graph-3/datasets/Taskonomy/tiny-train/tiny-train_0.15_7rooms_part3'
+# main_gt_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part3'
+# main_exp_out_path = r'/data/multi-domain-graph-3/datasets/datasets_preproc_exp/taskonomy/tiny-train_0.15/part3'
+
+main_db_path = r'/data/multi-domain-graph-4/datasets/Taskonomy/fullplus-test'
+main_gt_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_gt/taskonomy/fullplus-test'
+main_exp_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_exp/taskonomy/fullplus-test'
 
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']
@@ -201,7 +205,8 @@ def get_data_range(in_path, right_dtype):
     filenames.sort()
     min_values = []
     max_values = []
-    # filenames = filenames[35964:]
+    # search data_range only in 5k files
+    filenames = filenames[:5000]
     for idx, filename in enumerate(tqdm(filenames)):
         data_path = os.path.join(in_path, filename)
         try:
@@ -233,6 +238,7 @@ def process_rgb(in_path, out_path):
     os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
+
     for idx, filename in enumerate(tqdm(filenames)):
         out_img_path = os.path.join(out_path, '%08d.npy' % idx)
         if os.path.exists(out_img_path):

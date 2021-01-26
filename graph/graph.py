@@ -8,13 +8,15 @@ class MultiDomainGraph:
                  config,
                  experts,
                  device,
+                 iter_no,
                  silent=False,
                  valid_shuffle=True):
         super(MultiDomainGraph, self).__init__()
         self.experts = experts
-        self.init_nets(experts, device, silent, config, valid_shuffle)
+        self.init_nets(experts, device, silent, config, valid_shuffle, iter_no)
 
-    def init_nets(self, all_experts, device, silent, config, valid_shuffle):
+    def init_nets(self, all_experts, device, silent, config, valid_shuffle,
+                  iter_no):
         rnd_sampler = torch.Generator()
         self.edges = []
         for i_idx, expert_i in enumerate(all_experts.methods):
@@ -28,8 +30,14 @@ class MultiDomainGraph:
                             expert_i.identifier, expert_j.identifier
                     ]:
                         continue
-                    new_edge = Edge(config, expert_i, expert_j, device,
-                                    rnd_sampler, silent, valid_shuffle)
+                    new_edge = Edge(config,
+                                    expert_i,
+                                    expert_j,
+                                    device,
+                                    rnd_sampler,
+                                    silent,
+                                    valid_shuffle,
+                                    iter_no=iter_no)
                     self.edges.append(new_edge)
                     print("Add edge", str(new_edge))
             # break
