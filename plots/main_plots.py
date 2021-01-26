@@ -6,12 +6,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 
-#main_csvs_path = r'./trained_18.01.2021_got10k_4_frames_per_video'
-#final_csv_path = r'trained_18.01.2021_got10k_4_frames_per_video.csv'
-#fig_path = r'trained_18.01.2021_on_got10k_4_frames_per_video_eval_.svg'
-main_csvs_path = r'./trained_19.01_tiny_taskonomy'
-final_csv_path = r'trained_19.01_tiny_taskonomy.csv'
-fig_path = r'trained_19.01_tiny_taskonomy_eval_.svg'
+main_csvs_path = r'./trained_21.01_tiny_taskonomy-ok'
+final_csv_path = r'trained_21.01_tiny_taskonomy-ok.csv'
+fig_path = r'trained_21.01_tiny_taskonomy-ok.svg'
 
 
 def generate_common_csv(main_csvs_path, final_csv_path):
