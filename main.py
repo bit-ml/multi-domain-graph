@@ -226,7 +226,8 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                                flush_secs=30)
     save_idxes = None
     save_idxes_test = None
-
+    add_rgb_src_in_ensemble = config.getboolean('Ensemble',
+                                                'add_rgb_src_in_ensemble')
     ensemble_fct = config.get('Ensemble', 'ensemble_fct')
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
@@ -240,6 +241,8 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             if edge_xk.ill_posed:
                 continue
             if not edge_xk.trained:
+                continue
+            if not add_rgb_src_in_ensemble and edge_xk.expert1.domain_name == 'rgb':
                 continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
@@ -466,7 +469,8 @@ def main(argv):
 
     # # Per pixel histograms, inside an ensemble
     # plot_per_pixel_ensembles(graph, silent=silent, config=config)
-
+    print("Eval 1Hop edges")
+    eval_1hop(graph, silent=silent, config=config, epoch_idx=start_epoch)
     # drop_version passed as -1 -> no drop
     print("Eval 1Hop ensembles before drop")
     eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)
