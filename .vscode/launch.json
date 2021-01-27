@@ -5,7 +5,6 @@
     "version": "0.2.0",
     "justMyCode": false,
     "configurations": [
-        
         {
             "name": "Run current file (without args)",
             "type": "python",
@@ -54,15 +53,24 @@
             ]
         },
         {
-            "name": "Load Edges",
+            "name": "Config Mixt Tiny-Test Edges",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                // "config2_load_edges.ini"
+                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_edges.ini"
+            ]
+        },
+        {
+            "name": "config_elena.ini",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
                 "config_elena.ini"
             ]
-        }
+        },
     ]
 }

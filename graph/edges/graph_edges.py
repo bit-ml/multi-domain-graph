@@ -28,7 +28,7 @@ class Edge:
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=100 * torch.cuda.device_count(),
-                          bs_test=100 * torch.cuda.device_count(),
+                          bs_test=200 * torch.cuda.device_count(),
                           n_workers=8,
                           config=config,
                           rnd_sampler=rnd_sampler,
@@ -107,6 +107,7 @@ class Edge:
         first_k_train = config.getint('FirstK', 'first_k_train')
         first_k_val = config.getint('FirstK', 'first_k_val')
         first_k_test = config.getint('FirstK', 'first_k_test')
+        first_k_next_iter = config.getint('FirstK', 'first_k_next_iter')
 
         experts = [self.expert1, self.expert2]
 
@@ -169,7 +170,7 @@ class Edge:
                                            NEXT_ITER_TRAIN_PATTERNS,
                                            first_k_next_iter,
                                            iter_no=iter_no)
-            print("Next iter ds", len(next_iter_ds))
+            print("\tNext iter ds", len(next_iter_ds))
             self.next_iter_loader = DataLoader(next_iter_ds,
                                                batch_size=bs_test,
                                                shuffle=False,
@@ -177,7 +178,7 @@ class Edge:
 
         else:
             self.next_iter_loader = None
-            print("Next iter ds 0")
+            print("\tNext iter ds 0")
 
         PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
         EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
@@ -762,10 +763,6 @@ class Edge:
                 '''
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
                                                  domain2_exp_gt).item()
-            '''
-            if config.getboolean('Training2Iters', 'train_2_iters'):
-                print("[Iter2] Supervision Saved to:", save_dir)
-            '''
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
@@ -929,7 +926,8 @@ class Edge:
                             domain2_1hop_ens[elem_idx].data.cpu().numpy())
                 crt_idx += domain2_1hop_ens.shape[0]
 
-            if config.getboolean('Training2Iters', 'train_2_iters'):
+            if num_batches > 0 and config.getboolean('Training2Iters',
+                                                     'train_2_iters'):
                 print("[Iter2] Supervision Saved to:", save_dir)
 
     def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config):
