@@ -59,6 +59,7 @@ class Domain2DDataset(Dataset):
 
         self.e1_output_path = load_glob_with_cache_multiple_patterns(
             cache_e1, glob_paths_e1)
+        # print("\tCache file", cache_e1)
         self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
                                                        ) if first_k ==
                                                   -1 else first_k]
@@ -73,6 +74,7 @@ class Domain2DDataset(Dataset):
         ]
         self.e2_output_path = load_glob_with_cache_multiple_patterns(
             cache_e2, glob_paths_e2)
+        # print("\tCache file", cache_e2)
         self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
                                                        ) if first_k ==
                                                   -1 else first_k]
@@ -117,6 +119,7 @@ class DomainTestDataset(Dataset):
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[0].identifier, pattern)
         self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
+        # print("\tCache file", cache_e1)
         self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
                                                        ) if first_k ==
                                                   -1 else first_k]
@@ -127,6 +130,7 @@ class DomainTestDataset(Dataset):
         glob_path_e2 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[1].identifier, pattern)
         self.e2_output_path = load_glob_with_cache(cache_e2, glob_path_e2)
+        # print("\tCache file", cache_e2)
         self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
                                                        ) if first_k ==
                                                   -1 else first_k]
@@ -139,6 +143,7 @@ class DomainTestDataset(Dataset):
                                                pattern)
         self.d2_gt_output_path = load_glob_with_cache(cache_d2_gt,
                                                       glob_path_d2_gt)
+        # print("\tCache file", cache_d2_gt)
         self.d2_gt_output_path = self.d2_gt_output_path[:len(
             self.d2_gt_output_path) if first_k == -1 else first_k]
 
@@ -187,6 +192,7 @@ class DomainTrainNextIterDataset(Dataset):
         glob_path_e1 = "%s/%s/%s/%s.npy" % (
             experts_path, dataset_path, self.experts[0].identifier, pattern)
         self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
+        # print("\tCache file", cache_e1)
         self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
                                                        ) if first_k ==
                                                   -1 else first_k]
@@ -199,6 +205,8 @@ class DomainTrainNextIterDataset(Dataset):
             preproc_gt_path, dataset_path, self.experts[1].identifier, pattern)
         self.d2_gt_output_path = load_glob_with_cache(cache_d2_gt,
                                                       glob_path_d2_gt)
+        # print("\tCache file", cache_d2_gt)
+
         self.d2_gt_output_path = self.d2_gt_output_path[:len(
             self.d2_gt_output_path) if first_k == -1 else first_k]
 

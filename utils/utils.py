@@ -22,8 +22,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 LPIPS_NETS = {}
 # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True).to(device)
-LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
-                                          spatial=True).to(device)
+# LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
+#                                           spatial=True).to(device)
 
 
 def get_gaussian_filter(n_channels, win_size=11, sigma=1.5):

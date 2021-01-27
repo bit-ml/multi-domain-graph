@@ -47,18 +47,18 @@ def eval_1hop(space_graph, silent, config, epoch_idx):
     if not os.path.exists(csv_results_path):
         os.mkdir(csv_results_path)
 
+    valid_dataset = config.get('Paths', 'VALID_PATH')
+    valid_set_str = pathlib.Path(valid_dataset).parts[-1]
+
+    test_dataset = config.get('Paths', 'TEST_PATH')
+    test_set_str = pathlib.Path(test_dataset).parts[-1]
+
     if silent:
         writer = DummySummaryWriter()
     else:
         tb_dir = config.get('Logs', 'tensorboard_dir')
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
         datetime = config.get('Run id', 'datetime')
-
-        valid_dataset = config.get('Paths', 'VALID_PATH')
-        valid_set_str = pathlib.Path(valid_dataset).parts[-1]
-
-        test_dataset = config.get('Paths', 'TEST_PATH')
-        test_set_str = pathlib.Path(test_dataset).parts[-1]
 
         writer = SummaryWriter(
             log_dir=f'%s/%s_1hop_edges_e%d_valid_%s_test_%s_%s' %
@@ -323,7 +323,7 @@ def load_2Dtasks(graph, epoch):
             edge.net.module.eval()
             edge.trained = True
         else:
-            print('model %s_%s UNAVAILABLE' %
+            print('model: %s_%s UNAVAILABLE' %
                   (edge.expert1.domain_name, edge.expert2.domain_name))
 
 
@@ -394,7 +394,7 @@ def main(argv):
     if config.getboolean('Testing', 'test_1hop_edges'):
         min_epoch = config.getint('Testing', 'test_min_epoch')
         max_epoch = config.getint('Testing', 'test_max_epoch')
-        epoch_step = config.getint('Testing', 'test_epoch_step')
+        epoch_step = max(1, config.getint('Testing', 'test_epoch_step'))
         for t_epoch in np.arange(min_epoch, max_epoch + 1, epoch_step):
             graph = build_space_graph(config,
                                       silent=silent,
