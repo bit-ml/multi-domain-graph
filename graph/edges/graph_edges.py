@@ -32,12 +32,13 @@ class Edge:
         self.silent = silent
 
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(bs=100 * torch.cuda.device_count(),
-                          bs_test=200 * torch.cuda.device_count(),
-                          n_workers=8,
-                          rnd_sampler=rnd_sampler,
-                          valid_shuffle=valid_shuffle,
-                          iter_no=iter_no)
+        self.init_loaders(
+            bs=100 * torch.cuda.device_count(),
+            bs_test=100,  # * torch.cuda.device_count(),
+            n_workers=8,
+            rnd_sampler=rnd_sampler,
+            valid_shuffle=valid_shuffle,
+            iter_no=iter_no)
 
         self.lr = 5e-2
         self.optimizer = optim.SGD(self.net.parameters(),
@@ -692,6 +693,7 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
                                                       edges_1hop_weights,
+                                                      edge.expert2.domain_name,
                                                       fct=ensemble_fct)
                 l1_expert += 100 * edge.l1(domain2_exp_gt, domain2_gt).item()
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
@@ -743,6 +745,7 @@ class Edge:
 
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
                                                       edges_1hop_weights,
+                                                      edge.expert2.domain_name,
                                                       ensemble_fct)
                 '''
                 # Save output for second iteration
@@ -913,7 +916,9 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
-                                                      [], ensemble_fct)
+                                                      [],
+                                                      edge.expert2.domain_name,
+                                                      ensemble_fct)
 
                 save_dir = "%s/%s" % (os.path.join(
                     config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
