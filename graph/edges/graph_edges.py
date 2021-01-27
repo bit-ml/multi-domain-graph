@@ -28,7 +28,7 @@ class Edge:
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=100 * torch.cuda.device_count(),
-                          bs_test=250 * torch.cuda.device_count(),
+                          bs_test=100 * torch.cuda.device_count(),
                           n_workers=8,
                           config=config,
                           rnd_sampler=rnd_sampler,
@@ -110,17 +110,19 @@ class Edge:
 
         experts = [self.expert1, self.expert2]
 
-        if iter_no == 2:
-            PREPROC_GT_PATH_TRAIN = self.config.get('Training2Iters',
-                                                    'PREPROC_GT_PATH_TRAIN')
-            EXPERTS_OUTPUT_PATH_TRAIN = self.config.get(
-                'Training2Iters', 'EXPERTS_OUTPUT_PATH_TRAIN')
-            TRAIN_PATH = self.config.get('Training2Iters', 'TRAIN_PATH')
-            train_ds = DomainTrainNextIterDataset(PREPROC_GT_PATH_TRAIN,
-                                                  EXPERTS_OUTPUT_PATH_TRAIN,
-                                                  TRAIN_PATH,
+        if self.config.getboolean('Training2Iters',
+                                  'train_2_iters') and iter_no == 2:
+            NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
+                'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
+            NEXT_ITER_DST_TRAIN_PATH = self.config.get(
+                'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
+            NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
+                                                'NEXT_ITER_DB_PATH')
+            train_ds = DomainTrainNextIterDataset(NEXT_ITER_SRC_TRAIN_PATH,
+                                                  NEXT_ITER_DST_TRAIN_PATH,
+                                                  NEXT_ITER_DB_PATH,
                                                   experts,
-                                                  first_k_val,
+                                                  first_k_next_iter,
                                                   iter_no=iter_no)
         else:
             TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
@@ -133,11 +135,6 @@ class Edge:
                                        iter_no=iter_no)
         VALID_PATH = self.config.get('Paths', 'VALID_PATH')
         VALID_PATTERNS = self.config.get('Paths', 'VALID_PATTERNS').split(",")
-
-        PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
-        EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
-                                                   'EXPERTS_OUTPUT_PATH_TEST')
-        TEST_PATH = self.config.get('Paths', 'TEST_PATH')
 
         valid_ds = Domain2DDataset(VALID_PATH,
                                    experts,
@@ -158,6 +155,34 @@ class Edge:
             # sampler=rnd_sampler,
             num_workers=n_workers)
 
+        if self.config.getboolean('Training2Iters',
+                                  'train_2_iters') and iter_no == 1:
+            NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
+                'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
+            NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
+                                                'NEXT_ITER_DB_PATH')
+            NEXT_ITER_TRAIN_PATTERNS = self.config.get(
+                'Training2Iters', 'NEXT_ITER_TRAIN_PATTERNS')
+            next_iter_ds = Domain2DDataset(os.path.join(
+                NEXT_ITER_SRC_TRAIN_PATH, NEXT_ITER_DB_PATH),
+                                           experts,
+                                           NEXT_ITER_TRAIN_PATTERNS,
+                                           first_k_next_iter,
+                                           iter_no=iter_no)
+            print("Next iter ds", len(next_iter_ds))
+            self.next_iter_loader = DataLoader(next_iter_ds,
+                                               batch_size=bs_test,
+                                               shuffle=False,
+                                               num_workers=n_workers)
+
+        else:
+            self.next_iter_loader = None
+            print("Next iter ds 0")
+
+        PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
+        EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
+                                                   'EXPERTS_OUTPUT_PATH_TEST')
+        TEST_PATH = self.config.get('Paths', 'TEST_PATH')
         test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
                                     EXPERTS_OUTPUT_PATH_TEST,
                                     TEST_PATH,
@@ -667,6 +692,7 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
                                                       edges_1hop_weights,
+                                                      edge.expert2.domain_name,
                                                       fct=ensemble_fct)
                 l1_expert += 100 * edge.l1(domain2_exp_gt, domain2_gt).item()
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
@@ -679,7 +705,7 @@ class Edge:
                                      wtag, edges_1hop_weights, ensemble_fct,
                                      config):
         with torch.no_grad():
-            crt_idx = 0
+            #crt_idx = 0
             num_batches = len(loaders[0])
             for idx_batch in tqdm(range(num_batches)):
                 domain2_1hop_ens_list = []
@@ -718,8 +744,9 @@ class Edge:
 
                 domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
                                                       edges_1hop_weights,
+                                                      edge.expert2.domain_name,
                                                       ensemble_fct)
-
+                '''
                 # Save output for second iteration
                 if config.getboolean('Training2Iters', 'train_2_iters'):
                     save_dir = "%s/%s" % (config.get(
@@ -732,18 +759,18 @@ class Edge:
                         np.save(save_path,
                                 domain2_1hop_ens[elem_idx].data.cpu().numpy())
                     crt_idx += domain2_1hop_ens.shape[0]
-
+                '''
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
                                                  domain2_exp_gt).item()
-
+            '''
             if config.getboolean('Training2Iters', 'train_2_iters'):
                 print("[Iter2] Supervision Saved to:", save_dir)
+            '''
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer, drop_version, edges_1hop_weights,
                            edges_1hop_test_weights, ensemble_fct, config):
-
         drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
         wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
                                              drop_str)
@@ -858,6 +885,66 @@ class Edge:
         print("")
         print("")
         return save_idxes, save_idxes_test
+
+    ######## Save 1hop ensembles ###############
+    def save_1hop_ensemble_next_iter_set(loaders, edges_1hop, device,
+                                         ensemble_fct, config):
+        with torch.no_grad():
+            crt_idx = 0
+            num_batches = len(loaders[0])
+            for idx_batch in tqdm(range(num_batches)):
+                domain2_1hop_ens_list = []
+                for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
+                    edge, loader = data_edge
+                    domain1, domain2_exp_gt = next(loader)
+
+                    assert domain1.shape[1] == edge.net.module.n_channels
+                    assert domain2_exp_gt.shape[1] == edge.net.module.n_classes
+
+                    domain1 = domain1.to(device=device, dtype=torch.float32)
+                    domain2_exp_gt = domain2_exp_gt.to(device=device,
+                                                       dtype=torch.float32)
+
+                    with torch.no_grad():
+                        # Ensemble1Hop: 1hop preds
+                        one_hop_pred = edge.net(domain1)
+                        domain2_1hop_ens_list.append(one_hop_pred.clone())
+
+                # with_expert
+                domain2_1hop_ens_list.append(domain2_exp_gt)
+                domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
+
+                domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
+                                                      [],
+                                                      edge.expert2.domain_name,
+                                                      ensemble_fct)
+
+                save_dir = "%s/%s" % (os.path.join(
+                    config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
+                    config.get('Training2Iters',
+                               'NEXT_ITER_DB_PATH')), edge.expert2.identifier)
+                for elem_idx in range(domain2_1hop_ens.shape[0]):
+                    save_path = "%s/%08d.npy" % (save_dir, crt_idx + elem_idx)
+                    np.save(save_path,
+                            domain2_1hop_ens[elem_idx].data.cpu().numpy())
+                crt_idx += domain2_1hop_ens.shape[0]
+
+            if config.getboolean('Training2Iters', 'train_2_iters'):
+                print("[Iter2] Supervision Saved to:", save_dir)
+
+    def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config):
+        next_iter_loaders = []
+        for edge in edges_1hop:
+            next_iter_loaders.append(iter(edge.next_iter_loader))
+
+        start = time.time()
+        Edge.save_1hop_ensemble_next_iter_set(next_iter_loaders, edges_1hop,
+                                              device, ensemble_fct, config)
+        end = time.time()
+        print("time for NEXT ITER SET Edge.save_1hop_ensemble_next_iter_set",
+              end - start)
+
+        return
 
     def ensemble_histogram(edges_loaders_1hop, end_id, device):
         with torch.no_grad():

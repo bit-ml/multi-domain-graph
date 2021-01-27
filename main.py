@@ -226,8 +226,10 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                                flush_secs=30)
     save_idxes = None
     save_idxes_test = None
-
+    add_rgb_src_in_ensemble = config.getboolean('Ensemble',
+                                                'add_rgb_src_in_ensemble')
     ensemble_fct = config.get('Ensemble', 'ensemble_fct')
+
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         tag = "Valid_1Hop_%s" % end_id
@@ -240,6 +242,8 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             if edge_xk.ill_posed:
                 continue
             if not edge_xk.trained:
+                continue
+            if not add_rgb_src_in_ensemble and edge_xk.expert1.domain_name == 'rgb':
                 continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
@@ -263,6 +267,35 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
                 drop_version, edges_1hop_weights, edges_1hop_test_weights,
                 ensemble_fct, config)
+
+    writer.close()
+
+
+def save_1hop_ensembles(space_graph, config):
+    writer = DummySummaryWriter()
+
+    add_rgb_src_in_ensemble = config.getboolean('Ensemble',
+                                                'add_rgb_src_in_ensemble')
+    ensemble_fct = config.get('Ensemble', 'ensemble_fct')
+
+    for expert in space_graph.experts.methods:
+        end_id = expert.identifier
+        edges_1hop = []
+
+        # 1. Select edges that ends in end_id
+        for edge_xk in space_graph.edges:
+            if edge_xk.ill_posed:
+                continue
+            if not edge_xk.trained:
+                continue
+            if not add_rgb_src_in_ensemble and edge_xk.expert1.domain_name == 'rgb':
+                continue
+            if edge_xk.expert2.identifier == end_id:
+                edges_1hop.append(edge_xk)
+
+        # 2. Eval each ensemble
+        if len(edges_1hop) > 0:
+            Edge.save_1hop_ensemble(edges_1hop, device, ensemble_fct, config)
 
     writer.close()
 
@@ -386,6 +419,8 @@ def main(argv):
     config.read(argv[1])
     config.set('Run id', 'datetime', str(datetime.now()))
 
+    print(config.get('Run id', 'datetime'))
+
     silent = config.getboolean('Logs', 'silent')
     n_epochs = config.getint('Edge Models', 'n_epochs')
     start_epoch = config.getint('Edge Models', 'start_epoch')
@@ -420,26 +455,26 @@ def main(argv):
         use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
         all_experts = Experts(full_experts=False,
                               use_rgb_to_tsk=use_rgb_to_tsk)
+        next_iter_path = os.path.join(
+            config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
+            config.get('Training2Iters', 'NEXT_ITER_DB_PATH'))
         for expert in all_experts.methods:
-            save_to_dir = "%s/%s" % (config.get(
-                'Training2Iters', 'save_next_iter_dir'), expert.identifier)
+            save_to_dir = "%s/%s" % (next_iter_path, expert.identifier)
             os.makedirs(save_to_dir, exist_ok=True)
-
         # 00. Build graph
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
                                   iter_no=1)
+
         load_2Dtasks(graph, epoch=start_epoch)
 
         # ; 1. Run eval on trainingset2 + save outputs
-        eval_1hop_ensembles(graph,
-                            drop_version=-1,
-                            silent=silent,
-                            config=config)
+        save_1hop_ensembles(graph, config=config)
 
         # ; 2. Train on trainset2 using previously saved outputs
         # 00. Build graph
+
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
@@ -456,6 +491,7 @@ def main(argv):
                             drop_version=-1,
                             silent=silent,
                             config=config)
+
         return
 
     # 2. Build graph
@@ -466,7 +502,6 @@ def main(argv):
 
     # # Per pixel histograms, inside an ensemble
     # plot_per_pixel_ensembles(graph, silent=silent, config=config)
-
     # drop_version passed as -1 -> no drop
     print("Eval 1Hop ensembles before drop")
     eval_1hop_ensembles(graph, drop_version=-1, silent=silent, config=config)

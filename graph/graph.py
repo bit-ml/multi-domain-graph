@@ -30,6 +30,7 @@ class MultiDomainGraph:
                             expert_i.identifier, expert_j.identifier
                     ]:
                         continue
+
                     # # # TO REMOVE
                     # if expert_j.identifier not in [
                     #         # "depth_xtc",
@@ -39,6 +40,11 @@ class MultiDomainGraph:
                     # ]:
                     #     continue
 
+                    if config.getboolean(
+                            'Ensemble', 'restr_dst_domain') and not config.get(
+                                'Ensemble',
+                                'dst_domain_restr') == expert_j.domain_name:
+                        continue
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,

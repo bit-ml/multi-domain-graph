@@ -148,6 +148,10 @@ class DomainTestDataset(Dataset):
             self.d2_gt_output_path) if first_k == -1 else first_k]
 
         # check data
+        #if not (len(self.e1_output_path) == len(self.e2_output_path) == len(
+        #        self.d2_gt_output_path)):
+        #    self.available = False
+
         assert (len(self.e1_output_path) == len(self.e2_output_path) == len(
             self.d2_gt_output_path))
 
@@ -167,19 +171,21 @@ class DomainTestDataset(Dataset):
 
 
 class DomainTrainNextIterDataset(Dataset):
-    def __init__(self, preproc_gt_path, experts_path, dataset_path, experts,
+    def __init__(self, experts_path, ensembles_path, dataset_path, experts,
                  first_k, iter_no):
         super(DomainTrainNextIterDataset, self).__init__()
         self.experts = experts
         tag = pathlib.Path(dataset_path).parts[-1]
         available_experts = os.listdir(os.path.join(experts_path,
                                                     dataset_path))
-        available_gts = os.listdir(os.path.join(preproc_gt_path, dataset_path))
+        available_ensembles = os.listdir(
+            os.path.join(ensembles_path, dataset_path))
+
         self.available = False
 
         if self.experts[0].identifier in available_experts and \
             self.experts[1].identifier in available_experts and \
-            self.experts[1].identifier in available_gts:
+            self.experts[1].identifier in available_ensembles:
             self.available = True
         else:
             return
@@ -198,28 +204,28 @@ class DomainTrainNextIterDataset(Dataset):
                                                   -1 else first_k]
 
         # get data for domain of dst expert
-        cache_d2_gt = "%s/%s_test_%s_gt_iter%d.npy" % (
+        cache_ens2 = "%s/%s_test_%s_ens_iter%d.npy" % (
             CACHE_NAME, tag, self.experts[1].domain_name, iter_no)
 
-        glob_path_d2_gt = "%s/%s/%s/%s.npy" % (
-            preproc_gt_path, dataset_path, self.experts[1].identifier, pattern)
-        self.d2_gt_output_path = load_glob_with_cache(cache_d2_gt,
-                                                      glob_path_d2_gt)
-        # print("\tCache file", cache_d2_gt)
+        glob_path_ens2 = "%s/%s/%s/%s.npy" % (
+            ensembles_path, dataset_path, self.experts[1].identifier, pattern)
+        self.ens2_output_path = load_glob_with_cache(cache_ens2,
+                                                     glob_path_ens2)
+        # print("\tCache file", cache_ens2)
 
-        self.d2_gt_output_path = self.d2_gt_output_path[:len(
-            self.d2_gt_output_path) if first_k == -1 else first_k]
+        self.ens2_output_path = self.ens2_output_path[:len(
+            self.ens2_output_path) if first_k == -1 else first_k]
 
         # check data
-        assert (len(self.e1_output_path) == len(self.d2_gt_output_path))
+        assert (len(self.e1_output_path) == len(self.ens2_output_path))
 
     def __getitem__(self, index):
         if self.available == False:
             return None, None
         oe1 = np.load(self.e1_output_path[index])
-        d2_gt = np.load(self.d2_gt_output_path[index])
+        ens2 = np.load(self.ens2_output_path[index])
 
-        return oe1, d2_gt
+        return oe1, ens2
 
     def __len__(self):
         if self.available == False:

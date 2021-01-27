@@ -587,7 +587,10 @@ def mean_mode_histo(multi_chan_maps):
     return result
 
 
-def combine_maps(multi_chan_maps, edges_weights, fct="median"):
+def combine_maps(multi_chan_maps,
+                 edges_weights,
+                 dst_domain_name,
+                 fct="median"):
     '''
         input list shape: (arr_m1, arr_m2, arr_m3, ...)
         result shape: (arr_all)
@@ -619,6 +622,13 @@ def combine_maps(multi_chan_maps, edges_weights, fct="median"):
     if fct == "ssim_maps_twd_exp_median_faster":
         return combine_maps_ssim_twd_expert(multi_chan_maps,
                                             combine="median_faster")
+    if fct == "ssim_maps_twd_exp_mixed":
+        if dst_domain_name == 'edges':
+            return combine_maps_ssim_twd_expert(multi_chan_maps,
+                                                combine="mean")
+        else:
+            return combine_maps_ssim_twd_expert(multi_chan_maps,
+                                                combine="median_faster")
     if fct == "ssim_maps_btw_tasks_mean":
         return combine_maps_ssim_btw_tasks(multi_chan_maps, combine="mean")
     if fct == "ssim_maps_btw_tasks_median_w":
