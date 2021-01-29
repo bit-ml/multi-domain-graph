@@ -16,7 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
-from utils.utils import img_for_plot
+from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed, img_for_plot
 
 
 class Edge:
@@ -25,6 +25,9 @@ class Edge:
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
+
+        self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
+        self.ensemble_filter = self.net = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=100 * torch.cuda.device_count(),
@@ -35,23 +38,33 @@ class Edge:
                           valid_shuffle=valid_shuffle,
                           iter_no=iter_no)
 
-        self.lr = 5e-2
-        self.optimizer = optim.SGD(self.net.parameters(),
-                                   lr=self.lr,
-                                   weight_decay=1e-2,
-                                   nesterov=True,
-                                   momentum=0.9)
+        learning_rate = config.getfloat('Training', 'learning_rate')
+        optimizer_type = config.get('Training', 'optimizer')
+        weight_decay = config.getfloat('Training', 'weight_decay')
+        reduce_lr_patience = config.getfloat('Training', 'reduce_lr_patience')
+        reduce_lr_factor = config.getfloat('Training', 'reduce_lr_factor')
+        reduce_lr_threshold = config.getfloat('Training',
+                                              'reduce_lr_threshold')
+        reduce_lr_min_lr = config.getfloat('Training', 'reduce_lr_min_lr')
+        momentum = config.getfloat('Training', 'momentum')
 
-        # self.lr = 1e-1
-        # self.optimizer = optim.Adam(self.net.parameters(),
-        #                             lr=self.lr,
-        #                             weight_decay=1e-8)
-
+        self.lr = learning_rate
+        if optimizer_type == 'sgd':
+            self.optimizer = optim.SGD(self.net.parameters(),
+                                       lr=self.lr,
+                                       weight_decay=weight_decay,
+                                       nesterov=True,
+                                       momentum=momentum)
+        else:
+            self.optimizer = optim.Adam(self.net.parameters(),
+                                        lr=self.lr,
+                                        weight_decay=weight_decay)
         self.scheduler = ReduceLROnPlateau(self.optimizer,
-                                           patience=5,
-                                           factor=0.1,
-                                           threshold=0.03,
-                                           min_lr=1e-5)
+                                           patience=reduce_lr_patience,
+                                           factor=reduce_lr_factor,
+                                           threshold=reduce_lr_threshold,
+                                           min_lr=reduce_lr_min_lr)
+
         # print("optimizer", self.optimizer)
         self.l2 = nn.MSELoss()
         self.l1 = nn.L1Loss()
@@ -104,45 +117,45 @@ class Edge:
         print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
               (total_params, trainable_params))
 
-    def init_loaders(self, bs, bs_test, n_workers, config, rnd_sampler,
-                     valid_shuffle, iter_no):
-        first_k_train = config.getint('FirstK', 'first_k_train')
-        first_k_val = config.getint('FirstK', 'first_k_val')
-        first_k_test = config.getint('FirstK', 'first_k_test')
-        first_k_next_iter = config.getint('FirstK', 'first_k_next_iter')
-
+    def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle,
+                     iter_no):
         experts = [self.expert1, self.expert2]
 
         if self.config.getboolean('Training2Iters',
                                   'train_2_iters') and iter_no == 2:
             NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
                 'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
+            #NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
+            #    'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
             NEXT_ITER_DST_TRAIN_PATH = self.config.get(
                 'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
             NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
                                                 'NEXT_ITER_DB_PATH')
+            FIRST_K_NEXT_ITER = self.config.getint('Training2Iters',
+                                                   'FIRST_K_NEXT_ITER')
             train_ds = DomainTrainNextIterDataset(NEXT_ITER_SRC_TRAIN_PATH,
                                                   NEXT_ITER_DST_TRAIN_PATH,
                                                   NEXT_ITER_DB_PATH,
                                                   experts,
-                                                  first_k_next_iter,
+                                                  FIRST_K_NEXT_ITER,
                                                   iter_no=iter_no)
         else:
+            FIRST_K_TRAIN = self.config.getint('Paths', 'FIRST_K_TRAIN')
             TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
             TRAIN_PATTERNS = self.config.get('Paths',
                                              'TRAIN_PATTERNS').split(",")
             train_ds = Domain2DDataset(TRAIN_PATH,
                                        experts,
                                        TRAIN_PATTERNS,
-                                       first_k_train,
+                                       FIRST_K_TRAIN,
                                        iter_no=iter_no)
         VALID_PATH = self.config.get('Paths', 'VALID_PATH')
         VALID_PATTERNS = self.config.get('Paths', 'VALID_PATTERNS').split(",")
-
+        FIRST_K_VAL = self.config.getint('Paths', 'FIRST_K_VAL')
         valid_ds = Domain2DDataset(VALID_PATH,
                                    experts,
                                    VALID_PATTERNS,
-                                   first_k_val,
+                                   FIRST_K_VAL,
                                    iter_no=iter_no)
         print("\tTrain ds", len(train_ds), "==========")
         print("\tValid ds", len(valid_ds), "==========")
@@ -166,11 +179,13 @@ class Edge:
                                                 'NEXT_ITER_DB_PATH')
             NEXT_ITER_TRAIN_PATTERNS = self.config.get(
                 'Training2Iters', 'NEXT_ITER_TRAIN_PATTERNS')
+            FIRST_K_NEXT_ITER = self.config.getint('Training2Iters',
+                                                   'FIRST_K_NEXT_ITER')
             next_iter_ds = Domain2DDataset(os.path.join(
                 NEXT_ITER_SRC_TRAIN_PATH, NEXT_ITER_DB_PATH),
                                            experts,
                                            NEXT_ITER_TRAIN_PATTERNS,
-                                           first_k_next_iter,
+                                           FIRST_K_NEXT_ITER,
                                            iter_no=iter_no)
             print("\tNext iter ds", len(next_iter_ds))
             self.next_iter_loader = DataLoader(next_iter_ds,
@@ -186,11 +201,12 @@ class Edge:
         EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
                                                    'EXPERTS_OUTPUT_PATH_TEST')
         TEST_PATH = self.config.get('Paths', 'TEST_PATH')
+        FIRST_K_TEST = self.config.getint('Paths', 'FIRST_K_TEST')
         test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
                                     EXPERTS_OUTPUT_PATH_TEST,
                                     TEST_PATH,
                                     experts,
-                                    first_k_test,
+                                    FIRST_K_TEST,
                                     iter_no=1)
         print("\tTest ds", len(test_ds), "==========")
 
@@ -329,6 +345,7 @@ class Edge:
     def train(self, start_epoch, n_epochs, device, writer, eval_test):
         self.global_step = start_epoch
         wtag = '%s_%s' % (self.expert1.identifier, self.expert2.identifier)
+        epoch = 0
         for epoch in range(n_epochs):
             # 1. Train
             train_l2_loss, train_l1_loss = self.train_step(
@@ -693,10 +710,15 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
 
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
-                domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
-                                                      edges_1hop_weights,
-                                                      edge.expert2.domain_name,
-                                                      fct=ensemble_fct)
+                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
+                    domain2_1hop_ens = edge.ensemble_filter(
+                        domain2_1hop_ens_list, edge.expert2.domain_name)
+                else:
+                    domain2_1hop_ens = utils.combine_maps(
+                        domain2_1hop_ens_list,
+                        edges_1hop_weights,
+                        edge.expert2.domain_name,
+                        fct=ensemble_fct)
                 l1_expert += 100 * edge.l1(domain2_exp_gt, domain2_gt).item()
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
                                                  domain2_gt).item()
@@ -745,10 +767,13 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
-                                                      edges_1hop_weights,
-                                                      edge.expert2.domain_name,
-                                                      ensemble_fct)
+                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
+                    domain2_1hop_ens = edge.ensemble_filter(
+                        domain2_1hop_ens_list, edge.expert2.domain_name)
+                else:
+                    domain2_1hop_ens = utils.combine_maps(
+                        domain2_1hop_ens_list, edges_1hop_weights,
+                        edge.expert2.domain_name, ensemble_fct)
                 '''
                 # Save output for second iteration
                 if config.getboolean('Training2Iters', 'train_2_iters'):
@@ -913,10 +938,13 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                domain2_1hop_ens = utils.combine_maps(domain2_1hop_ens_list,
-                                                      [],
-                                                      edge.expert2.domain_name,
-                                                      ensemble_fct)
+                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
+                    domain2_1hop_ens = edge.ensemble_filter(
+                        domain2_1hop_ens_list, edge.expert2.domain_name)
+                else:
+                    domain2_1hop_ens = utils.combine_maps(
+                        domain2_1hop_ens_list, [], edge.expert2.domain_name,
+                        ensemble_fct)
 
                 save_dir = "%s/%s" % (os.path.join(
                     config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
