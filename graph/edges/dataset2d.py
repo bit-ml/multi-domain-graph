@@ -222,8 +222,11 @@ class DomainTrainNextIterDataset(Dataset):
     def __getitem__(self, index):
         if self.available == False:
             return None, None
-        oe1 = np.load(self.e1_output_path[index])
-        ens2 = np.load(self.ens2_output_path[index])
+        try:
+            oe1 = np.load(self.e1_output_path[index])
+            ens2 = np.load(self.ens2_output_path[index])
+        except:
+            print("Nu am gasit", self.e1_output_path[index], "sau", self.ens2_output_path[index])
 
         return oe1, ens2
 

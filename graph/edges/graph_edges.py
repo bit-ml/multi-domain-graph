@@ -21,15 +21,15 @@ from utils.utils import img_for_plot
 
 class Edge:
     def __init__(self, config, expert1, expert2, device, rnd_sampler, silent,
-                 valid_shuffle, iter_no):
+                 valid_shuffle, iter_no, bs_test):
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=100 * torch.cuda.device_count(),
-                          bs_test=200 * torch.cuda.device_count(),
-                          n_workers=8,
+                          bs_test=bs_test * torch.cuda.device_count(),
+                          n_workers=10,
                           config=config,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle,
@@ -41,15 +41,17 @@ class Edge:
                                    weight_decay=1e-2,
                                    nesterov=True,
                                    momentum=0.9)
+
         # self.lr = 1e-1
         # self.optimizer = optim.Adam(self.net.parameters(),
         #                             lr=self.lr,
         #                             weight_decay=1e-8)
+
         self.scheduler = ReduceLROnPlateau(self.optimizer,
                                            patience=5,
                                            factor=0.1,
                                            threshold=0.03,
-                                           min_lr=1e-3)
+                                           min_lr=1e-5)
         # print("optimizer", self.optimizer)
         self.l2 = nn.MSELoss()
         self.l1 = nn.L1Loss()
@@ -600,10 +602,10 @@ class Edge:
         print(
             "%25s-------------------------------------------------------------------------------------"
             % (" "))
-        print("Loss %-20s %30.2f   %30.2f" %
-              ("average", mean_l1_per_edge, mean_l1_per_edge_test))
+        # print("Loss %-20s %30.2f   %30.2f" %
+        #       ("average", mean_l1_per_edge, mean_l1_per_edge_test))
 
-        print("")
+        # print("")
         print("")
         csv_path = os.path.join(
             csv_results_path, 'to__%s__valid_%s_test_%s_epoch_%s.csv' %

@@ -45,6 +45,11 @@ class MultiDomainGraph:
                                 'Ensemble',
                                 'dst_domain_restr') == expert_j.domain_name:
                         continue
+                    if expert_j.domain_name in ["normals", "rgb"]:
+                        # because it has 3 channels
+                        bs_test = 100
+                    else:
+                        bs_test = 200
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,
@@ -52,7 +57,8 @@ class MultiDomainGraph:
                                     rnd_sampler,
                                     silent,
                                     valid_shuffle,
-                                    iter_no=iter_no)
+                                    iter_no=iter_no,
+                                    bs_test=bs_test)
                     self.edges.append(new_edge)
                     print("Add edge", str(new_edge))
             # # TO REMOVE

@@ -53,13 +53,43 @@
             ]
         },
         {
-            "name": "Config Mixt Tiny-Test Edges",
+            "name": "to EDGES - Iter2",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
                 "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_edges.ini"
+            ]
+        },
+        {
+            "name": "to NORMALS - Iter2",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_normals.ini"
+            ]
+        },
+        {
+            "name": "to DEPTH - Iter2",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_depth.ini"
+            ]
+        },
+        {
+            "name": "to RGB - Iter2",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_rgb.ini"
             ]
         },
         {

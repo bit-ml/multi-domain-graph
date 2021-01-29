@@ -18,3 +18,4 @@ csv_results*/results_*.csv
 notebooks/*
 nohup*.out
 csv_results_elena/*.csv
+logs_*.out
