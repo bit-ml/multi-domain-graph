@@ -134,13 +134,8 @@ class Edge:
         print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
               (total_params, trainable_params))
 
-    def init_loaders(self, bs, bs_test, n_workers, config, rnd_sampler,
-                     valid_shuffle, iter_no):
-        first_k_train = config.getint('FirstK', 'first_k_train')
-        first_k_val = config.getint('FirstK', 'first_k_val')
-        first_k_test = config.getint('FirstK', 'first_k_test')
-        first_k_next_iter = config.getint('FirstK', 'first_k_next_iter')
-
+    def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle,
+                     iter_no):
         experts = [self.expert1, self.expert2]
 
         if self.config.getboolean('Training2Iters',
