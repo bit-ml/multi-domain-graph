@@ -17,6 +17,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed, img_for_plot
+from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized
+from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th
 
 
 class Edge:
@@ -26,7 +28,15 @@ class Edge:
         self.config = config
         self.silent = silent
 
-        self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
+        ensemble_fct = config.get('Ensemble', 'ensemble_fct')
+        if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized':
+            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized(
+                0.5)
+        elif ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized_th':
+            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th(
+                0.5)
+        else:
+            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
@@ -745,7 +755,7 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
 
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
-                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
+                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn' or ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized' or ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized_th':
                     domain2_1hop_ens = edge.ensemble_filter(
                         domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
                         edge.expert2.domain_name)
@@ -803,7 +813,7 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
+                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn' or ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized' or ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized_th':
                     domain2_1hop_ens = edge.ensemble_filter(
                         domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
                         edge.expert2.domain_name)
@@ -975,7 +985,7 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
+                if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn' or ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized' or ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized_th':
                     domain2_1hop_ens = edge.ensemble_filter(
                         domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
                         edge.expert2.domain_name)
