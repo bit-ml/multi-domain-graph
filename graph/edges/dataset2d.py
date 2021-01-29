@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-CACHE_NAME = "my_cache"
+CACHE_NAME = "my_cache_28"
 W, H = 256, 256
 
 
@@ -96,6 +96,7 @@ class DomainTestDataset(Dataset):
                  first_k, iter_no):
         super(DomainTestDataset, self).__init__()
         self.experts = experts
+
         tag = pathlib.Path(dataset_path).parts[-1]
         available_experts = os.listdir(os.path.join(experts_path,
                                                     dataset_path))
@@ -104,7 +105,7 @@ class DomainTestDataset(Dataset):
 
         if self.experts[0].identifier in available_experts and \
             self.experts[1].identifier in available_experts and \
-            self.experts[1].domain_name in available_gts:
+            (self.experts[1].domain_name in available_gts or self.experts[1].identifier in available_gts):
             self.available = True
         else:
             return
@@ -134,9 +135,14 @@ class DomainTestDataset(Dataset):
         cache_d2_gt = "%s/%s_test_%s_gt_iter%d.npy" % (
             CACHE_NAME, tag, self.experts[1].domain_name, iter_no)
 
-        glob_path_d2_gt = "%s/%s/%s/%s.npy" % (preproc_gt_path, dataset_path,
-                                               self.experts[1].domain_name,
-                                               pattern)
+        if self.experts[1].domain_name in available_gts:
+            glob_path_d2_gt = "%s/%s/%s/%s.npy" % (
+                preproc_gt_path, dataset_path, self.experts[1].domain_name,
+                pattern)
+        elif self.experts[1].identifier in available_gts:
+            glob_path_d2_gt = "%s/%s/%s/%s.npy" % (
+                preproc_gt_path, dataset_path, self.experts[1].identifier,
+                pattern)
         self.d2_gt_output_path = load_glob_with_cache(cache_d2_gt,
                                                       glob_path_d2_gt)
         self.d2_gt_output_path = self.d2_gt_output_path[:len(
