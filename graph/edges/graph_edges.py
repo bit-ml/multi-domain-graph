@@ -34,7 +34,6 @@ class Edge:
         self.init_loaders(bs=100 * torch.cuda.device_count(),
                           bs_test=200 * torch.cuda.device_count(),
                           n_workers=8,
-                          config=config,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle,
                           iter_no=iter_no)
@@ -142,6 +141,8 @@ class Edge:
                                   'train_2_iters') and iter_no == 2:
             NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
                 'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
+            #NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
+            #    'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
             NEXT_ITER_DST_TRAIN_PATH = self.config.get(
                 'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
             NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
