@@ -721,15 +721,13 @@ class EnsembleFilter_TwdExpert_SSIM_Mixed(torch.nn.Module):
 
     def forward_mean(self, data, for_mask_data):
         data = data * for_mask_data
-        ensemble_res = torch.mean(data, 0)
+        ensemble_res = torch.mean(data, 4)
         return ensemble_res
 
     def forward_median(self, data, for_mask_data):
         mask = for_mask_data < self.threshold
-
         # mask - indicates values to be ignored
         bs, n_chs, h, w, n_exps = data.shape
-        print(data.shape)
 
         data = data.view(bs * n_chs * h * w, n_exps)
         mask = mask.view(bs * n_chs * h * w, n_exps)
@@ -751,24 +749,24 @@ class EnsembleFilter_TwdExpert_SSIM_Mixed(torch.nn.Module):
         data = data.contiguous().view(n_exps * bs * n_chs * h * w)
         ensemble_res = (data[s_idx].view(bs, n_chs, h, w) +
                         data[s_idx_].view(bs, n_chs, h, w)) * 0.5
+        #torch.nan_to_num(ensemble_res)
         ensemble_res[ensemble_res != ensemble_res] = 0
         return ensemble_res
 
     def twd_expert_distances(self, data):
-        n_tasks = data.shape[0]
+        bs, n_chs, h, w, n_tasks = data.shape
         win_size = 11
         sigma = win_size / 7
-        g_filter = get_gaussian_filter(n_channels=data.shape[2],
+        g_filter = get_gaussian_filter(n_channels=n_chs,
                                        win_size=win_size,
                                        sigma=sigma).cuda()
         g_filter = g_filter / torch.sum(g_filter)
-
         ssim_maps = []
         for i in range(n_tasks):
-            ssim_map = get_ssim_score(data[-1],
-                                      data[i],
+            ssim_map = get_ssim_score(data[:, :, :, :, -1],
+                                      data[:, :, :, :, i],
                                       g_filter,
-                                      data.shape[2],
+                                      n_chs,
                                       win_size,
                                       reduction=False)
             ssim_maps.append(ssim_map)
@@ -780,8 +778,8 @@ class EnsembleFilter_TwdExpert_SSIM_Mixed(torch.nn.Module):
 
     def forward(self, data, dst_domain_name):
         for_mask_data = self.twd_expert_distances(data)
+        for_mask_data = for_mask_data.permute(1, 2, 3, 4, 0)
         if dst_domain_name == 'edges':
             return self.forward_mean(data, for_mask_data)
         else:
-            return self.forward_median(data.permute(1, 2, 3, 4, 0),
-                                       for_mask_data.permute(1, 2, 3, 4, 0))
+            return self.forward_median(data, for_mask_data)

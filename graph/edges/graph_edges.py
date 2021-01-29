@@ -27,13 +27,12 @@ class Edge:
         self.silent = silent
 
         self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
-        self.ensemble_filter = self.net = nn.DataParallel(self.ensemble_filter)
+        self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=100 * torch.cuda.device_count(),
                           bs_test=bs_test * torch.cuda.device_count(),
                           n_workers=10,
-                          config=config,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle,
                           iter_no=iter_no)
@@ -117,16 +116,26 @@ class Edge:
         print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
               (total_params, trainable_params))
 
+    def copy_model(self, device):
+        self.prev_net = UNetGood(n_channels=self.expert1.n_maps,
+                                 n_classes=self.expert2.n_maps,
+                                 bilinear=True).to(device)
+        self.prev_net = nn.DataParallel(self.prev_net)
+        self.prev_net.load_state_dict(self.net.state_dict())
+
     def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle,
                      iter_no):
         experts = [self.expert1, self.expert2]
-
+        iter_2_src_data = self.config.getint('Training2Iters',
+                                             'iter_2_src_data')
         if self.config.getboolean('Training2Iters',
                                   'train_2_iters') and iter_no == 2:
-            NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
-                'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
-            #NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
-            #    'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
+            if iter_2_src_data == 1:
+                NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
+                    'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
+            elif iter_2_src_data == 2:
+                NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
+                    'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
             NEXT_ITER_DST_TRAIN_PATH = self.config.get(
                 'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
             NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
@@ -192,14 +201,40 @@ class Edge:
                                                batch_size=bs_test,
                                                shuffle=False,
                                                num_workers=n_workers)
-
         else:
             self.next_iter_loader = None
             print("\tNext iter ds 0")
+        if self.config.getboolean(
+                'Training2Iters',
+                'train_2_iters') and iter_no == 1 and iter_2_src_data == 2:
+            EXPERTS_OUTPUT_PATH_TEST = self.config.get(
+                'Paths', 'EXPERTS_OUTPUT_PATH_TEST')
+            TEST_PATH = self.config.get('Paths', 'TEST_PATH')
+            TEST_PATTERNS = self.config.get('Paths', 'TEST_PATTERNS')
+            FIRST_K_TEST = self.config.getint('Paths', 'FIRST_K_TEST')
+            test_no_gt_ds = Domain2DDataset(os.path.join(
+                EXPERTS_OUTPUT_PATH_TEST, TEST_PATH),
+                                            experts,
+                                            TEST_PATTERNS,
+                                            FIRST_K_TEST,
+                                            iter_no=iter_no)
+            print("\tTest no gt ds", len(test_no_gt_ds))
+            self.test_no_gt_loader = DataLoader(test_no_gt_ds,
+                                                batch_size=bs_test,
+                                                shuffle=False,
+                                                num_workers=n_workers)
+        else:
+            self.test_no_gt_loader = None
+            print("\tTest no gt ds 0")
 
         PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
-        EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
-                                                   'EXPERTS_OUTPUT_PATH_TEST')
+        if self.config.getboolean('Training2Iters',
+                                  'train_2_iters') and iter_no == 2:
+            EXPERTS_OUTPUT_PATH_TEST = self.config.get(
+                'Training2Iters', 'ENSEMBLE_OUTPUT_PATH_TEST')
+        else:
+            EXPERTS_OUTPUT_PATH_TEST = self.config.get(
+                'Paths', 'EXPERTS_OUTPUT_PATH_TEST')
         TEST_PATH = self.config.get('Paths', 'TEST_PATH')
         FIRST_K_TEST = self.config.getint('Paths', 'FIRST_K_TEST')
         test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
@@ -712,7 +747,8 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
                 if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
                     domain2_1hop_ens = edge.ensemble_filter(
-                        domain2_1hop_ens_list, edge.expert2.domain_name)
+                        domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
+                        edge.expert2.domain_name)
                 else:
                     domain2_1hop_ens = utils.combine_maps(
                         domain2_1hop_ens_list,
@@ -769,7 +805,8 @@ class Edge:
 
                 if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
                     domain2_1hop_ens = edge.ensemble_filter(
-                        domain2_1hop_ens_list, edge.expert2.domain_name)
+                        domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
+                        edge.expert2.domain_name)
                 else:
                     domain2_1hop_ens = utils.combine_maps(
                         domain2_1hop_ens_list, edges_1hop_weights,
@@ -912,7 +949,7 @@ class Edge:
 
     ######## Save 1hop ensembles ###############
     def save_1hop_ensemble_next_iter_set(loaders, edges_1hop, device,
-                                         ensemble_fct, config):
+                                         ensemble_fct, config, save_dir):
         with torch.no_grad():
             crt_idx = 0
             num_batches = len(loaders[0])
@@ -940,37 +977,53 @@ class Edge:
 
                 if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
                     domain2_1hop_ens = edge.ensemble_filter(
-                        domain2_1hop_ens_list, edge.expert2.domain_name)
+                        domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
+                        edge.expert2.domain_name)
                 else:
                     domain2_1hop_ens = utils.combine_maps(
                         domain2_1hop_ens_list, [], edge.expert2.domain_name,
                         ensemble_fct)
 
-                save_dir = "%s/%s" % (os.path.join(
-                    config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
-                    config.get('Training2Iters',
-                               'NEXT_ITER_DB_PATH')), edge.expert2.identifier)
+                save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
                 for elem_idx in range(domain2_1hop_ens.shape[0]):
-                    save_path = "%s/%08d.npy" % (save_dir, crt_idx + elem_idx)
+                    save_path = "%s/%08d.npy" % (save_dir_, crt_idx + elem_idx)
                     np.save(save_path,
                             domain2_1hop_ens[elem_idx].data.cpu().numpy())
                 crt_idx += domain2_1hop_ens.shape[0]
 
             if num_batches > 0 and config.getboolean('Training2Iters',
                                                      'train_2_iters'):
-                print("[Iter2] Supervision Saved to:", save_dir)
+                print("[Iter2] Supervision Saved to:", save_dir_)
 
     def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config):
         next_iter_loaders = []
+        test_no_gt_loaders = []
         for edge in edges_1hop:
             next_iter_loaders.append(iter(edge.next_iter_loader))
+            test_no_gt_loaders.append(iter(edge.test_no_gt_loader))
 
         start = time.time()
+        save_dir = os.path.join(
+            config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
+            config.get('Training2Iters', 'NEXT_ITER_DB_PATH'))
         Edge.save_1hop_ensemble_next_iter_set(next_iter_loaders, edges_1hop,
-                                              device, ensemble_fct, config)
+                                              device, ensemble_fct, config,
+                                              save_dir)
         end = time.time()
         print("time for NEXT ITER SET Edge.save_1hop_ensemble_next_iter_set",
               end - start)
+        if config.getint('Training2Iters', 'iter_2_src_data') == 2:
+            start = time.time()
+            save_dir = os.path.join(
+                config.get('Training2Iters', 'ENSEMBLE_OUTPUT_PATH_TEST'),
+                config.get('Paths', 'TEST_PATH'))
+            Edge.save_1hop_ensemble_next_iter_set(test_no_gt_loaders,
+                                                  edges_1hop, device,
+                                                  ensemble_fct, config,
+                                                  save_dir)
+            end = time.time()
+            print("time for TEST SET Edge.save_1hop_ensemble_next_iter_set",
+                  end - start)
 
         return
 
