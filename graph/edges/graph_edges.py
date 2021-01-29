@@ -18,12 +18,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 from utils.utils import img_for_plot
-'''
-first_k_train = -1
-first_k_val = -1
-first_k_test = -1
-first_k_next_iter = -1
-'''
 
 
 class Edge:
@@ -37,13 +31,13 @@ class Edge:
         self.ensemble_filter = self.net = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
-        self.init_loaders(
-            bs=100 * torch.cuda.device_count(),
-            bs_test=100,  # * torch.cuda.device_count(),
-            n_workers=8,
-            rnd_sampler=rnd_sampler,
-            valid_shuffle=valid_shuffle,
-            iter_no=iter_no)
+        self.init_loaders(bs=100 * torch.cuda.device_count(),
+                          bs_test=200 * torch.cuda.device_count(),
+                          n_workers=8,
+                          config=config,
+                          rnd_sampler=rnd_sampler,
+                          valid_shuffle=valid_shuffle,
+                          iter_no=iter_no)
 
         learning_rate = config.getfloat('Training', 'learning_rate')
         optimizer_type = config.get('Training', 'optimizer')
@@ -75,7 +69,7 @@ class Edge:
         self.lr = 5e-2
         self.optimizer = optim.SGD(self.net.parameters(),
                                    lr=self.lr,
-                                   weight_decay=1e-8,
+                                   weight_decay=1e-2,
                                    nesterov=True,
                                    momentum=0.9)
         # self.lr = 1e-1
@@ -137,11 +131,16 @@ class Edge:
         self.net = nn.DataParallel(self.net)
         total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
         trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        print("Number of parameters %.2fM (Trainable %.2fM)" %
+        print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
               (total_params, trainable_params))
 
-    def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle,
-                     iter_no):
+    def init_loaders(self, bs, bs_test, n_workers, config, rnd_sampler,
+                     valid_shuffle, iter_no):
+        first_k_train = config.getint('FirstK', 'first_k_train')
+        first_k_val = config.getint('FirstK', 'first_k_val')
+        first_k_test = config.getint('FirstK', 'first_k_test')
+        first_k_next_iter = config.getint('FirstK', 'first_k_next_iter')
+
         experts = [self.expert1, self.expert2]
 
         if self.config.getboolean('Training2Iters',
@@ -178,8 +177,8 @@ class Edge:
                                    VALID_PATTERNS,
                                    FIRST_K_VAL,
                                    iter_no=iter_no)
-        print("Train ds", len(train_ds))
-        print("Valid ds", len(valid_ds))
+        print("\tTrain ds", len(train_ds), "==========")
+        print("\tValid ds", len(valid_ds), "==========")
 
         self.train_loader = DataLoader(train_ds,
                                        batch_size=bs,
@@ -208,7 +207,7 @@ class Edge:
                                            NEXT_ITER_TRAIN_PATTERNS,
                                            FIRST_K_NEXT_ITER,
                                            iter_no=iter_no)
-            print("Next iter ds", len(next_iter_ds))
+            print("\tNext iter ds", len(next_iter_ds))
             self.next_iter_loader = DataLoader(next_iter_ds,
                                                batch_size=bs_test,
                                                shuffle=False,
@@ -216,7 +215,7 @@ class Edge:
 
         else:
             self.next_iter_loader = None
-            print("Next iter ds 0")
+            print("\tNext iter ds 0")
 
         PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
         EXPERTS_OUTPUT_PATH_TEST = self.config.get('Paths',
@@ -229,7 +228,7 @@ class Edge:
                                     experts,
                                     FIRST_K_TEST,
                                     iter_no=1)
-        print("Test ds", len(test_ds))
+        print("\tTest ds", len(test_ds), "==========")
 
         if test_ds.available:
             self.test_loader = DataLoader(test_ds,
@@ -811,10 +810,6 @@ class Edge:
                 '''
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
                                                  domain2_exp_gt).item()
-            '''
-            if config.getboolean('Training2Iters', 'train_2_iters'):
-                print("[Iter2] Supervision Saved to:", save_dir)
-            '''
             return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
@@ -981,7 +976,8 @@ class Edge:
                             domain2_1hop_ens[elem_idx].data.cpu().numpy())
                 crt_idx += domain2_1hop_ens.shape[0]
 
-            if config.getboolean('Training2Iters', 'train_2_iters'):
+            if num_batches > 0 and config.getboolean('Training2Iters',
+                                                     'train_2_iters'):
                 print("[Iter2] Supervision Saved to:", save_dir)
 
     def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config):

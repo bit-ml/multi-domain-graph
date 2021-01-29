@@ -409,10 +409,14 @@ def get_exp_results():
     for exp_name in EXPERTS_NAME:
         print('EXPERT: %20s' % exp_name)
         expert = get_expert(exp_name)
+        
         exp_out_path = os.path.join(main_exp_out_path, exp_name)
         os.makedirs(exp_out_path, exist_ok=True)
 
         for batch_idx, (frames, indexes) in enumerate(tqdm(dataloader)):
+            # skip fast (eg. for missing depth 00161500.npy)
+            # if indexes[-1] < 161499:
+            #     continue
             already_exists = 0
             for check_idx in indexes:
                 out_path = os.path.join(exp_out_path, '%08d.npy' % check_idx)

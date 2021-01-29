@@ -30,6 +30,16 @@ class MultiDomainGraph:
                             expert_i.identifier, expert_j.identifier
                     ]:
                         continue
+
+                    # # # TO REMOVE
+                    # if expert_j.identifier not in [
+                    #         # "depth_xtc",
+                    #         # "edges_dexined",
+                    #         "normals_xtc",
+                    #         # "rgb"
+                    # ]:
+                    #     continue
+
                     if config.getboolean(
                             'Ensemble', 'restr_dst_domain') and not config.get(
                                 'Ensemble',
@@ -45,4 +55,5 @@ class MultiDomainGraph:
                                     iter_no=iter_no)
                     self.edges.append(new_edge)
                     print("Add edge", str(new_edge))
+            # # TO REMOVE
             # break
