@@ -20,6 +20,7 @@ from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed, img_for_plot
 from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized
 from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th
 from utils.utils import EnsembleFilter_TwdExpert_L1, EnsembleFilter_Equal
+from utils.utils import EnsembleFilter_TwdExpert_SSIM_Normalized_Th
 
 
 class Edge:
@@ -43,6 +44,9 @@ class Edge:
             self.ensemble_filter = EnsembleFilter_Equal(0.5)
         elif ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
             self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
+        elif ensemble_fct == 'ssim_maps_twd_exp_nn_normalized_th':
+            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Normalized_Th(
+                0.5)
         if not self.ensemble_filter == None:
             self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
