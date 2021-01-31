@@ -1093,3 +1093,80 @@ class EnsembleFilter_Equal(torch.nn.Module):
             return self.forward_mean(data, for_mask_data, weights)
         else:
             return self.forward_median(data, for_mask_data, weights)
+
+
+class EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized(torch.nn.Module):
+    def __init__(self, threshold=0.5):
+        super(EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized, self).__init__()
+        self.threshold = threshold
+
+    def forward_mean(self, data, for_mask_data, weights):
+        data = data * weights
+        return torch.sum(data, -1)
+
+    def forward_median(self, data, for_mask_data, weights):
+        bs, n_chs, h, w, n_exps = data.shape
+
+        data = data.view(bs * n_chs * h * w, n_exps)
+        weights = weights.view(bs * n_chs * h * w, n_exps)
+        indices = torch.argsort(data, 1)
+
+        data = data[torch.arange(bs * n_chs * h * w).unsqueeze(1).repeat(
+            (1, n_exps)), indices]
+        weights = weights[torch.arange(bs * n_chs * h * w).unsqueeze(1).repeat(
+            (1, n_exps)), indices]
+        weights = torch.cumsum(weights, 1)
+
+        weights[weights < 0.5] = 2
+        _, indices = torch.min(weights, 1, keepdim=True)
+        data = data[torch.arange(bs * n_chs * h * w).unsqueeze(1), indices]
+        data = data.contiguous().view(bs, n_chs, h, w)
+        return data
+
+    def twd_expert_distances(self, data):
+        bs, n_chs, h, w, n_tasks = data.shape
+
+        g_filters = []
+        kernels = np.array([3, 11, 19])
+        for kernel in kernels:
+            sigma = kernel / 7
+            g_filter = get_gaussian_filter(n_channels=n_chs,
+                                           win_size=kernel,
+                                           sigma=sigma).cuda()
+            g_filter = g_filter / torch.sum(g_filter)
+            g_filters.append(g_filter)
+
+        ssim_maps = []
+        for i in range(n_tasks):
+            ssim_map = get_ssim_score(data[:, :, :, :, -1],
+                                      data[:, :, :, :, i],
+                                      g_filters[0],
+                                      n_chs,
+                                      kernels[0],
+                                      reduction=False)
+            for j in np.arange(1, len(g_filters)):
+                ssim_map = ssim_map + get_ssim_score(data[:, :, :, :, -1],
+                                                     data[:, :, :, :, i],
+                                                     g_filters[j],
+                                                     n_chs,
+                                                     kernels[j],
+                                                     reduction=False)
+            ssim_map = ssim_map / len(g_filters)
+            ssim_maps.append(ssim_map)
+
+        ssim_maps = torch.stack(ssim_maps, 0)
+        ssim_maps = torch.clamp(ssim_maps, min=0)
+
+        return ssim_maps
+
+    def forward(self, data, dst_domain_name):
+        for_mask_data = self.twd_expert_distances(data)
+        for_mask_data = for_mask_data.permute(1, 2, 3, 4, 0)
+
+        weights = for_mask_data / torch.sum(for_mask_data, -1)[:, :, :, :,
+                                                               None]
+
+        if dst_domain_name == 'edges':
+            return self.forward_mean(data, for_mask_data, weights)
+        else:
+            return self.forward_median(data, for_mask_data, weights)

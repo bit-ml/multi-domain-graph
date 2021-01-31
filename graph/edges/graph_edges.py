@@ -21,6 +21,7 @@ from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized
 from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th
 from utils.utils import EnsembleFilter_TwdExpert_L1, EnsembleFilter_Equal
 from utils.utils import EnsembleFilter_TwdExpert_SSIM_Normalized_Th
+from utils.utils import EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized
 
 
 class Edge:
@@ -47,6 +48,9 @@ class Edge:
         elif ensemble_fct == 'ssim_maps_twd_exp_nn_normalized_th':
             self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Normalized_Th(
                 0.5)
+        elif ensemble_fct == 'mssim_maps_twd_exp_mixed_nn_normalized':
+            self.ensemble_filter = EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized(
+                0.5)
         if not self.ensemble_filter == None:
             self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
@@ -67,6 +71,7 @@ class Edge:
                                               'reduce_lr_threshold')
         reduce_lr_min_lr = config.getfloat('Training', 'reduce_lr_min_lr')
         momentum = config.getfloat('Training', 'momentum')
+        amsgrad = config.getboolean('Training', 'amsgrad')
 
         self.lr = learning_rate
         if optimizer_type == 'sgd':
@@ -75,10 +80,21 @@ class Edge:
                                        weight_decay=weight_decay,
                                        nesterov=True,
                                        momentum=momentum)
-        else:
+        elif optimizer_type == 'adam':
             self.optimizer = optim.Adam(self.net.parameters(),
                                         lr=self.lr,
                                         weight_decay=weight_decay)
+        elif optimizer_type == 'adamw':
+            if amsgrad:
+                self.optimizer = optim.AdamW(self.net.parameters(),
+                                             lr=self.lr,
+                                             weight_decay=weight_decay,
+                                             amsgrad=True)
+            else:
+                self.optimizer = optim.AdamW(self.net.parameters(),
+                                             lr=self.lr,
+                                             weight_decay=weight_decay)
+
         self.scheduler = ReduceLROnPlateau(self.optimizer,
                                            patience=reduce_lr_patience,
                                            factor=reduce_lr_factor,
