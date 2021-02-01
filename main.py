@@ -452,6 +452,7 @@ def main(argv):
         return
 
     if config.getboolean('Training2Iters', 'train_2_iters'):
+        '''
         use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
         all_experts = Experts(full_experts=False,
                               use_rgb_to_tsk=use_rgb_to_tsk)
@@ -479,7 +480,7 @@ def main(argv):
 
         # ; 2. Train on trainset2 using previously saved outputs
         # 00. Build graph
-
+        '''
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,

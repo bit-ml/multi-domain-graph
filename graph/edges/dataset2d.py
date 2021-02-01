@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
-CACHE_NAME = "my_cache_28"
+CACHE_NAME = "my_cache"
 W, H = 256, 256
 
 
@@ -232,7 +232,8 @@ class DomainTrainNextIterDataset(Dataset):
             oe1 = np.load(self.e1_output_path[index])
             ens2 = np.load(self.ens2_output_path[index])
         except:
-            print("Nu am gasit", self.e1_output_path[index], "sau", self.ens2_output_path[index])
+            print("Nu am gasit", self.e1_output_path[index], "sau",
+                  self.ens2_output_path[index])
 
         return oe1, ens2
 
