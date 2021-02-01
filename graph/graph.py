@@ -22,6 +22,8 @@ class MultiDomainGraph:
         for i_idx, expert_i in enumerate(all_experts.methods):
             for expert_j in all_experts.methods:
                 if expert_i != expert_j:
+                    print(expert_i.domain_name + "  " + expert_j.domain_name)
+
                     train_only_for_new_expert_b = config.getboolean(
                         'Training', 'train_only_for_new_expert')
                     train_only_for_new_expert = config.get(
@@ -29,6 +31,7 @@ class MultiDomainGraph:
                     if train_only_for_new_expert_b and train_only_for_new_expert not in [
                             expert_i.identifier, expert_j.identifier
                     ]:
+                        print('first')
                         continue
 
                     # # # TO REMOVE
@@ -44,6 +47,7 @@ class MultiDomainGraph:
                             'Ensemble', 'restr_dst_domain') and not config.get(
                                 'Ensemble',
                                 'dst_domain_restr') == expert_j.domain_name:
+                        print('first')
                         continue
                     if expert_j.domain_name in ["normals", "rgb"]:
                         # because it has 3 channels

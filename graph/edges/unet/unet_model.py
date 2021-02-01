@@ -74,7 +74,12 @@ class UNetMedium(nn.Module):
 
 
 class UNetGood(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=True, normalize=False):
+    def __init__(self,
+                 n_channels,
+                 n_classes,
+                 bilinear=True,
+                 normalize=False,
+                 clamp=True):
         # 1 mil params
         super(UNetGood, self).__init__()
         self.n_channels = n_channels
@@ -94,6 +99,7 @@ class UNetGood(nn.Module):
         self.outc = OutConv(16, n_classes)
 
         self.normalize = normalize
+        self.clamp = clamp
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -109,7 +115,10 @@ class UNetGood(nn.Module):
         if self.normalize:
             norm = logits.norm(dim=1)
             return logits / norm[:, None]
-        return logits.clamp(min=0, max=1)
+        if self.clamp:
+            return logits.clamp(min=0, max=1)
+        else:
+            return logits
 
 
 class UNetSmall(nn.Module):

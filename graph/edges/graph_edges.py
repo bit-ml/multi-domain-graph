@@ -145,10 +145,12 @@ class Edge:
         self.expert2 = expert2
         self.name = "%s -> %s" % (expert1.identifier, expert2.identifier)
         should_normalize = (expert2.domain_name == "normals")
+        should_clamp = not (expert2.domain_name == "saliency_seg")
         self.net = UNetGood(n_channels=self.expert1.n_maps,
                             n_classes=self.expert2.n_maps,
                             bilinear=True,
-                            normalize=should_normalize).to(device)
+                            normalize=should_normalize,
+                            clamp=should_clamp).to(device)
         self.net = nn.DataParallel(self.net)
         total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
         trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
