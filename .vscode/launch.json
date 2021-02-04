@@ -5,7 +5,6 @@
     "version": "0.2.0",
     "justMyCode": false,
     "configurations": [
-        
         {
             "name": "Run file (without args)",
             "type": "python",
@@ -14,7 +13,7 @@
             "console": "integratedTerminal",
         },
         {
-            "name": "Generate Expert Output GOT-10k",
+            "name": "Generate GOT-10k",
             "type": "python",
             "request": "launch",
             "program": "${file}",
@@ -26,7 +25,7 @@
             ]
         },
         {
-            "name": "Generate Expert Output Taskonomy",
+            "name": "Generate Taskonomy",
             "type": "python",
             "request": "launch",
             "program": "${file}",
@@ -44,7 +43,7 @@
             ]
         },
         {
-            "name": "Generate Expert Output Replica",
+            "name": "Generate Replica",
             "type": "python",
             "request": "launch",
             "program": "${file}",

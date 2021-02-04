@@ -2,9 +2,9 @@ import os
 import sys
 import traceback
 
-import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -27,13 +27,13 @@ import experts.vmos_stm_expert
 WORKING_H = 256
 WORKING_W = 256
 
-main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/test'
-main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/test'
-main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/test'
+# main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/test'
+# main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/test'
+# main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/test'
 
-# main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/train'
-# main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/train'
-# main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/train'
+main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/train'
+main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/train'
+main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/train'
 
 # main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/val'
 # main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/val'
@@ -64,6 +64,15 @@ usage_str = 'usage: python main_taskonomy.py type exp1 exp2 ...'
 #    expi                   - name of the i'th expert / domain
 #                           - should be one of the VALID_EXPERTS_NAME / VALID_GT_DOMAINS
 #                           - 'all' to run all available experts / domains
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+SURFNORM_KERNEL = torch.from_numpy(
+    np.array([
+        [[1, 2, 1], [0, 0, 0], [-1, -2, -1]],
+        [[1, 0, -1], [2, 0, -2], [1, 0, -1]],
+        [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    ]))[:, np.newaxis, ...].to(dtype=torch.float32, device=device)
 
 
 def check_arguments_without_delete(argv):
@@ -164,11 +173,23 @@ def get_expert(exp_name):
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return experts.normals_expert.SurfaceNormalsXTC(full_expert=True)
+        return experts.normals_expert.SurfaceNormalsXTC(full_expert=True,
+                                                        for_replica=True)
     elif exp_name == 'saliency_seg_egnet':
         return experts.saliency_seg_expert.SaliencySegmModel(full_expert=True)
     elif exp_name == 'rgb':
         return experts.rgb_expert.RGBModel(full_expert=True)
+
+
+def depth_to_surface_normals(depth, surfnorm_scalar=256):
+    with torch.no_grad():
+        surface_normals = F.conv2d(depth,
+                                   surfnorm_scalar * SURFNORM_KERNEL,
+                                   padding=1)
+        surface_normals[:, 2, ...] = 1
+        surface_normals = surface_normals / surface_normals.norm(dim=1,
+                                                                 keepdim=True)
+    return surface_normals
 
 
 def process_rgb(in_path, out_path):
@@ -181,7 +202,7 @@ def process_depth(in_path, out_path):
     files = os.listdir(in_path)
     files.sort()
 
-    for file_ in files:
+    for idx_file, file_ in enumerate(files):
         depth_map = np.load(os.path.join(in_path, file_))
         depth_map = depth_map / 14
         depth_map = 1 - depth_map
@@ -189,9 +210,37 @@ def process_depth(in_path, out_path):
         np.save(os.path.join(out_path, file_), depth_map)
 
 
-def process_surface_normals(in_path, out_path):
+def process_surface_normals(main_db_path, out_path):
     os.makedirs(out_path, exist_ok=True)
-    os.system("cp %s/* %s/" % (in_path, out_path))
+    depth_full_path = os.path.join(main_db_path, "depth")
+
+    batch_size = 500
+    dataset = DatasetDepth(depth_full_path)
+    dataloader = torch.utils.data.DataLoader(dataset,
+                                             batch_size=batch_size,
+                                             shuffle=False,
+                                             drop_last=False,
+                                             num_workers=8)
+    with torch.no_grad():
+        for batch_idx, (depth_frames, indexes) in enumerate(tqdm(dataloader)):
+            # adjust depth
+            depth_frames = 1 - depth_frames / 14.
+            depth_frames = depth_frames.to(device)
+
+            normals_frames = depth_to_surface_normals(depth_frames[:, None])
+            normals_frames = 0.5 * normals_frames + 0.5
+
+            # permute it to match the normals expert
+            permutation = [1, 0, 2]
+            normals_imgs = normals_frames.data.cpu().numpy()[:, permutation]
+
+            # SAVE Normals npy
+            for sample in zip(normals_imgs, indexes):
+                normals_img, sample_idx = sample
+
+                normals_img_path = os.path.join(out_path,
+                                                '%08d.npy' % sample_idx)
+                np.save(normals_img_path, normals_img)
 
 
 def get_gt_domains():
@@ -207,7 +256,27 @@ def get_gt_domains():
         elif orig_dom_name == 'depth':
             process_depth(in_path, out_path)
         elif orig_dom_name == 'normals':
-            process_surface_normals(in_path, out_path)
+            process_surface_normals(main_db_path, out_path)
+
+
+class DatasetDepth(Dataset):
+    def __init__(self, depth_paths):
+        super(DatasetDepth, self).__init__()
+
+        filenames = os.listdir(depth_paths)
+        filenames.sort()
+        self.depth_paths = []
+        for filename in filenames:
+            self.depth_paths.append(os.path.join(depth_paths, filename))
+
+    def __getitem__(self, index):
+        depth_npy = np.load(self.depth_paths[index])
+        index_of_file = int(self.depth_paths[index].split("/")[-1].replace(
+            ".npy", ""))
+        return depth_npy, index_of_file
+
+    def __len__(self):
+        return len(self.depth_paths)
 
 
 class Dataset_ImgLevel(Dataset):
@@ -221,12 +290,7 @@ class Dataset_ImgLevel(Dataset):
             self.rgbs_path.append(os.path.join(rgbs_path, filename))
 
     def __getitem__(self, index):
-        # try:
         rgb = np.load(self.rgbs_path[index])
-        # except:
-        #     traceback.print_exc()
-        # print("ERROARE::: path", self.rgbs_path[index], "index", index)
-        # rgb = np.zeros((WORKING_W, WORKING_H, 3), dtype=np.float32)
         index_of_file = int(self.rgbs_path[index].split("/")[-1].replace(
             ".npy", ""))
         return rgb, index_of_file
@@ -244,7 +308,7 @@ def get_exp_results():
                                                  batch_size=batch_size,
                                                  shuffle=False,
                                                  drop_last=False,
-                                                 num_workers=0)
+                                                 num_workers=8)
 
         for exp_name in EXPERTS_NAME:
             print('EXPERT: %20s' % exp_name)
@@ -257,13 +321,6 @@ def get_exp_results():
                 # skip fast (eg. for missing depth 00161500.npy)
                 # if indexes[-1] < 161499:
                 #     continue
-                # already_exists = 0
-                # for check_idx in indexes:
-                #     out_path = os.path.join(exp_out_path, '%08d.npy' % check_idx)
-                #     if os.path.exists(out_path):
-                #         already_exists += 1
-                # if already_exists == len(indexes):
-                #     continue
 
                 frames = frames.permute(0, 2, 3, 1) * 255.
                 results = expert.apply_expert_batch(frames)
@@ -273,8 +330,6 @@ def get_exp_results():
 
                     out_path = os.path.join(exp_out_path,
                                             '%08d.npy' % sample_idx)
-                    # if os.path.exists(out_path):
-                    #     continue
 
                     np.save(out_path, expert_res)
 
@@ -333,6 +388,7 @@ def split_train_exp_ds():
 
 if __name__ == "__main__":
     status, status_code = check_arguments_without_delete(sys.argv)
+    print(main_db_path)
     if status == 0:
         sys.exit(status_code + '\n' + usage_str)
 

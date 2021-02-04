@@ -187,10 +187,16 @@ def img_for_plot(img):
         img = img[:, 0:1]
         c = 1
 
-    img_view = img.view(n, c, -1)
-    min_img = img_view.min(axis=2)[0][:, :, None, None]
-    max_img = img_view.max(axis=2)[0][:, :, None, None]
+    # # v1. normalize per channel
+    # img_view = img.view(n, c, -1)
+    # min_img = img_view.min(axis=2)[0][:, :, None, None]
+    # max_img = img_view.max(axis=2)[0][:, :, None, None]
+    # return (img - min_img) / (max_img - min_img)
 
+    # normalize per all input (all channels)
+    img_view = img.view(n, -1)
+    min_img = img_view.min(axis=1)[0][:, None, None, None]
+    max_img = img_view.max(axis=1)[0][:, None, None, None]
     return (img - min_img) / (max_img - min_img)
 
 
