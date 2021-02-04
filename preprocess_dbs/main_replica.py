@@ -201,6 +201,7 @@ def get_gt_domains():
 
         in_path = os.path.join(main_db_path, orig_dom_name)
         out_path = os.path.join(main_gt_out_path, dom_name)
+
         if orig_dom_name == 'rgb':
             process_rgb(in_path, out_path)
         elif orig_dom_name == 'depth':

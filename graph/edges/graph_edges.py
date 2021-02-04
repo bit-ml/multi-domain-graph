@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 from utils.utils import (EnsembleFilter_Equal, EnsembleFilter_TwdExpert_L1,
+                         EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized,
                          EnsembleFilter_TwdExpert_SSIM_Mixed,
                          EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized,
                          EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th,
@@ -48,6 +49,9 @@ class Edge:
             self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
         elif ensemble_fct == 'ssim_maps_twd_exp_nn_normalized_th':
             self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Normalized_Th(
+                0.5)
+        elif ensemble_fct == 'mssim_maps_twd_exp_mixed_nn_normalized':
+            self.ensemble_filter = EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized(
                 0.5)
         if not self.ensemble_filter == None:
             self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
