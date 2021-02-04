@@ -31,9 +31,19 @@ class FilesDataset(Dataset):
         return len(self.files1)
 
 
-OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/edges"
-OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_iter1/taskonomy/tiny-train_0.15/part2/edges_dexined"
+# OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/edges"
+# OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_cu_rgb_iter1_elena/taskonomy/tiny-train_0.15/part2/edges_dexined"
+
+# OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/depth"
+# OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_cu_rgb_iter1_elena/taskonomy/tiny-train_0.15/part2/depth_xtc"
+
+OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/rgb"
+OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_cu_rgb_iter1_elena/taskonomy/tiny-train_0.15/part2/rgb"
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+print("OUTPUT_DIR1", OUTPUT_DIR1)
+print("OUTPUT_DIR2", OUTPUT_DIR2)
 
 dataset = FilesDataset(OUTPUT_DIR1, OUTPUT_DIR2)
 data_loader = DataLoader(dataset,
@@ -59,5 +69,5 @@ with torch.no_grad():
         all_l2_loss += l2_loss.item()
         all_l1_loss += l1_loss.item()
 
-print("L1 loss %.2f%%" % (all_l1_loss / len(data_loader) * 100))
-print("L2 loss %.2f%%" % (all_l2_loss / len(data_loader) * 100))
+print("L1 loss %.2f" % (all_l1_loss / len(data_loader) * 100))
+print("L2 loss %.2f" % (all_l2_loss / len(data_loader) * 100))

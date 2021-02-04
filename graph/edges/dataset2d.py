@@ -1,7 +1,9 @@
 import glob
 import os
 import pathlib
+import sys
 import time
+import traceback
 
 import numpy as np
 import torch
@@ -41,7 +43,8 @@ def load_glob_with_cache(cache_file, glob_path):
 
 
 class Domain2DDataset(Dataset):
-    def __init__(self, dataset_path, experts, patterns, first_k, iter_no):
+    def __init__(self, dataset_path, add_dataset_path, experts, patterns,
+                 first_k, iter_no):
         super(Domain2DDataset, self).__init__()
         self.experts = experts
 
@@ -59,6 +62,22 @@ class Domain2DDataset(Dataset):
 
         self.e1_output_path = load_glob_with_cache_multiple_patterns(
             cache_e1, glob_paths_e1)
+
+        if not (add_dataset_path == ''):
+            add_tag = pathlib.Path(add_dataset_path).parts[-1]
+            add_cache_e1 = "%s/%s_%s_%d_iter%d_add.npy" % (
+                CACHE_NAME, add_tag, self.experts[0].identifier, len(patterns),
+                iter_no)
+            add_glob_paths_e1 = [
+                "%s/%s/%s.npy" %
+                (add_dataset_path, self.experts[0].identifier, pattern)
+                for pattern in patterns
+            ]
+            self.e1_output_path = np.concatenate(
+                (self.e1_output_path,
+                 load_glob_with_cache_multiple_patterns(
+                     add_cache_e1, add_glob_paths_e1)))
+
         # print("\tCache file", cache_e1)
         self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
                                                        ) if first_k ==
@@ -74,6 +93,22 @@ class Domain2DDataset(Dataset):
         ]
         self.e2_output_path = load_glob_with_cache_multiple_patterns(
             cache_e2, glob_paths_e2)
+
+        if not (add_dataset_path == ''):
+            add_tag = pathlib.Path(add_dataset_path).parts[-1]
+            add_cache_e2 = "%s/%s_%s_%d_iter%d_add.npy" % (
+                CACHE_NAME, add_tag, self.experts[1].identifier, len(patterns),
+                iter_no)
+            add_glob_paths_e2 = [
+                "%s/%s/%s.npy" %
+                (add_dataset_path, self.experts[1].identifier, pattern)
+                for pattern in patterns
+            ]
+            self.e2_output_path = np.concatenate(
+                (self.e2_output_path,
+                 load_glob_with_cache_multiple_patterns(
+                     add_cache_e2, add_glob_paths_e2)))
+
         # print("\tCache file", cache_e2)
         self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
                                                        ) if first_k ==
@@ -153,11 +188,6 @@ class DomainTestDataset(Dataset):
         self.d2_gt_output_path = self.d2_gt_output_path[:len(
             self.d2_gt_output_path) if first_k == -1 else first_k]
 
-        # check data
-        #if not (len(self.e1_output_path) == len(self.e2_output_path) == len(
-        #        self.d2_gt_output_path)):
-        #    self.available = False
-
         assert (len(self.e1_output_path) == len(self.e2_output_path) == len(
             self.d2_gt_output_path))
 
@@ -177,8 +207,8 @@ class DomainTestDataset(Dataset):
 
 
 class DomainTrainNextIterDataset(Dataset):
-    def __init__(self, experts_path, ensembles_path, dataset_path, experts,
-                 first_k, iter_no):
+    def __init__(self, experts_path, ensembles_path, dataset_path,
+                 add_dataset_path, experts, first_k, iter_no):
         super(DomainTrainNextIterDataset, self).__init__()
         self.experts = experts
         tag = pathlib.Path(dataset_path).parts[-1]
@@ -205,6 +235,17 @@ class DomainTrainNextIterDataset(Dataset):
             experts_path, dataset_path, self.experts[0].identifier, pattern)
         self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
         # print("\tCache file", cache_e1)
+        if not (add_dataset_path == ''):
+            add_tag = pathlib.Path(add_dataset_path).parts[-1]
+            add_cache_e1 = "%s/%s_test_%s_pseudo_gt_iter%d_add.npy" % (
+                CACHE_NAME, add_tag, self.experts[0].identifier, iter_no)
+            add_glob_path_e1 = "%s/%s/%s/%s.npy" % (
+                experts_path, add_dataset_path, self.experts[0].identifier,
+                pattern)
+            self.e1_output_path = np.concatenate(
+                (self.e1_output_path,
+                 load_glob_with_cache(add_cache_e1, add_glob_path_e1)))
+
         self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
                                                        ) if first_k ==
                                                   -1 else first_k]
@@ -232,7 +273,12 @@ class DomainTrainNextIterDataset(Dataset):
             oe1 = np.load(self.e1_output_path[index])
             ens2 = np.load(self.ens2_output_path[index])
         except:
-            print("Nu am gasit", self.e1_output_path[index], "sau", self.ens2_output_path[index])
+            traceback.print_exc()
+            print("ERR [index=%i] [e1_output_path=%s]" %
+                  (index, self.e1_output_path[index]))
+            print("ERR [index=%i] [ens2_output_path=%s]" %
+                  (index, self.ens2_output_path[index]))
+            sys.exit(-1)
 
         return oe1, ens2
 

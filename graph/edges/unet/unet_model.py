@@ -73,14 +73,14 @@ class UNetMedium(nn.Module):
         return logits
 
 
-
 class UNetGood(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=True):
+    def __init__(self, n_channels, n_classes, bilinear=True, normalize=False):
         # 1 mil params
         super(UNetGood, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.bilinear = bilinear
+        self.normalize = normalize
 
         self.inc = DoubleConv(n_channels, 16)
         self.down1 = Down(16, 32)
@@ -105,6 +105,9 @@ class UNetGood(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
+        if self.normalize:
+            norm = logits.norm(dim=1)
+            return logits / norm[:, None]
         return logits
 
 

@@ -43,7 +43,7 @@ main_exp_out_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_exp/t
 VALID_ORIG_GT_DOMAINS = ['rgb', 'depth_zbuffer', 'edge_texture', 'normal']
 
 # our internal domain names
-VALID_GT_DOMAINS = ['rgb', 'depth', 'edges', 'normals']
+VALID_GT_DOMAINS = ['rgb', 'depth', 'edges', 'normals', 'normals_unnorm']
 
 VALID_EXPERTS_NAME = [\
     'prdimp50',
@@ -409,7 +409,7 @@ def get_exp_results():
     for exp_name in EXPERTS_NAME:
         print('EXPERT: %20s' % exp_name)
         expert = get_expert(exp_name)
-        
+
         exp_out_path = os.path.join(main_exp_out_path, exp_name)
         os.makedirs(exp_out_path, exist_ok=True)
 
@@ -437,6 +437,32 @@ def get_exp_results():
                 np.save(out_path, expert_res)
 
 
+def redo_surface_norm():
+    EPSILON = 0.00001
+
+    # in_path = os.path.join(main_gt_out_path, "normals_unnorm")
+    # out_path = os.path.join(main_gt_out_path, "normals")
+    in_path = os.path.join(main_exp_out_path, "normals_xtc_unnorm")
+    out_path = os.path.join(main_exp_out_path, "normals_xtc")
+
+    os.makedirs(out_path, exist_ok=True)
+
+    filenames = os.listdir(in_path)
+    filenames.sort()
+
+    idx = 0
+    for idx, filename in enumerate(tqdm(filenames)):
+        out_img_path = os.path.join(out_path, filename)
+        if os.path.exists(out_img_path):
+            continue
+        data_path = os.path.join(in_path, filename)
+        data_np = np.load(data_path)
+        norm = np.linalg.norm(data_np, axis=0)
+        data = data_np / norm[None]
+
+        np.save(out_img_path, data)
+
+
 if __name__ == "__main__":
     status, status_code = check_arguments_without_delete(sys.argv)
     if status == 0:
@@ -446,3 +472,4 @@ if __name__ == "__main__":
         get_gt_domains()
     else:
         get_exp_results()
+    # redo_surface_norm()

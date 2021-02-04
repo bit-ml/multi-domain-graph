@@ -5,8 +5,9 @@
     "version": "0.2.0",
     "justMyCode": false,
     "configurations": [
+        
         {
-            "name": "Run current file (without args)",
+            "name": "Run file (without args)",
             "type": "python",
             "request": "launch",
             "program": "${file}",
@@ -39,57 +40,25 @@
                 // gt: ['rgb', 'depth', 'edges', 'normals']
                 // exp: ['halftone_gray_basic', 'depth_xtc', 'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb']
                 "0",
+                "depth"
+            ]
+        },
+        {
+            "name": "Generate Expert Output Replica",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0",
+            },
+            "args": [
+                // type    - 0 create preprocessed gt samples
+                //         - 1 create preprocessed experts samples
+                // gt: ['rgb', 'depth', 'edges', 'normals']
+                // exp: ['halftone_gray_basic', 'depth_xtc', 'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb']
+                "0",
                 "normals"
-            ]
-        },
-        {
-            "name": "Save Edges",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "config1_save_edges.ini"
-            ]
-        },
-        {
-            "name": "to EDGES - Iter2",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_edges.ini"
-            ]
-        },
-        {
-            "name": "to NORMALS - Iter2",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_normals.ini"
-            ]
-        },
-        {
-            "name": "to DEPTH - Iter2",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_depth.ini"
-            ]
-        },
-        {
-            "name": "to RGB - Iter2",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "configs_27/config_mixt_ensemble_tiny_test_models_27_e40_dst_rgb.ini"
             ]
         },
         {
@@ -100,6 +69,16 @@
             "console": "integratedTerminal",
             "args": [
                 "config_elena.ini"
+            ]
+        },
+        {
+            "name": "Custom Config",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "configs_taskonomy/config_elena_no_edges.ini"
             ]
         },
     ]

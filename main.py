@@ -20,7 +20,16 @@ import configparser
 
 def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
-    all_experts = Experts(full_experts=False, use_rgb_to_tsk=use_rgb_to_tsk)
+
+    if config.has_option('Experts', 'selector_map'):
+        selector_map_str = config.get('Experts', 'selector_map').split(",")
+        selector_map = [int(token) for token in selector_map_str]
+    else:
+        selector_map = None
+
+    all_experts = Experts(full_experts=False,
+                          use_rgb_to_tsk=use_rgb_to_tsk,
+                          selector_map=selector_map)
 
     md_graph = MultiDomainGraph(
         config,
@@ -333,7 +342,8 @@ def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
 
 
 def check_models_exists(config, epoch):
-    print("Load nets from checkpoints. From epoch: %2d" % epoch)
+    print("Load nets from checkpoints. From epoch: %2d" % epoch,
+          config.get('Edge Models', 'load_path'))
     all_experts = Experts(full_experts=False)
     for expert_i in all_experts.methods:
         for expert_j in all_experts.methods:
@@ -356,70 +366,20 @@ def load_2Dtasks(graph, epoch):
             edge.net.module.eval()
             edge.trained = True
         else:
-            print('model: %s_%s UNAVAILABLE' %
-                  (edge.expert1.domain_name, edge.expert2.domain_name))
-
-
-############################## 1HOP - pdf per pixel in full ensemble ###############################
-def plot_per_pixel_ensembles(space_graph, silent, config):
-    for expert in space_graph.experts.methods:
-        end_id = expert.identifier
-        edges_loaders_1hop = []
-        print("-> End_id", end_id)
-
-        # 1. Select edges that ends in end_id
-        for edge_xk in space_graph.edges:
-            if edge_xk.ill_posed:
-                continue
-            if edge_xk.expert2.identifier == end_id:
-                # print("   ---", edge_xk.expert1.identifier)
-                edges_loaders_1hop.append(
-                    (edge_xk, iter(edge_xk.valid_loader)))
-
-        # 2. Eval each ensemble
-        Edge.ensemble_histogram(edges_loaders_1hop, end_id, device)
-
-
-############################## 2HOPs ###############################
-
-
-def train_2hops_2Dtasks(space_graph, drop_version, epochs, use_expert_gt,
-                        silent, config):
-    '''
-    - Like train_1hop_2Dtasks, but use ensembles as GT.
-    - Use bool: edge.ill_posed
-    '''
-    if silent:
-        writer = DummySummaryWriter()
-    else:
-        tb_dir = config.get('Logs', 'tensorboard_dir')
-        tb_prefix = config.get('Logs', 'tensorboard_prefix')
-        datetime = config.get('Run id', 'datetime')
-        writer = SummaryWriter(
-            log_dir=f'%s/%s_2hops_ens_dropV%d_%s' %
-            (tb_dir, tb_prefix, drop_version, datetime),  #datetime.now()),
-            flush_secs=30)
-
-    for net_idx, net in enumerate(space_graph.edges):
-        print("[net_idx %2d] Train with 2-hop supervision" % (net_idx), net)
-        net.train_from_2hops_ens(graph=space_graph,
-                                 epochs=epochs,
-                                 drop_version=drop_version,
-                                 device=device,
-                                 writer=writer,
-                                 use_expert_gt=use_expert_gt)
-    writer.close()
+            print(
+                'model: %s_%s UNAVAILABLE' %
+                (edge.expert1.domain_name, edge.expert2.domain_name), path)
 
 
 ############################## MAIN ###############################
-
-
 def main(argv):
     config = configparser.ConfigParser()
     config.read(argv[1])
     config.set('Run id', 'datetime', str(datetime.now()))
 
     print(config.get('Run id', 'datetime'))
+    print("load_path", config.get('Edge Models', 'load_path'))
+    print("TEST_PATH", config.get('Paths', 'TEST_PATH'))
 
     silent = config.getboolean('Logs', 'silent')
     n_epochs = config.getint('Edge Models', 'n_epochs')
@@ -435,7 +395,11 @@ def main(argv):
                                       silent=silent,
                                       valid_shuffle=False)
             load_2Dtasks(graph, epoch=t_epoch)
-            eval_1hop(graph, silent=silent, config=config, epoch_idx=t_epoch)
+            # eval_1hop(graph, silent=silent, config=config, epoch_idx=t_epoch)
+            eval_1hop_ensembles(graph,
+                                drop_version=-1,
+                                silent=silent,
+                                config=config)
             # check_models_exists(config, epoch=t_epoch)
         return
 
@@ -449,6 +413,10 @@ def main(argv):
                       n_epochs=n_epochs,
                       silent=silent,
                       config=config)
+        eval_1hop_ensembles(graph,
+                            drop_version=-1,
+                            silent=silent,
+                            config=config)
         return
 
     if config.getboolean('Training2Iters', 'train_2_iters'):
@@ -467,6 +435,7 @@ def main(argv):
             os.makedirs(save_to_dir, exist_ok=True)
             save_to_dir = "%s/%s" % (test_set_path, expert.identifier)
             os.makedirs(save_to_dir, exist_ok=True)
+
         # 00. Build graph
         graph = build_space_graph(config,
                                   silent=silent,
@@ -479,17 +448,23 @@ def main(argv):
 
         # ; 2. Train on trainset2 using previously saved outputs
         # 00. Build graph
+        print("Start Training")
 
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
                                   iter_no=2)
-        load_2Dtasks(graph, epoch=start_epoch)
-        train_2Dtasks(graph,
-                      start_epoch=start_epoch,
-                      n_epochs=n_epochs,
-                      silent=silent,
-                      config=config)
+        load_2Dtasks(
+            graph,
+            epoch=0  # from scratch
+            # epoch=start_epoch
+        )
+        train_2Dtasks(
+            graph,
+            start_epoch=0,  # doar pt numaratoare
+            n_epochs=n_epochs,
+            silent=silent,
+            config=config)
 
         # ; 3. Run eval on testset
         eval_1hop_ensembles(graph,

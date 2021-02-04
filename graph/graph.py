@@ -31,14 +31,6 @@ class MultiDomainGraph:
                     ]:
                         continue
 
-                    # # # TO REMOVE
-                    # if expert_j.identifier not in [
-                    #         # "depth_xtc",
-                    #         # "edges_dexined",
-                    #         "normals_xtc",
-                    #         # "rgb"
-                    # ]:
-                    #     continue
 
                     if config.getboolean(
                             'Ensemble', 'restr_dst_domain') and not config.get(
@@ -48,8 +40,10 @@ class MultiDomainGraph:
                     if expert_j.domain_name in ["normals", "rgb"]:
                         # because it has 3 channels
                         bs_test = 100
+                        bs_train = 90
                     else:
                         bs_test = 200
+                        bs_train = 100
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,
@@ -58,8 +52,7 @@ class MultiDomainGraph:
                                     silent,
                                     valid_shuffle,
                                     iter_no=iter_no,
+                                    bs_train=bs_train,
                                     bs_test=bs_test)
                     self.edges.append(new_edge)
                     print("Add edge", str(new_edge))
-            # # TO REMOVE
-            # break

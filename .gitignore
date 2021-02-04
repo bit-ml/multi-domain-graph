@@ -19,3 +19,7 @@ notebooks/*
 nohup*.out
 csv_results_elena/*.csv
 logs_*.out
+configs/configs_*ian*
+configs/configs_*feb*
+my_script.sh
+my_configs/*
