@@ -462,29 +462,34 @@ def main(argv):
         test_set_path = os.path.join(
             config.get('Training2Iters', 'ENSEMBLE_OUTPUT_PATH_TEST'),
             config.get('Paths', 'TEST_PATH'))
-
+        valid_iter_path = os.path.join(
+            config.get('Training2Iters', 'NEXT_ITER_VALID_PATH'),
+            config.get('Paths', 'VALID_DB'))
         for expert in all_experts.methods:
             save_to_dir = "%s/%s" % (next_iter_path, expert.identifier)
             os.makedirs(save_to_dir, exist_ok=True)
             save_to_dir = "%s/%s" % (test_set_path, expert.identifier)
+            os.makedirs(save_to_dir, exist_ok=True)
+            save_to_dir = "%s/%s" % (valid_iter_path, expert.identifier)
             os.makedirs(save_to_dir, exist_ok=True)
         # 00. Build graph
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
                                   iter_no=1)
+
         load_2Dtasks(graph, epoch=start_epoch)
 
         # ; 1. Run eval on trainingset2 + save outputs
         save_1hop_ensembles(graph, config=config)
-
+        '''
         # ; 2. Train on trainset2 using previously saved outputs
         # 00. Build graph
-        '''
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
                                   iter_no=2)
+
         load_2Dtasks(graph, epoch=start_epoch)
         train_2Dtasks(graph,
                       start_epoch=start_epoch,

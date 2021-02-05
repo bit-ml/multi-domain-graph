@@ -39,10 +39,13 @@ class SurfaceNormalsXTC():
 
     def apply_expert_batch(self, batch_rgb_frames):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
-        normals_maps = self.model(batch_rgb_frames.to(self.device)).clamp(
-            min=0, max=1).data.cpu().float().numpy()
-        normals_maps = np.array(normals_maps).astype('float32')
-        return normals_maps
+        normals_maps = self.model(batch_rgb_frames.to(self.device))
+        # normals_maps = normals_maps.clamp(
+        #     min=0, max=1).data.cpu().float().numpy()
+        norm = normals_maps.norm(dim=1)
+        rez = normals_maps / norm[:, None]
+        rez = rez.data.cpu().numpy().astype('float32')
+        return rez
 
     '''
     def apply_expert(self, rgb_frames):
