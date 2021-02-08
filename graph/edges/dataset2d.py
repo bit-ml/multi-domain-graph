@@ -7,9 +7,33 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-
-CACHE_NAME = "my_cache_rgb_iter2_config2_dst_gt"
-W, H = 256, 256
+'''
+conf => take default value from config 
+STORE => take values from iter STORE_PATH
+--------------------------------------------------------------------------------------------------
+                                       config 1                config 2
+--------------------------------------------------------------------------------------------------
+iter_idx == 1 |  train - src |          conf            |       conf
+                 train - dst |          conf            |       conf
+                 ---------------------------------------------------------------------------------
+                 valid - src |          conf            |       conf
+                 valid - dst |          conf            |       conf
+                 ---------------------------------------------------------------------------------
+                 test - src  |          conf            |       conf
+                 test - dst  |          conf            |       conf
+                 test - gt   |          conf            |       conf
+--------------------------------------------------------------------------------------------------
+iter_idx > 1  |  train - src |          conf            |       STORE
+                 train - dst |          STORE           |       STORE
+                 ---------------------------------------------------------------------------------
+                 valid - src |          conf            |       STORE
+                 valid - dst |          STORE           |       STORE
+                 ---------------------------------------------------------------------------------
+                 test - src  |          conf            |       STORE
+                 test - dst  |          STORE           |       STORE
+                 test - gt   |          conf            |       conf
+--------------------------------------------------------------------------------------------------                
+'''
 
 
 def load_glob_with_cache_multiple_patterns(cache_file, glob_paths):
@@ -28,270 +52,184 @@ def load_glob_with_cache_multiple_patterns(cache_file, glob_paths):
     return all_paths
 
 
-def load_glob_with_cache(cache_file, glob_path):
-    if not os.path.exists(cache_file):
-        all_paths = sorted(glob.glob(glob_path))
-        save_folder = os.path.dirname(cache_file)
-        if not os.path.exists(save_folder):
-            pathlib.Path(save_folder).mkdir(parents=True, exist_ok=True)
-        np.save(cache_file, all_paths)
+def get_paths_for_idx_and_split(config, iter_idx, split_str, running_iter_idx,
+                                for_next_iter_idx_subset):
+    iters_config = config.getint('General', 'iters_config')
+
+    if running_iter_idx == 1:
+        src_path = config.get('PathsIter%d' % iter_idx, 'ITER%d_%s_SRC_PATH' %
+                              (iter_idx, split_str)).split('\n')
+        dst_path = config.get('PathsIter%d' % iter_idx, 'ITER%d_%s_DST_PATH' %
+                              (iter_idx, split_str)).split('\n')
     else:
-        all_paths = np.load(cache_file)
-    return all_paths
+        if iters_config == 1:
+            src_path = config.get('PathsIter%d' % iter_idx,
+                                  'ITER%d_%s_SRC_PATH' %
+                                  (iter_idx, split_str)).split('\n')
+        else:  # iters_config == 2
+            src_path = config.get(
+                'PathsIter%d' % iter_idx,
+                'ITER%d_%s_STORE_PATH' % (iter_idx, split_str)).split('\n')
+        dst_path = config.get('PathsIter%d' % iter_idx,
+                              'ITER%d_%s_STORE_PATH' %
+                              (iter_idx, split_str)).split('\n')
+
+    patterns = config.get('PathsIter%d' % iter_idx, 'ITER%d_%s_PATTERNS' %
+                          (iter_idx, split_str)).split('\n')
+    first_k = config.getint('PathsIter%d' % iter_idx,
+                            'ITER%d_%s_FIRST_K' % (iter_idx, split_str))
+    if split_str == 'TEST':
+        gt_dst_path = config.get(
+            'PathsIter%d' % iter_idx,
+            'ITER%d_%s_GT_DST_PATH' % (iter_idx, split_str)).split('\n')
+    else:
+        gt_dst_path = None
+
+    # If we get paths for next iter => we will only get a certain subset of data(e.g. part1 or part2 for training set)
+    if not (running_iter_idx == iter_idx):
+        if len(patterns) == len(src_path):
+            patterns = patterns[
+                for_next_iter_idx_subset:for_next_iter_idx_subset + 1]
+        src_path = src_path[for_next_iter_idx_subset:for_next_iter_idx_subset +
+                            1]
+        dst_path = dst_path[for_next_iter_idx_subset:for_next_iter_idx_subset +
+                            1]
+        if not (gt_dst_path == None):
+            gt_dst_path = gt_dst_path[
+                for_next_iter_idx_subset:for_next_iter_idx_subset + 1]
+        store_path = store_path[
+            for_next_iter_idx_subset:for_next_iter_idx_subset + 1]
+
+    return src_path, dst_path, patterns, first_k, gt_dst_path
 
 
-class Domain2DDataset(Dataset):
-    def __init__(self, dataset_path, add_dataset_path, experts, patterns,
-                 first_k, iter_no):
-        super(Domain2DDataset, self).__init__()
-        self.experts = experts
-        s = time.time()
-        tag = pathlib.Path(dataset_path).parts[-1]
-        # load experts paths
-        cache_e1 = "%s/%s_%s_%d_iter%d.npy" % (CACHE_NAME, tag,
-                                               self.experts[0].identifier,
-                                               len(patterns), iter_no)
-        glob_paths_e1 = [
-            "%s/%s/%s.npy" %
-            (dataset_path, self.experts[0].identifier, pattern)
-            for pattern in patterns
-        ]
+def get_glob_paths(path, identifier, patterns):
+    glob_paths = []
+    for i in range(len(path)):
 
-        self.e1_output_path = load_glob_with_cache_multiple_patterns(
-            cache_e1, glob_paths_e1)
-
-        if not (add_dataset_path == ''):
-            add_tag = pathlib.Path(add_dataset_path).parts[-1]
-            add_cache_e1 = "%s/%s_%s_%d_iter%d_add.npy" % (
-                CACHE_NAME, add_tag, self.experts[0].identifier, len(patterns),
-                iter_no)
-            add_glob_paths_e1 = [
-                "%s/%s/%s.npy" %
-                (add_dataset_path, self.experts[0].identifier, pattern)
+        if len(patterns) == len(path):
+            glob_paths_ = ["%s/%s/%s.npy" % (path[i], identifier, patterns[i])]
+        elif len(patterns) == 1:
+            glob_paths_ = ["%s/%s/%s.npy" % (path[i], identifier, patterns[0])]
+        else:
+            glob_paths_ = [
+                "%s/%s/%s.npy" % (path[i], identifier, pattern)
                 for pattern in patterns
             ]
-            self.e1_output_path = np.concatenate(
-                (self.e1_output_path,
-                 load_glob_with_cache_multiple_patterns(
-                     add_cache_e1, add_glob_paths_e1)))
+        glob_paths = glob_paths + glob_paths_
+    return glob_paths
 
-        # print("\tCache file", cache_e1)
-        self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
-                                                       ) if first_k ==
-                                                  -1 else first_k]
 
-        cache_e2 = "%s/%s_%s_%d_iter%d.npy" % (CACHE_NAME, tag,
-                                               self.experts[1].identifier,
-                                               len(patterns), iter_no)
-        glob_paths_e2 = [
-            "%s/%s/%s.npy" %
-            (dataset_path, self.experts[1].identifier, pattern)
-            for pattern in patterns
+class ImageLevelDataset(Dataset):
+    def __init__(self,
+                 src_expert,
+                 dst_expert,
+                 config,
+                 iter_idx,
+                 split_str,
+                 for_next_iter=False,
+                 for_next_iter_idx_subset=0):
+        """
+            src_expert
+            dst_expert 
+            config 
+            iter_idx - current iteration index 
+            split_str - desired split ('TRAIN', 'VALID' or 'TEST')
+            for_next_iter - if we load a dataset for next iter (load it in order to save ensembles of current iter)
+            for_next_iter_idx_subset - if we load a dataset for next iter, we can load per subset s.t. we can save it in corresponding subset dst 
+        """
+        super(ImageLevelDataset, self).__init__()
+        self.src_expert = src_expert
+        self.dst_expert = dst_expert
+
+        src_path, dst_path, patterns, first_k, gt_dst_path = get_paths_for_idx_and_split(
+            config, iter_idx, split_str,
+            (iter_idx - 1) if for_next_iter else iter_idx,
+            for_next_iter_idx_subset)
+
+        paths_str = [
+            pathlib.Path(src_path_).parts[-1] for src_path_ in src_path
         ]
-        self.e2_output_path = load_glob_with_cache_multiple_patterns(
-            cache_e2, glob_paths_e2)
+        paths_str = '_'.join(paths_str)
 
-        if not (add_dataset_path == ''):
-            add_tag = pathlib.Path(add_dataset_path).parts[-1]
-            add_cache_e2 = "%s/%s_%s_%d_iter%d_add.npy" % (
-                CACHE_NAME, add_tag, self.experts[1].identifier, len(patterns),
-                iter_no)
-            add_glob_paths_e2 = [
-                "%s/%s/%s.npy" %
-                (add_dataset_path, self.experts[1].identifier, pattern)
-                for pattern in patterns
-            ]
-            self.e2_output_path = np.concatenate(
-                (self.e2_output_path,
-                 load_glob_with_cache_multiple_patterns(
-                     add_cache_e2, add_glob_paths_e2)))
+        tag = 'iter_%d_split_%s_nPaths_%d_%s_%s_iters_config_%d' % (
+            iter_idx, split_str, len(src_path), paths_str, '_for_next_iter'
+            if for_next_iter else '', config.getint('General', 'iters_config'))
 
-        # print("\tCache file", cache_e2)
-        self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
-                                                       ) if first_k ==
-                                                  -1 else first_k]
-        e = time.time()
+        CACHE_NAME = config.get('General', 'CACHE_NAME')
 
-        assert (len(self.e1_output_path) == len(self.e2_output_path))
+        if not (gt_dst_path == None):
+            for i in range(len(gt_dst_path)):
+                available_gt_domains = os.listdir(gt_dst_path[i])
+                if not (self.dst_expert.domain_name in available_gt_domains):
+                    self.src_paths = []
+                    self.dst_paths = []
+                    self.gt_dst_paths = []
+                    return
 
-        # TODO: precompute+save mean & std when buliding cache
-
-    def __getitem__(self, index):
-        oe1 = np.load(self.e1_output_path[index])
-        oe2 = np.load(self.e2_output_path[index])
-        return oe1, oe2
-
-    def __len__(self):
-        return len(self.e1_output_path)
-
-
-class DomainTestDataset(Dataset):
-    def __init__(self, preproc_gt_path, experts_path, dataset_path, experts,
-                 first_k, iter_no):
-        super(DomainTestDataset, self).__init__()
-        self.experts = experts
-
-        tag = pathlib.Path(dataset_path).parts[-1]
-        available_experts = os.listdir(os.path.join(experts_path,
-                                                    dataset_path))
-        available_gts = os.listdir(os.path.join(preproc_gt_path, dataset_path))
-        self.available = False
-
-        if self.experts[0].identifier in available_experts and \
-            self.experts[1].identifier in available_experts and \
-            (self.experts[1].domain_name in available_gts or self.experts[1].identifier in available_gts):
-            self.available = True
-        else:
+        if first_k == 0:
+            self.src_paths = []
+            self.dst_paths = []
+            self.gt_dst_paths = []
             return
 
-        pattern = "*"
+        #s = time.time()
+        cache_src = "%s/src_%s_%s.npy" % (CACHE_NAME, tag,
+                                          self.src_expert.identifier)
+        glob_paths_srcs = get_glob_paths(src_path, self.src_expert.identifier,
+                                         patterns)
+        self.src_paths = load_glob_with_cache_multiple_patterns(
+            cache_src, glob_paths_srcs)
+        self.src_paths = self.src_paths[:len(self.src_paths) if first_k ==
+                                        -1 else min(first_k, len(self.src_paths
+                                                                 ))]
 
-        # get data for src expert
-        cache_e1 = "%s/%s_test_%s_pseudo_gt_iter%d.npy" % (
-            CACHE_NAME, tag, self.experts[0].identifier, iter_no)
-        glob_path_e1 = "%s/%s/%s/%s.npy" % (
-            experts_path, dataset_path, self.experts[0].identifier, pattern)
-        self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
-        # print("\tCache file", cache_e1)
-        self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
-                                                       ) if first_k ==
-                                                  -1 else first_k]
+        #print("Load %s %20.10f" % (cache_src, time.time() - s))
 
-        # get data for dst expert
-        cache_e2 = "%s/%s_test_%s_pseudo_gt_iter%d.npy" % (
-            CACHE_NAME, tag, self.experts[1].identifier, iter_no)
-        glob_path_e2 = "%s/%s/%s/%s.npy" % (
-            experts_path, dataset_path, self.experts[1].identifier, pattern)
-        self.e2_output_path = load_glob_with_cache(cache_e2, glob_path_e2)
-        # print("\tCache file", cache_e2)
-        self.e2_output_path = self.e2_output_path[:len(self.e2_output_path
-                                                       ) if first_k ==
-                                                  -1 else first_k]
-        # get data for domain of dst expert
-        cache_d2_gt = "%s/%s_test_%s_gt_iter%d.npy" % (
-            CACHE_NAME, tag, self.experts[1].domain_name, iter_no)
+        #s = time.time()
+        cache_dst = "%s/dst_%s_%s.npy" % (CACHE_NAME, tag,
+                                          self.dst_expert.identifier)
+        glob_paths_dsts = get_glob_paths(dst_path, self.dst_expert.identifier,
+                                         patterns)
+        self.dst_paths = load_glob_with_cache_multiple_patterns(
+            cache_dst, glob_paths_dsts)
+        self.dst_paths = self.dst_paths[:len(self.dst_paths) if first_k ==
+                                        -1 else min(first_k, len(self.dst_paths
+                                                                 ))]
 
-        if self.experts[1].domain_name in available_gts:
-            glob_path_d2_gt = "%s/%s/%s/%s.npy" % (
-                preproc_gt_path, dataset_path, self.experts[1].domain_name,
-                pattern)
-        elif self.experts[1].identifier in available_gts:
-            glob_path_d2_gt = "%s/%s/%s/%s.npy" % (
-                preproc_gt_path, dataset_path, self.experts[1].identifier,
-                pattern)
-        self.d2_gt_output_path = load_glob_with_cache(cache_d2_gt,
-                                                      glob_path_d2_gt)
-        # print("\tCache file", cache_d2_gt)
-        self.d2_gt_output_path = self.d2_gt_output_path[:len(
-            self.d2_gt_output_path) if first_k == -1 else first_k]
+        #print("Load %s %20.10f" % (cache_dst, time.time() - s))
 
-        # check data
-        #if not (len(self.e1_output_path) == len(self.e2_output_path) == len(
-        #        self.d2_gt_output_path)):
-        #    self.available = False
+        if (not for_next_iter) and (not (gt_dst_path == None)):
+            #s = time.time()
+            cache_gt_dst = "%s/gt_dst_%s_%s.npy" % (
+                CACHE_NAME, tag, self.dst_expert.domain_name)
+            glob_paths_gt_dsts = get_glob_paths(gt_dst_path,
+                                                self.dst_expert.domain_name,
+                                                patterns)
+            self.gt_dst_paths = load_glob_with_cache_multiple_patterns(
+                cache_gt_dst, glob_paths_gt_dsts)
+            self.gt_dst_paths = self.gt_dst_paths[:len(
+                self.gt_dst_paths
+            ) if first_k == -1 else min(first_k, len(self.gt_dst_paths))]
 
-        assert (len(self.e1_output_path) == len(self.e2_output_path) == len(
-            self.d2_gt_output_path))
-
-    def __getitem__(self, index):
-        if self.available == False:
-            return None, None, None
-        oe1 = np.load(self.e1_output_path[index])
-        oe2 = np.load(self.e2_output_path[index])
-        d2_gt = np.load(self.d2_gt_output_path[index])
-
-        return oe1, oe2, d2_gt
-
-    def __len__(self):
-        if self.available == False:
-            return 0
-        return len(self.e1_output_path)
-
-
-class DomainTrainNextIterDataset(Dataset):
-    def __init__(self, experts_path, ensembles_path, dataset_path,
-                 add_dataset_path, experts, first_k, iter_no, add_to_src):
-        super(DomainTrainNextIterDataset, self).__init__()
-        self.experts = experts
-        tag = pathlib.Path(dataset_path).parts[-1]
-        available_experts = os.listdir(os.path.join(experts_path,
-                                                    dataset_path))
-        available_ensembles = os.listdir(
-            os.path.join(ensembles_path, dataset_path))
-
-        self.available = False
-
-        if self.experts[0].identifier in available_experts and \
-            self.experts[1].identifier in available_experts and \
-            self.experts[1].identifier in available_ensembles:
-            self.available = True
+            #print("Load %s %20.10f" % (cache_gt_dst, time.time() - s))
         else:
-            return
+            self.gt_dst_paths = []
 
-        pattern = "*"
-
-        # get data for src expert
-        cache_e1 = "%s/%s_test_%s_pseudo_gt_iter%d.npy" % (
-            CACHE_NAME, tag, self.experts[0].identifier, iter_no)
-        glob_path_e1 = "%s/%s/%s/%s.npy" % (
-            experts_path, dataset_path, self.experts[0].identifier, pattern)
-        self.e1_output_path = load_glob_with_cache(cache_e1, glob_path_e1)
-        # print("\tCache file", cache_e1)
-        if (not (add_dataset_path == '')) and add_to_src:
-            add_tag = pathlib.Path(add_dataset_path).parts[-1]
-            add_cache_e1 = "%s/%s_test_%s_pseudo_gt_iter%d_add.npy" % (
-                CACHE_NAME, add_tag, self.experts[0].identifier, iter_no)
-            add_glob_path_e1 = "%s/%s/%s/%s.npy" % (
-                experts_path, add_dataset_path, self.experts[0].identifier,
-                pattern)
-            self.e1_output_path = np.concatenate(
-                (self.e1_output_path,
-                 load_glob_with_cache(add_cache_e1, add_glob_path_e1)))
-
-        self.e1_output_path = self.e1_output_path[:len(self.e1_output_path
-                                                       ) if first_k ==
-                                                  -1 else first_k]
-
-        # get data for domain of dst expert
-        cache_ens2 = "%s/%s_test_%s_ens_iter%d.npy" % (
-            CACHE_NAME, tag, self.experts[1].domain_name, iter_no)
-
-        glob_path_ens2 = "%s/%s/%s/%s.npy" % (
-            ensembles_path, dataset_path, self.experts[1].identifier, pattern)
-        self.ens2_output_path = load_glob_with_cache(cache_ens2,
-                                                     glob_path_ens2)
-        # print("\tCache file", cache_ens2)
-
-        if (not (add_dataset_path == '')) and (not add_to_src):
-            add_tag = pathlib.Path(add_dataset_path).parts[-1]
-            add_cache_ens2 = "%s/%s_test_%s_pseudo_gt_iter%d_add.npy" % (
-                CACHE_NAME, add_tag, self.experts[1].identifier, iter_no)
-            add_glob_path_ens2 = "%s/%s/%s/%s.npy" % (
-                ensembles_path, add_dataset_path, self.experts[1].identifier,
-                pattern)
-            self.ens2_output_path = np.concatenate(
-                (self.ens2_output_path,
-                 load_glob_with_cache(add_cache_ens2, add_glob_path_ens2)))
-
-        self.ens2_output_path = self.ens2_output_path[:len(
-            self.ens2_output_path) if first_k == -1 else first_k]
-
-        # check data
-        assert (len(self.e1_output_path) == len(self.ens2_output_path))
+        if not (first_k == 0):
+            assert (len(self.src_paths) == len(self.dst_paths))
+            if (not for_next_iter) and (not (gt_dst_path == None)):
+                assert (len(self.src_paths) == len(self.gt_dst_paths))
 
     def __getitem__(self, index):
-        if self.available == False:
-            return None, None
-        try:
-            oe1 = np.load(self.e1_output_path[index])
-            ens2 = np.load(self.ens2_output_path[index])
-        except:
-            print("Nu am gasit", self.e1_output_path[index], "sau",
-                  self.ens2_output_path[index])
+        src_data = np.load(self.src_paths[index])
+        dst_data = np.load(self.dst_paths[index])
 
-        return oe1, ens2
+        if len(self.gt_dst_paths) > 0:
+            gt_dst_data = np.load(self.gt_dst_paths[index])
+            return src_data, dst_data, gt_dst_data
+        else:
+            return src_data, dst_data
 
     def __len__(self):
-        if self.available == False:
-            return 0
-        return len(self.e1_output_path)
+        return len(self.src_paths)

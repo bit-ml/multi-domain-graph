@@ -8,8 +8,9 @@ from datetime import datetime
 import numpy as np
 import torch
 import torchvision
-from graph.edges.dataset2d import (Domain2DDataset, DomainTestDataset,
-                                   DomainTrainNextIterDataset)
+#from graph.edges.dataset2d import (Domain2DDataset, DomainTestDataset,
+#                                   DomainTrainNextIterDataset)
+from graph.edges.dataset2d import ImageLevelDataset
 from graph.edges.unet.unet_model import UNetGood
 from torch import nn, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -171,197 +172,101 @@ class Edge:
 
     def init_loaders(self, bs, bs_test, n_workers, rnd_sampler, valid_shuffle,
                      iter_no):
-        experts = [self.expert1, self.expert2]
-        iter_2_src_data = self.config.getint('Training2Iters',
-                                             'iter_2_src_data')
-        if self.config.getboolean('Training2Iters',
-                                  'train_2_iters') and iter_no == 2:
-            if iter_2_src_data == 1:
-                NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
-                    'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
-            elif iter_2_src_data == 2:
-                NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
-                    'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
-            if self.config.getboolean('Training2Iters',
-                                      'config2_keep_exp_as_target'):
-                NEXT_ITER_DST_TRAIN_PATH = self.config.get(
-                    'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
-                add_to_src = False
-            else:
-                NEXT_ITER_DST_TRAIN_PATH = self.config.get(
-                    'Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH')
-                add_to_src = True
-            NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
-                                                'NEXT_ITER_DB_PATH')
-            if iter_2_src_data == 1 or (iter_no == 2 and iter_2_src_data == 2
-                                        and self.config.getboolean(
-                                            'Training2Iters',
-                                            'config2_keep_exp_as_target')):
-                ADD_NEXT_ITER_DB_PATH = self.config.get(
-                    'Training2Iters', 'ADD_NEXT_ITER_DB_PATH')
-            else:
-                ADD_NEXT_ITER_DB_PATH = ''
-            FIRST_K_NEXT_ITER = self.config.getint('Training2Iters',
-                                                   'FIRST_K_NEXT_ITER')
-            train_ds = DomainTrainNextIterDataset(NEXT_ITER_SRC_TRAIN_PATH,
-                                                  NEXT_ITER_DST_TRAIN_PATH,
-                                                  NEXT_ITER_DB_PATH,
-                                                  ADD_NEXT_ITER_DB_PATH,
-                                                  experts,
-                                                  FIRST_K_NEXT_ITER,
-                                                  iter_no=iter_no,
-                                                  add_to_src=add_to_src)
-        else:
-            FIRST_K_TRAIN = self.config.getint('Paths', 'FIRST_K_TRAIN')
-            TRAIN_PATH = self.config.get('Paths', 'TRAIN_PATH')
-            ADD_TRAIN_PATH = self.config.get('Paths', 'ADD_TRAIN_PATH')
-            TRAIN_PATTERNS = self.config.get('Paths',
-                                             'TRAIN_PATTERNS').split(",")
-            train_ds = Domain2DDataset(TRAIN_PATH,
-                                       ADD_TRAIN_PATH,
-                                       experts,
-                                       TRAIN_PATTERNS,
-                                       FIRST_K_TRAIN,
-                                       iter_no=iter_no)
 
-        VALID_PATH = self.config.get('Paths', 'VALID_PATH')
-        NEXT_ITER_VALID_PATH = self.config.get('Training2Iters',
-                                               'NEXT_ITER_VALID_PATH')
-        VALID_DB = self.config.get('Paths', 'VALID_DB')
-        VALID_PATTERNS = self.config.get('Paths', 'VALID_PATTERNS').split(",")
-        FIRST_K_VAL = self.config.getint('Paths', 'FIRST_K_VAL')
-
-        if self.config.getboolean('Training2Iters',
-                                  'train_2_iters') and iter_no == 2:
-            if iter_2_src_data == 1:
-                valid_ds = DomainTrainNextIterDataset(VALID_PATH,
-                                                      NEXT_ITER_VALID_PATH,
-                                                      VALID_DB,
-                                                      '',
-                                                      experts,
-                                                      FIRST_K_VAL,
-                                                      iter_no=iter_no,
-                                                      add_to_src=True)
-            elif iter_2_src_data == 2:
-                if not (self.config.getboolean('Training2Iters',
-                                               'config2_keep_exp_as_target')):
-                    valid_ds = Domain2DDataset(os.path.join(
-                        NEXT_ITER_VALID_PATH, VALID_DB),
-                                               '',
-                                               experts,
-                                               VALID_PATTERNS,
-                                               FIRST_K_VAL,
-                                               iter_no=iter_no)
-                else:
-                    valid_ds = DomainTrainNextIterDataset(NEXT_ITER_VALID_PATH,
-                                                          VALID_PATH,
-                                                          VALID_DB,
-                                                          '',
-                                                          experts,
-                                                          FIRST_K_VAL,
-                                                          iter_no=iter_no,
-                                                          add_to_src=True)
-
-        else:
-            valid_ds = Domain2DDataset(os.path.join(VALID_PATH, VALID_DB),
-                                       '',
-                                       experts,
-                                       VALID_PATTERNS,
-                                       FIRST_K_VAL,
-                                       iter_no=iter_no)
+        # Load train dataset
+        train_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
+                                     iter_no, 'TRAIN')
         print("\tTrain ds", len(train_ds), "==========")
-        print("\tValid ds", len(valid_ds), "==========")
-
         self.train_loader = DataLoader(train_ds,
                                        batch_size=bs,
                                        shuffle=True,
                                        num_workers=n_workers)
-        self.valid_loader = DataLoader(
-            valid_ds,
-            batch_size=bs_test,
-            shuffle=valid_shuffle,
-            # sampler=rnd_sampler,
-            num_workers=n_workers)
 
-        if self.config.getboolean('Training2Iters',
-                                  'train_2_iters') and iter_no == 1:
-            NEXT_ITER_SRC_TRAIN_PATH = self.config.get(
-                'Training2Iters', 'NEXT_ITER_SRC_TRAIN_PATH')
-            NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
-                                                'NEXT_ITER_DB_PATH')
-            ADD_NEXT_ITER_DB_PATH = self.config.get('Training2Iters',
-                                                    'ADD_NEXT_ITER_DB_PATH')
-            NEXT_ITER_TRAIN_PATTERNS = self.config.get(
-                'Training2Iters', 'NEXT_ITER_TRAIN_PATTERNS')
-            FIRST_K_NEXT_ITER = self.config.getint('Training2Iters',
-                                                   'FIRST_K_NEXT_ITER')
-            next_iter_ds = Domain2DDataset(
-                os.path.join(NEXT_ITER_SRC_TRAIN_PATH, NEXT_ITER_DB_PATH),
-                os.path.join(NEXT_ITER_SRC_TRAIN_PATH, ADD_NEXT_ITER_DB_PATH),
-                experts,
-                NEXT_ITER_TRAIN_PATTERNS,
-                FIRST_K_NEXT_ITER,
-                iter_no=iter_no)
-            print("\tNext iter ds", len(next_iter_ds))
-            self.next_iter_loader = DataLoader(next_iter_ds,
-                                               batch_size=bs_test,
-                                               shuffle=False,
-                                               num_workers=n_workers)
-        else:
-            self.next_iter_loader = None
-            print("\tNext iter ds 0")
-        if self.config.getboolean(
-                'Training2Iters',
-                'train_2_iters') and iter_no == 1 and iter_2_src_data == 2:
-            EXPERTS_OUTPUT_PATH_TEST = self.config.get(
-                'Paths', 'EXPERTS_OUTPUT_PATH_TEST')
-            TEST_PATH = self.config.get('Paths', 'TEST_PATH')
-            TEST_PATTERNS = self.config.get('Paths', 'TEST_PATTERNS')
-            FIRST_K_TEST = self.config.getint('Paths', 'FIRST_K_TEST')
-            test_no_gt_ds = Domain2DDataset(os.path.join(
-                EXPERTS_OUTPUT_PATH_TEST, TEST_PATH),
-                                            '',
-                                            experts,
-                                            TEST_PATTERNS,
-                                            FIRST_K_TEST,
-                                            iter_no=iter_no)
-            print("\tTest no gt ds", len(test_no_gt_ds))
-            self.test_no_gt_loader = DataLoader(test_no_gt_ds,
-                                                batch_size=bs_test,
-                                                shuffle=False,
-                                                num_workers=n_workers)
-        else:
-            self.test_no_gt_loader = None
-            print("\tTest no gt ds 0")
-
-        PREPROC_GT_PATH_TEST = self.config.get('Paths', 'PREPROC_GT_PATH_TEST')
-        if self.config.getboolean(
-                'Training2Iters',
-                'train_2_iters') and iter_no == 2 and iter_2_src_data == 2:
-            EXPERTS_OUTPUT_PATH_TEST = self.config.get(
-                'Training2Iters', 'ENSEMBLE_OUTPUT_PATH_TEST')
-        else:
-            EXPERTS_OUTPUT_PATH_TEST = self.config.get(
-                'Paths', 'EXPERTS_OUTPUT_PATH_TEST')
-        TEST_PATH = self.config.get('Paths', 'TEST_PATH')
-        FIRST_K_TEST = self.config.getint('Paths', 'FIRST_K_TEST')
-
-        test_ds = DomainTestDataset(PREPROC_GT_PATH_TEST,
-                                    EXPERTS_OUTPUT_PATH_TEST,
-                                    TEST_PATH,
-                                    experts,
-                                    FIRST_K_TEST,
-                                    iter_no=1)
+        # Load valid dataset
+        valid_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
+                                     iter_no, 'VALID')
+        print("\tValid ds", len(valid_ds), "==========")
+        self.valid_loader = DataLoader(valid_ds,
+                                       batch_size=bs_test,
+                                       shuffle=valid_shuffle,
+                                       num_workers=n_workers)
+        # Load test dataset
+        test_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
+                                    iter_no, 'TEST')
         print("\tTest ds", len(test_ds), "==========")
-
-        if test_ds.available:
+        if len(test_ds) > 0:
             self.test_loader = DataLoader(test_ds,
                                           batch_size=bs_test,
                                           shuffle=False,
                                           num_workers=n_workers)
-
         else:
             self.test_loader = None
+
+        if iter_no + 1 <= self.config.getint('General', 'n_iters'):
+            n_next_iter_train_subsets = len(
+                self.config.get('PathsIter%d' % (iter_no + 1),
+                                'ITER%d_TRAIN_SRC_PATH' %
+                                (iter_no + 1)).split('\n'))
+            n_next_iter_valid_subsets = len(
+                self.config.get('PathsIter%d' % (iter_no + 1),
+                                'ITER%d_VALID_SRC_PATH' %
+                                (iter_no + 1)).split('\n'))
+            n_next_iter_test_subsets = len(
+                self.config.get('PathsIter%d' % (iter_no + 1),
+                                'ITER%d_TEST_SRC_PATH' %
+                                (iter_no + 1)).split('\n'))
+            self.next_iter_train_loaders = []
+            for i in range(n_next_iter_train_subsets):
+                next_iter_train_ds = ImageLevelDataset(
+                    self.expert1,
+                    self.expert2,
+                    self.config,
+                    iter_no + 1,
+                    'TRAIN',
+                    for_next_iter=True,
+                    for_next_iter_idx_subset=i)
+                print("\tNext iter train ds - subset %d" % i,
+                      len(next_iter_train_ds), "==========")
+                self.next_iter_train_loaders.append(
+                    DataLoader(next_iter_train_ds,
+                               batch_size=bs_test,
+                               shuffle=False,
+                               num_workers=n_workers))
+            self.next_iter_valid_loaders = []
+            for i in range(n_next_iter_valid_subsets):
+                next_iter_valid_ds = ImageLevelDataset(
+                    self.expert1,
+                    self.expert2,
+                    self.config,
+                    iter_no + 1,
+                    'VALID',
+                    for_next_iter=True,
+                    for_next_iter_idx_subset=i)
+                print("\tNext iter valid ds - subset %d" % i,
+                      len(next_iter_valid_ds), "==========")
+                self.next_iter_valid_loaders.append(
+                    DataLoader(next_iter_valid_ds,
+                               batch_size=bs_test,
+                               shuffle=False,
+                               num_workers=n_workers))
+
+            self.next_iter_test_loaders = []
+            for i in range(n_next_iter_test_subsets):
+                next_iter_test_ds = ImageLevelDataset(
+                    self.expert1,
+                    self.expert2,
+                    self.config,
+                    iter_no + 1,
+                    'TEST',
+                    for_next_iter=True,
+                    for_next_iter_idx_subset=i)
+                print("\tNext iter test ds - subset %d" % i,
+                      len(next_iter_test_ds), "==========")
+                self.next_iter_test_loaders.append(
+                    DataLoader(next_iter_test_ds,
+                               batch_size=bs_test,
+                               shuffle=False,
+                               num_workers=n_workers))
 
     def save_model(self, epoch):
         if not self.config.getboolean('Edge Models', 'save_models'):
@@ -1104,53 +1009,44 @@ class Edge:
                                                      'train_2_iters'):
                 print("[Iter2] Supervision Saved to:", save_dir_)
 
-    def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config):
-        next_iter_loaders = []
-        test_no_gt_loaders = []
-        valid_loaders = []
-        for edge in edges_1hop:
-            next_iter_loaders.append(iter(edge.next_iter_loader))
-            test_no_gt_loaders.append(iter(edge.test_no_gt_loader))
-            valid_loaders.append(iter(edge.valid_loader))
+    def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config, iter_no):
+        next_iter_train_store_paths = config.get(
+            'PathsIter%d' % (iter_no + 1),
+            'ITER%d_TRAIN_STORE_PATH' % (iter_no + 1)).split('\n')
+        next_iter_valid_store_paths = config.get(
+            'PathsIter%d' % (iter_no + 1),
+            'ITER%d_VALID_STORE_PATH' % (iter_no + 1)).split('\n')
+        next_iter_test_store_paths = config.get(
+            'PathsIter%d' % (iter_no + 1),
+            'ITER%d_TEST_STORE_PATH' % (iter_no + 1)).split('\n')
 
-        start = time.time()
-        save_dir = os.path.join(
-            config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
-            config.get('Training2Iters', 'NEXT_ITER_DB_PATH'))
-        Edge.save_1hop_ensemble_next_iter_set(next_iter_loaders, edges_1hop,
-                                              device, ensemble_fct, config,
-                                              save_dir)
-        end = time.time()
-        print("time for NEXT ITER SET Edge.save_1hop_ensemble_next_iter_set",
-              end - start)
+        # Save next iter train subsets
+        for i in range(len(next_iter_train_store_paths)):
+            local_next_iter_train_loaders = []
+            for edge in edges_1hop:
+                local_next_iter_train_loaders.append(
+                    iter(edge.next_iter_train_loaders[i]))
+            Edge.save_1hop_ensemble_next_iter_set(
+                local_next_iter_train_loaders, edges_1hop, device,
+                ensemble_fct, config, next_iter_train_store_paths[i])
 
-        start = time.time()
+        for i in range(len(next_iter_valid_store_paths)):
+            local_next_iter_valid_loaders = []
+            for edge in edges_1hop:
+                local_next_iter_valid_loaders.append(
+                    iter(edge.next_iter_valid_loaders[i]))
+            Edge.save_1hop_ensemble_next_iter_set(
+                local_next_iter_valid_loaders, edges_1hop, device,
+                ensemble_fct, config, next_iter_valid_store_paths[i])
 
-        save_dir = os.path.join(
-            config.get('Training2Iters', 'NEXT_ITER_VALID_PATH'),
-            config.get('Paths', 'VALID_DB'))
-        Edge.save_1hop_ensemble_next_iter_set(valid_loaders, edges_1hop,
-                                              device, ensemble_fct, config,
-                                              save_dir)
-        end = time.time()
-        print(
-            "time for NEXT ITER VALID SET Edge.save_1hop_ensemble_next_iter_set",
-            end - start)
-
-        if config.getint('Training2Iters', 'iter_2_src_data') == 2:
-            start = time.time()
-            save_dir = os.path.join(
-                config.get('Training2Iters', 'ENSEMBLE_OUTPUT_PATH_TEST'),
-                config.get('Paths', 'TEST_PATH'))
-            Edge.save_1hop_ensemble_next_iter_set(test_no_gt_loaders,
-                                                  edges_1hop, device,
-                                                  ensemble_fct, config,
-                                                  save_dir)
-            end = time.time()
-            print("time for TEST SET Edge.save_1hop_ensemble_next_iter_set",
-                  end - start)
-
-        return
+        for i in range(len(next_iter_test_store_paths)):
+            local_next_iter_test_loaders = []
+            for edge in edges_1hop:
+                local_next_iter_test_loaders.append(
+                    iter(edge.next_iter_test_loaders[i]))
+            Edge.save_1hop_ensemble_next_iter_set(
+                local_next_iter_test_loaders, edges_1hop, device, ensemble_fct,
+                config, next_iter_test_store_paths[i])
 
     def ensemble_histogram(edges_loaders_1hop, end_id, device):
         with torch.no_grad():

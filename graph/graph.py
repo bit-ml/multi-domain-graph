@@ -31,7 +31,6 @@ class MultiDomainGraph:
                     if train_only_for_new_expert_b and train_only_for_new_expert not in [
                             expert_i.identifier, expert_j.identifier
                     ]:
-                        print('first')
                         continue
 
                     # # # TO REMOVE
@@ -47,7 +46,6 @@ class MultiDomainGraph:
                             'Ensemble', 'restr_dst_domain') and not config.get(
                                 'Ensemble',
                                 'dst_domain_restr') == expert_j.domain_name:
-                        print('first')
                         continue
                     if expert_j.domain_name in ["normals", "rgb"]:
                         # because it has 3 channels
