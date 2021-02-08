@@ -5,7 +5,6 @@ import numpy as np
 import torch
 from torchvision import transforms
 
-from experts.basic_expert import BasicExpert
 from experts.depth.arguments import InferenceEvaluationArguments
 from experts.depth.inference import Inference
 from experts.xtc.unet import UNet
@@ -60,7 +59,7 @@ class DepthModel():
     '''
 
 
-class DepthModelXTC(BasicExpert):
+class DepthModelXTC():
     def __init__(self, full_expert=True):
         if full_expert:
             model_path = depthxtc_model_path

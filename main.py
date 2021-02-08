@@ -27,8 +27,7 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     else:
         selector_map = None
 
-    all_experts = Experts(dataset_name=config.get('Paths', 'DATASET_NAME'),
-                          full_experts=False,
+    all_experts = Experts(full_experts=False,
                           use_rgb_to_tsk=use_rgb_to_tsk,
                           selector_map=selector_map)
 
@@ -251,8 +250,8 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
         for edge_xk in space_graph.edges:
             if edge_xk.ill_posed:
                 continue
-            # if not edge_xk.trained:
-            #     continue
+            if not edge_xk.trained:
+                continue
             if not add_rgb_src_in_ensemble and edge_xk.expert1.domain_name == 'rgb':
                 continue
             if edge_xk.expert2.identifier == end_id:

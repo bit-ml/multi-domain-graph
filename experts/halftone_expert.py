@@ -4,13 +4,12 @@ import numpy as np
 import torch
 from PIL import Image
 
-from experts.basic_expert import BasicExpert
 from experts.halftone.halftone import Halftone
 
 W, H = 256, 256
 
 
-class HalftoneModel(BasicExpert):
+class HalftoneModel():
     def __init__(self, full_expert=True, style=0):
         # if full_expert:
         # self.model = Halftone()
