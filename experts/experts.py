@@ -15,6 +15,7 @@ from experts.tracking1_expert import Tracking1Model
 
 class Experts:
     def __init__(self,
+                 dataset_name,
                  full_experts=True,
                  use_rgb_to_tsk=True,
                  selector_map=None):
@@ -22,7 +23,8 @@ class Experts:
         self.methods = [
             RGBModel(full_experts),
             DepthModelXTC(full_experts),
-            SurfaceNormalsXTC(full_experts),
+            SurfaceNormalsXTC(dataset_name=dataset_name,
+                              full_expert=full_experts),
             EdgesModel(full_experts),
             SaliencySegmModel(full_experts),
             HalftoneModel(full_experts, 0),

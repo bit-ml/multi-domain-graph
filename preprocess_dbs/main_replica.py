@@ -27,43 +27,36 @@ import experts.vmos_stm_expert
 WORKING_H = 256
 WORKING_W = 256
 
-# main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/test'
-# main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/test'
-# main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/test'
-
-main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/train'
-main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/train'
-main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/train'
-
-# main_db_path = r'/data/multi-domain-graph-6/datasets/replica_raw/val'
-# main_gt_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/val'
-# main_exp_out_path = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/val'
-
 # dataset domain names
-VALID_ORIG_GT_DOMAINS = ['rgb', 'depth', 'normals']
+VALID_ORIG_GT_DOMAINS = ['rgb', 'depth', 'normals', 'rgb']
 
 # our internal domain names
-VALID_GT_DOMAINS = ['rgb', 'depth', 'normals']
-
-VALID_EXPERTS_NAME = [
-    'depth_xtc',
-    'normals_xtc',
-    'edges_dexined',
-    'halftone_gray_basic',
-    'saliency_seg_egnet',
+VALID_GT_DOMAINS = [\
+    'rgb',
+    'depth',
+    'normals',
+    'halftone_gray_basic'\
 ]
+
+VALID_EXPERTS_NAME = [\
+    'depth_xtc',
+    'edges_dexined',
+    'normals_xtc'\
+]
+VALID_SPLITS_NAME = ["val", "test", "train"]
 
 RUN_TYPE = []
 EXPERTS_NAME = []
 ORIG_DOMAINS = []
 DOMAINS = []
 
-usage_str = 'usage: python main_taskonomy.py type exp1 exp2 ...'
+usage_str = 'usage: python main_taskonomy.py type split-name exp1 exp2 ...'
 #    type                   - [0/1] - 0 create preprocessed gt samples
 #                                   - 1 create preprocessed experts samples
 #    expi                   - name of the i'th expert / domain
 #                           - should be one of the VALID_EXPERTS_NAME / VALID_GT_DOMAINS
 #                           - 'all' to run all available experts / domains
+#    split-name             - should be one of the VALID_SPLITS_NAME
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -80,25 +73,37 @@ def check_arguments_without_delete(argv):
     global EXPERTS_NAME
     global ORIG_DOMAINS
     global DOMAINS
+    global MAIN_DB_PATH
+    global MAIN_GT_OUT_PATH
+    global MAIN_EXP_OUT_PATH
 
-    if len(argv) < 3:
+    if len(argv) < 4:
         return 0, 'incorrect usage'
 
     RUN_TYPE = np.int32(argv[1])
     if not (RUN_TYPE == 0 or RUN_TYPE == 1 or RUN_TYPE == 2 or RUN_TYPE == 3):
         return 0, 'incorrect run type: %d' % RUN_TYPE
 
+    split_name = argv[2]
+    if split_name not in VALID_SPLITS_NAME:
+        status = 0
+        status_code = 'Split %s is not valid' % split_name
+        return status, status_code
+
+    MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/replica_raw/%s' % split_name
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/%s' % split_name
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica/%s' % split_name
+
     if RUN_TYPE == 0:
-        if argv[2] == 'all':
+        if argv[3] == 'all':
             ORIG_DOMAINS = []
             DOMAINS = []
             for doms in zip(VALID_ORIG_GT_DOMAINS, VALID_GT_DOMAINS):
                 orig_dom_name, dom_name = doms
-                dom_out_path = os.path.join(main_gt_out_path, dom_name)
                 ORIG_DOMAINS.append(orig_dom_name)
                 DOMAINS.append(dom_name)
         else:
-            potential_domains = argv[2:]
+            potential_domains = argv[3:]
             print("potential_domains", potential_domains)
             print("VALID_GT_DOMAINS", VALID_GT_DOMAINS)
             ORIG_DOMAINS = []
@@ -111,20 +116,18 @@ def check_arguments_without_delete(argv):
                     return status, status_code
                 orig_dom_name = VALID_ORIG_GT_DOMAINS[VALID_GT_DOMAINS.index(
                     dom_name)]
-                dom_out_path = os.path.join(main_gt_out_path, dom_name)
 
                 ORIG_DOMAINS.append(orig_dom_name)
                 DOMAINS.append(dom_name)
         print("ORIG_DOMAINS", ORIG_DOMAINS)
         return 1, ''
     elif RUN_TYPE == 1:
-        if argv[2] == 'all':
+        if argv[3] == 'all':
             EXPERTS_NAME = []
             for exp_name in VALID_EXPERTS_NAME:
-                exp_out_path = os.path.join(main_exp_out_path, exp_name)
                 EXPERTS_NAME.append(exp_name)
         else:
-            potential_experts = argv[2:]
+            potential_experts = argv[3:]
             EXPERTS_NAME = []
             for i in range(len(potential_experts)):
                 exp_name = potential_experts[i]
@@ -132,7 +135,6 @@ def check_arguments_without_delete(argv):
                     status = 0
                     status_code = 'Expert %s is not valid' % exp_name
                     return status, status_code
-                exp_out_path = os.path.join(main_exp_out_path, exp_name)
                 EXPERTS_NAME.append(exp_name)
         return 1, ''
     else:
@@ -173,8 +175,8 @@ def get_expert(exp_name):
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return experts.normals_expert.SurfaceNormalsXTC(full_expert=True,
-                                                        for_replica=True)
+        return experts.normals_expert.SurfaceNormalsXTC(dataset_name="replica",
+                                                        full_expert=True)
     elif exp_name == 'saliency_seg_egnet':
         return experts.saliency_seg_expert.SaliencySegmModel(full_expert=True)
     elif exp_name == 'rgb':
@@ -194,7 +196,7 @@ def depth_to_surface_normals(depth, surfnorm_scalar=256):
 
 def process_rgb(in_path, out_path):
     os.makedirs(out_path, exist_ok=True)
-    os.system("cp -r %s/* %s" % (in_path, out_path))
+    os.system("cp -r '%s/'* '%s'" % (in_path, out_path))
 
 
 def process_depth(in_path, out_path):
@@ -240,6 +242,7 @@ def process_surface_normals(main_db_path, out_path):
 
                 normals_img_path = os.path.join(out_path,
                                                 '%08d.npy' % sample_idx)
+                # TODO: save all batch, in smtg with workers like get_item
                 np.save(normals_img_path, normals_img)
 
 
@@ -248,15 +251,15 @@ def get_gt_domains():
     for doms in zip(ORIG_DOMAINS, DOMAINS):
         orig_dom_name, dom_name = doms
 
-        in_path = os.path.join(main_db_path, orig_dom_name)
-        out_path = os.path.join(main_gt_out_path, dom_name)
+        in_path = os.path.join(MAIN_DB_PATH, orig_dom_name)
+        out_path = os.path.join(MAIN_GT_OUT_PATH, dom_name)
 
         if orig_dom_name == 'rgb':
             process_rgb(in_path, out_path)
         elif orig_dom_name == 'depth':
             process_depth(in_path, out_path)
         elif orig_dom_name == 'normals':
-            process_surface_normals(main_db_path, out_path)
+            process_surface_normals(MAIN_DB_PATH, out_path)
 
 
 class DatasetDepth(Dataset):
@@ -301,7 +304,7 @@ class Dataset_ImgLevel(Dataset):
 
 def get_exp_results():
     with torch.no_grad():
-        rgbs_path = os.path.join(main_db_path, 'rgb')
+        rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')
         batch_size = 100
         dataset = Dataset_ImgLevel(rgbs_path)
         dataloader = torch.utils.data.DataLoader(dataset,
@@ -314,7 +317,7 @@ def get_exp_results():
             print('EXPERT: %20s' % exp_name)
             expert = get_expert(exp_name)
 
-            exp_out_path = os.path.join(main_exp_out_path, exp_name)
+            exp_out_path = os.path.join(MAIN_EXP_OUT_PATH, exp_name)
             os.makedirs(exp_out_path, exist_ok=True)
 
             for batch_idx, (frames, indexes) in enumerate(tqdm(dataloader)):
@@ -338,7 +341,7 @@ def split_train_gt_ds():
     all_domains = VALID_GT_DOMAINS
 
     for domain in all_domains:
-        dom_in_path = os.path.join(main_gt_out_path, domain)
+        dom_in_path = os.path.join(MAIN_GT_OUT_PATH, domain)
 
         dom_out_path1 = os.path.join(main_gt_out_path_1, domain)
         dom_out_path2 = os.path.join(main_gt_out_path_2, domain)
@@ -364,7 +367,7 @@ def split_train_exp_ds():
     all_domains = VALID_EXPERTS_NAME
 
     for domain in all_domains:
-        dom_in_path = os.path.join(main_exp_out_path, domain)
+        dom_in_path = os.path.join(MAIN_EXP_OUT_PATH, domain)
 
         dom_out_path1 = os.path.join(main_exp_out_path_1, domain)
         dom_out_path2 = os.path.join(main_exp_out_path_2, domain)
@@ -388,7 +391,7 @@ def split_train_exp_ds():
 
 if __name__ == "__main__":
     status, status_code = check_arguments_without_delete(sys.argv)
-    print(main_db_path)
+    print(MAIN_DB_PATH)
     if status == 0:
         sys.exit(status_code + '\n' + usage_str)
 

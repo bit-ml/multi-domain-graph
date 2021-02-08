@@ -1,11 +1,13 @@
 # use SGDepth code for depth expert - https://github.com/xavysp/DexiNed/blob/master/DexiNed-Pytorch/
 import os
+
 import cv2
 import numpy as np
 import tensorflow as tf
 import torch
 from torchvision import transforms
 
+from experts.basic_expert import BasicExpert
 from experts.saliencysegm.model import build_model, weights_init
 
 W, H = 256, 256
@@ -15,7 +17,7 @@ saliency_model_path = os.path.join(current_dir_name,
                                    'models/saliency_seg_egnet.pth')
 
 
-class SaliencySegmModel():
+class SaliencySegmModel(BasicExpert):
     def __init__(self, full_expert=True):
         if full_expert:
             #resnet_path = 'experts/models/resnet50_caffe.pth'

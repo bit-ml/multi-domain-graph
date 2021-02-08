@@ -145,12 +145,11 @@ class Edge:
         self.expert1 = expert1
         self.expert2 = expert2
         self.name = "%s -> %s" % (expert1.identifier, expert2.identifier)
-        should_normalize = (expert2.domain_name == "normals")
 
         self.net = UNetGood(n_channels=self.expert1.n_maps,
                             n_classes=self.expert2.n_maps,
-                            bilinear=True,
-                            normalize=should_normalize).to(device)
+                            from_exp=expert1,
+                            to_exp=expert2).to(device)
 
         self.net = nn.DataParallel(self.net)
         # total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
@@ -331,8 +330,6 @@ class Edge:
         train_l2_loss = 0
         for batch in self.train_loader:
             domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.module.n_channels
-            assert domain2_gt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
@@ -373,8 +370,6 @@ class Edge:
 
         for batch in self.valid_loader:
             domain1, domain2_gt = batch
-            assert domain1.shape[1] == self.net.module.n_channels
-            assert domain2_gt.shape[1] == self.net.module.n_classes
 
             domain1 = domain1.to(device=device, dtype=torch.float32)
             domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
@@ -399,40 +394,38 @@ class Edge:
         return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
             self.valid_loader) * 100
 
-    def test_step(self, device, writer, wtag):
-        """Currently should work as eval_step
-        """
-        self.net.eval()
-        test_l2_loss = 0
-        test_l1_loss = 0
+    # def test_step(self, device, writer, wtag):
+    #     """Currently should work as eval_step
+    #     """
+    #     self.net.eval()
+    #     test_l2_loss = 0
+    #     test_l1_loss = 0
 
-        for batch in self.test_loader:
-            domain1, domain2_gt, _ = batch
-            assert domain1.shape[1] == self.net.module.n_channels
-            assert domain2_gt.shape[1] == self.net.module.n_classes
+    #     for batch in self.test_loader:
+    #         domain1, domain2_gt, _ = batch
 
-            domain1 = domain1.to(device=device, dtype=torch.float32)
-            domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
+    #         domain1 = domain1.to(device=device, dtype=torch.float32)
+    #         domain2_gt = domain2_gt.to(device=device, dtype=torch.float32)
 
-            with torch.no_grad():
-                domain2_pred = self.net(domain1).clamp(min=0, max=1)
-            l2_loss = self.l2(domain2_pred, domain2_gt)
-            l1_loss = self.l1(domain2_pred, domain2_gt)
+    #         with torch.no_grad():
+    #             domain2_pred = self.net(domain1).clamp(min=0, max=1)
+    #         l2_loss = self.l2(domain2_pred, domain2_gt)
+    #         l1_loss = self.l1(domain2_pred, domain2_gt)
 
-            test_l2_loss += l2_loss.item()
-            test_l1_loss += l1_loss.item()
+    #         test_l2_loss += l2_loss.item()
+    #         test_l1_loss += l1_loss.item()
 
-        writer.add_images('Test_%s/Input' % wtag, img_for_plot(domain1[:3]),
-                          self.global_step)
+    #     writer.add_images('Test_%s/Input' % wtag, img_for_plot(domain1[:3]),
+    #                       self.global_step)
 
-        writer.add_images('Test_%s/GT' % wtag, img_for_plot(domain2_gt[:3]),
-                          self.global_step)
+    #     writer.add_images('Test_%s/GT' % wtag, img_for_plot(domain2_gt[:3]),
+    #                       self.global_step)
 
-        writer.add_images('Test_%s/Output' % wtag,
-                          img_for_plot(domain2_pred[:3]), self.global_step)
+    #     writer.add_images('Test_%s/Output' % wtag,
+    #                       img_for_plot(domain2_pred[:3]), self.global_step)
 
-        return test_l2_loss / len(self.test_loader) * 100, test_l1_loss / len(
-            self.test_loader) * 100
+    #     return test_l2_loss / len(self.test_loader) * 100, test_l1_loss / len(
+    #         self.test_loader) * 100
 
     def train(self, start_epoch, n_epochs, device, writer, eval_test):
         self.global_step = start_epoch
@@ -495,10 +488,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt, domain2_gt = next(loader)
-
-                    assert domain1.shape[1] == edge.net.module.n_channels
-                    assert domain2_exp_gt.shape[1] == edge.net.module.n_classes
-                    assert domain2_gt.shape[1] == edge.net.module.n_classes
 
                     domain1 = domain1.to(device=device, dtype=torch.float32)
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
@@ -570,9 +559,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt = next(loader)
-
-                    assert domain1.shape[1] == edge.net.module.n_channels
-                    assert domain2_exp_gt.shape[1] == edge.net.module.n_classes
 
                     domain1 = domain1.to(device=device, dtype=torch.float32)
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
@@ -687,9 +673,30 @@ class Edge:
             writer.add_images(
                 '%s/EXPERT' % (wtag_test),
                 img_for_plot(domain2_exp_gt_test[save_idxes_test]), 0)
+# from PIL import Image
+# pred_logits = domain2_exp_gt_test[1]
+# rgb_img = (pred_logits * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
 
-            # Image.fromarray((domain2_gt_test[0].data.cpu().numpy() * 255.).astype(np.uint8).transpose(1, 2, 0)).save("tb_normals_before.png")
-            # Image.fromarray((img_for_plot(domain2_gt_test[0][None])[0].data.cpu().numpy() * 255.).astype(np.uint8).transpose(1, 2, 0)).save("tb_normals_after.png")
+# Image.fromarray(rgb_img).save("t_initial.png")
+# aux = 2 * (pred_logits - 0.5)
+# aux[2, :, :] = 0
+# aux_norm = aux.norm(dim=0, keepdim=True)
+# aux_renormed = aux / aux_norm
+# # transform it back to RGB
+# normals_maps = 0.5 * aux_renormed + 0.5
+
+# rgb_img = (normals_maps * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
+# Image.fromarray(rgb_img).save("t_modificat012.png")
+# rgb_img = (normals_maps[[0, 2, 1]] * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
+# Image.fromarray(rgb_img).save("t_modificat021.png")
+# rgb_img = (normals_maps[[1, 2, 0]] * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
+# Image.fromarray(rgb_img).save("t_modificat120.png")
+# rgb_img = (normals_maps[[1, 0, 2]] * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
+# Image.fromarray(rgb_img).save("t_modificat102.png")
+# rgb_img = (normals_maps[[2, 0, 1]] * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
+# Image.fromarray(rgb_img).save("t_modificat201.png")
+# rgb_img = (normals_maps[[2, 1, 0]] * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
+# Image.fromarray(rgb_img).save("t_modificat210.png")
             writer.add_images('%s/GT' % (wtag_test),
                               img_for_plot(domain2_gt_test[save_idxes_test]),
                               0)
@@ -758,9 +765,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt = next(loader)
-
-                    assert domain1.shape[1] == edge.net.module.n_channels
-                    assert domain2_exp_gt.shape[1] == edge.net.module.n_classes
 
                     domain1 = domain1.to(device=device, dtype=torch.float32)
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
