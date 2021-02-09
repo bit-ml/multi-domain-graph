@@ -17,25 +17,33 @@ class MultiDomainGraph:
 
     def init_nets(self, all_experts, device, silent, config, valid_shuffle,
                   iter_no):
+
+        restricted_graph_type = config.getint('GraphStructure',
+                                              'restricted_graph_type')
+        restricted_graph_exp_identifier = config.get(
+            'GraphStructure', 'restricted_graph_exp_identifier')
+
         rnd_sampler = torch.Generator()
         self.edges = []
         for i_idx, expert_i in enumerate(all_experts.methods):
             for expert_j in all_experts.methods:
                 if expert_i != expert_j:
-                    train_only_for_new_expert_b = config.getboolean(
-                        'Training', 'train_only_for_new_expert')
-                    train_only_for_new_expert = config.get(
-                        'Training', 'train_only_for_new_expert')
-                    if train_only_for_new_expert_b and train_only_for_new_expert not in [
-                            expert_i.identifier, expert_j.identifier
-                    ]:
-                        continue
+                    if restricted_graph_type > 0:
+                        if restricted_graph_type == 1 and (
+                                not expert_i.identifier
+                                == restricted_graph_exp_identifier):
+                            continue
+                        if restricted_graph_type == 2 and (
+                                not expert_j.identifier
+                                == restricted_graph_exp_identifier):
+                            continue
+                        if restricted_graph_type == 3 and (
+                                not (expert_i.identifier
+                                     == restricted_graph_exp_identifier
+                                     or expert_j.identifier
+                                     == restricted_graph_exp_identifier)):
+                            continue
 
-                    if config.getboolean(
-                            'Ensemble', 'restr_dst_domain') and not config.get(
-                                'Ensemble',
-                                'dst_domain_restr') == expert_j.domain_name:
-                        continue
                     if expert_j.domain_name in ["normals", "rgb"]:
                         # because it has 3 channels
                         bs_test = 100

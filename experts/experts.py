@@ -12,12 +12,8 @@ from experts.semantic_segmentation_expert import SSegHRNet
 
 
 class Experts:
-    def __init__(self,
-                 dataset_name,
-                 full_experts=True,
-                 use_rgb_to_tsk=True,
-                 selector_map=None):
 
+    def __init__(self, dataset_name, full_experts=True, selector_map=None):
         self.methods = [
             RGBModel(full_experts),
             DepthModelXTC(full_experts),
@@ -32,10 +28,7 @@ class Experts:
             # DepthModel(full_experts),
         ]
         if selector_map is None:
-            if use_rgb_to_tsk:
-                selector_map = np.arange(len(self.methods))
-            else:
-                selector_map = np.arange(1, len(self.methods))
+            selector_map = np.arange(len(self.methods))
 
         self.methods = np.array(self.methods)[selector_map].tolist()
 
