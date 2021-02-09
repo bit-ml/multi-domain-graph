@@ -14,9 +14,9 @@ import numpy as np
 #final_csv_path = r'csv_results_config1.csv'
 #fig_path = r'csv_results_config1.svg'
 
-main_csvs_path = r'./csv_results_config6'
-final_csv_path = r'csv_results_config6.csv'
-fig_path = r'csv_results_config6.svg'
+main_csvs_path = r'./csv_results_edges_config1'
+final_csv_path = r'csv_results_edges_config1.csv'
+fig_path = r'csv_results_config7.svg'
 
 
 def generate_common_csv(main_csvs_path, final_csv_path):
@@ -96,9 +96,27 @@ def generate_train_plots(csv_path, fig_path):
 
 
 if __name__ == "__main__":
+    '''
+    main_csvs_path = r'./csv_results_edges_standard'
+    final_csv_path = r'csv_results_edges_standard.csv'
     generate_common_csv(main_csvs_path, final_csv_path)
+    '''
+    '''
+    for i in np.arange(11, 13):
+        main_csvs_path_ = main_csvs_path.replace('config1', 'config%d' % i)
+        final_csv_path_ = final_csv_path.replace('config1', 'config%d' % i)
+        generate_common_csv(main_csvs_path_, final_csv_path_)
+
+    for i in np.arange(11, 13):
+        main_csvs_path_ = main_csvs_path.replace('edges_config1',
+                                                 'normals_config%d' % i)
+        final_csv_path_ = final_csv_path.replace('edges_config1',
+                                                 'normals_config%d' % i)
+        generate_common_csv(main_csvs_path_, final_csv_path_)
+    '''
+    #generate_common_csv(main_csvs_path, final_csv_path)
     #generate_plots(final_csv_path, fig_path)
 
-    #trains_csv_path = 'train_to_normals_28_01.csv'
-    #out_path = 'train_to_normals_28_01.svg'
-    #generate_train_plots(trains_csv_path, out_path)
+    trains_csv_path = 'train_edges.csv'
+    out_path = 'train_edges.svg'
+    generate_train_plots(trains_csv_path, out_path)
