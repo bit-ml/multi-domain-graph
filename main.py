@@ -25,7 +25,7 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     else:
         selector_map = None
 
-    all_experts = Experts(full_experts=False, selector_map=selector_map)
+    all_experts = Experts(dataset_name=config.get('Paths', 'DATASET_NAME'), full_experts=False, selector_map=selector_map)
 
     md_graph = MultiDomainGraph(
         config,

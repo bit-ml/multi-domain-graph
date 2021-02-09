@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from scipy.stats import pearsonr
+from skimage import color
 from skimage.metrics import structural_similarity as ssim
 from tqdm import tqdm
 
@@ -21,7 +22,7 @@ EPSILON = 0.00001
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def img_for_plot(img):
+def img_for_plot(img, dst_id):
     '''
     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
     '''
@@ -29,6 +30,12 @@ def img_for_plot(img):
     if c == 2:
         img = img[:, 0:1]
         c = 1
+    if dst_id.find("sem_seg") >= 0:
+        # ADE20k labels https://github.com/CSAILVision/sceneparsing/blob/master/objectInfo150.csv, 150 classes
+        result = color.label2rgb((img[:, 0] * 150).data.cpu().numpy(),
+                                 bg_label=0).transpose(0, 3, 1, 2)
+        img = torch.from_numpy(result.astype(np.float32)).contiguous()
+        c = 3
 
     # # v1. normalize per channel
     # img_view = img.view(n, c, -1)
