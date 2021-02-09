@@ -25,7 +25,9 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     else:
         selector_map = None
 
-    all_experts = Experts(dataset_name=config.get('Paths', 'DATASET_NAME'), full_experts=False, selector_map=selector_map)
+    all_experts = Experts(dataset_name=config.get('General', 'DATASET_NAME'),
+                          full_experts=False,
+                          selector_map=selector_map)
 
     md_graph = MultiDomainGraph(
         config,
@@ -323,7 +325,8 @@ def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
 def check_models_exists(config, epoch):
     print("Load nets from checkpoints. From epoch: %2d" % epoch,
           config.get('Edge Models', 'load_path'))
-    all_experts = Experts(full_experts=False)
+    all_experts = Experts(dataset_name=config.get('General', 'DATASET_NAME'),
+                          full_experts=False)
     for expert_i in all_experts.methods:
         for expert_j in all_experts.methods:
             if expert_i != expert_j:
