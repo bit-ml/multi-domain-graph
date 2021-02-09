@@ -14,6 +14,7 @@ sys.path.insert(0,
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import experts.depth_expert
 import experts.edges_expert
+import experts.grayscale_expert
 import experts.halftone_expert
 import experts.liteflownet_of_expert
 import experts.normals_expert
@@ -27,14 +28,17 @@ WORKING_H = 256
 WORKING_W = 256
 
 # dataset domain names
-VALID_ORIG_GT_DOMAINS = ['rgb', 'depth', 'normals', "halftone_gray_basic"]
+VALID_ORIG_GT_DOMAINS = [
+    'rgb', 'depth', 'normals', "halftone_gray_basic", "grayscale"
+]
 
 # our internal domain names
 VALID_GT_DOMAINS = [\
     'rgb',
     'depth',
     'normals',
-    'halftone_gray_basic'\
+    'halftone_gray_basic',
+    'grayscale'\
 ]
 
 VALID_EXPERTS_NAME = [\
@@ -184,6 +188,8 @@ def get_expert(exp_name):
         return experts.rgb_expert.RGBModel(full_expert=True)
     elif exp_name == 'sem_seg_hrnet':
         return experts.semantic_segmentation_expert.SSegHRNet(full_expert=True)
+    elif exp_name == 'grayscale':
+        return experts.grayscale_expert.Grayscale(full_expert=True)
 
 
 def depth_to_surface_normals(depth, surfnorm_scalar=256):
@@ -199,6 +205,18 @@ def depth_to_surface_normals(depth, surfnorm_scalar=256):
 
 def process_halftone():
     domain_name = "halftone_gray_basic"
+    get_exp_results(MAIN_GT_OUT_PATH, experts_name=[domain_name])
+
+    # link it in the experts
+    to_unlink = os.path.join(MAIN_EXP_OUT_PATH, domain_name)
+    os.system("unlink %s" % (to_unlink))
+
+    from_path = os.path.join(MAIN_GT_OUT_PATH, domain_name)
+    os.system("ln -s %s %s" % (from_path, MAIN_EXP_OUT_PATH))
+
+
+def process_grayscale():
+    domain_name = "grayscale"
     get_exp_results(MAIN_GT_OUT_PATH, experts_name=[domain_name])
 
     # link it in the experts
@@ -282,6 +300,8 @@ def get_gt_domains():
             process_surface_normals(MAIN_DB_PATH, out_path)
         elif orig_dom_name == 'halftone_gray_basic':
             process_halftone()
+        elif orig_dom_name == 'grayscale':
+            process_grayscale()
 
 
 class DatasetDepth(Dataset):
