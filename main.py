@@ -19,17 +19,13 @@ import configparser
 
 
 def build_space_graph(config, silent, valid_shuffle, iter_no=1):
-    use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
-
     if config.has_option('Experts', 'selector_map'):
         selector_map_str = config.get('Experts', 'selector_map').split(",")
         selector_map = [int(token) for token in selector_map_str]
     else:
         selector_map = None
 
-    all_experts = Experts(full_experts=False,
-                          use_rgb_to_tsk=use_rgb_to_tsk,
-                          selector_map=selector_map)
+    all_experts = Experts(full_experts=False, selector_map=selector_map)
 
     md_graph = MultiDomainGraph(
         config,
@@ -236,9 +232,6 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                                flush_secs=30)
     save_idxes = None
     save_idxes_test = None
-    add_rgb_src_in_ensemble = config.getboolean('Ensemble',
-                                                'add_rgb_src_in_ensemble')
-
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         tag = "Valid_1Hop_%s" % end_id
@@ -251,8 +244,6 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             if edge_xk.ill_posed:
                 continue
             if not edge_xk.trained:
-                continue
-            if not add_rgb_src_in_ensemble and edge_xk.expert1.domain_name == 'rgb':
                 continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
@@ -283,9 +274,6 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
 def save_1hop_ensembles(space_graph, config, iter_no):
     writer = DummySummaryWriter()
 
-    add_rgb_src_in_ensemble = config.getboolean('Ensemble',
-                                                'add_rgb_src_in_ensemble')
-
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         edges_1hop = []
@@ -295,8 +283,6 @@ def save_1hop_ensembles(space_graph, config, iter_no):
             if edge_xk.ill_posed:
                 continue
             if not edge_xk.trained:
-                continue
-            if not add_rgb_src_in_ensemble and edge_xk.expert1.domain_name == 'rgb':
                 continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
@@ -321,13 +307,7 @@ def train_2Dtasks(space_graph, start_epoch, n_epochs, silent, config):
             flush_secs=30)
     eval_test = config.getboolean('Training', 'eval_test_during_train')
 
-    src_domain_restr = config.get('Training', 'src_domain_restr')
-
     for net_idx, net in enumerate(space_graph.edges):
-        if config.getboolean(
-                'Training', 'restr_src_domain'
-        ) and not net.expert1.domain_name == src_domain_restr:
-            continue
         print("[%2d] Train" % net_idx, net)
 
         net.train(start_epoch=start_epoch,
@@ -527,9 +507,9 @@ def main(argv):
         return
 
     if config.getboolean('Training2Iters', 'train_2_iters'):
-        use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
         all_experts = Experts(full_experts=False,
-                              use_rgb_to_tsk=use_rgb_to_tsk)
+                              selector_map=config.get('Experts',
+                                                      'selector_map'))
         prepare_store_folders(config=config,
                               iter_no=2,
                               all_experts=all_experts)

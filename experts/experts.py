@@ -14,10 +14,7 @@ from experts.tracking1_expert import Tracking1Model
 
 
 class Experts:
-    def __init__(self,
-                 full_experts=True,
-                 use_rgb_to_tsk=True,
-                 selector_map=None):
+    def __init__(self, full_experts=True, selector_map=None):
 
         self.methods = [
             RGBModel(full_experts),
@@ -26,16 +23,12 @@ class Experts:
             EdgesModel(full_experts),
             SaliencySegmModel(full_experts),
             HalftoneModel(full_experts, 0),
-
             # Tracking1Model(full_experts),
             # RaftModel(full_experts, 1),
             # DepthModel(full_experts),
         ]
         if selector_map is None:
-            if use_rgb_to_tsk:
-                selector_map = np.arange(len(self.methods))
-            else:
-                selector_map = np.arange(1, len(self.methods))
+            selector_map = np.arange(len(self.methods))
 
         self.methods = np.array(self.methods)[selector_map].tolist()
 

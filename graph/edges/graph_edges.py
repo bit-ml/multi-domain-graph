@@ -102,8 +102,6 @@ class Edge:
             config.get('Edge Models', 'load_path'),
             '%s_%s' % (expert1.identifier, expert2.identifier))
 
-        src_domain_restr = config.get('Training', 'src_domain_restr')
-
         if config.getboolean('Edge Models', 'save_models'):
             self.save_model_dir = os.path.join(
                 config.get('Edge Models', 'save_path'),
@@ -111,10 +109,7 @@ class Edge:
                 '%s_%s' % (expert1.identifier, expert2.identifier))
 
             if not os.path.exists(self.save_model_dir):
-                if (config.getboolean('Training', 'restr_src_domain')
-                        and self.expert1.domain_name == src_domain_restr
-                    ) or not config.getboolean('Training', 'restr_src_domain'):
-                    os.makedirs(self.save_model_dir)
+                os.makedirs(self.save_model_dir)
 
             self.save_epochs_distance = config.getint('Edge Models',
                                                       'save_epochs_distance')
