@@ -31,7 +31,6 @@ class MultiDomainGraph:
                     ]:
                         continue
 
-
                     if config.getboolean(
                             'Ensemble', 'restr_dst_domain') and not config.get(
                                 'Ensemble',

@@ -36,10 +36,12 @@
             "args": [
                 // type    - 0 create preprocessed gt samples
                 //         - 1 create preprocessed experts samples
-                // gt: ['rgb', 'depth', 'edges', 'normals']
-                // exp: ['halftone_gray_basic', 'depth_xtc', 'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb']
+                // gt: ['rgb', 'depth', 'edges', 'normals', 'halftone_gray_basic']
+                // exp: ['depth_xtc', 'edges_dexined', 'normals_xtc', 'sem_seg_hrnet']
+                // split: test valid train
                 "0",
-                "depth"
+                "tiny-test",
+                "sem_seg",
             ]
         },
         {
@@ -54,10 +56,12 @@
             "args": [
                 // type    - 0 create preprocessed gt samples
                 //         - 1 create preprocessed experts samples
-                // gt: ['rgb', 'depth', 'edges', 'normals']
-                // exp: ['halftone_gray_basic', 'depth_xtc', 'edges_dexined', 'normals_xtc', 'saliency_seg_egnet', 'rgb']
+                // gt: ['rgb', 'depth', 'normals', 'halftone_gray_basic']
+                // exp: ['depth_xtc', 'edges_dexined', 'normals_xtc', 'sem_seg_hrnet']
+                // split: test val train
                 "0",
-                "normals"
+                "test",
+                "halftone_gray_basic"
             ]
         },
         {
@@ -66,18 +70,21 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1"
+            },
             "args": [
                 "config_elena.ini"
             ]
         },
         {
-            "name": "Custom Config",
+            "name": "custom_config.ini",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "configs_taskonomy/config_elena_no_edges.ini"
+                "custom_config.ini"
             ]
         },
     ]

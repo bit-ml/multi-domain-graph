@@ -25,7 +25,7 @@ import tqdm
 from experts.vmos_stm.dataset import Generic_Test
 from experts.vmos_stm.model import STM
 
-import experts.sseg_fcn_expert
+# import experts.sseg_fcn_expert
 
 def Run_video(Fs, Ms, num_frames, num_objects, model, Mem_every=None, Mem_number=None):
     # initialize storage tensors

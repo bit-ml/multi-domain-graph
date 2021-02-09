@@ -3,18 +3,17 @@
 # print(sys.path)
 import numpy as np
 
-from experts.depth_expert import DepthModel, DepthModelXTC
+from experts.depth_expert import DepthModelXTC
 from experts.edges_expert import EdgesModel
 from experts.halftone_expert import HalftoneModel
 from experts.normals_expert import SurfaceNormalsXTC
-from experts.raft_of_expert import RaftModel
 from experts.rgb_expert import RGBModel
-from experts.saliency_seg_expert import SaliencySegmModel
-from experts.tracking1_expert import Tracking1Model
+from experts.semantic_segmentation_expert import SSegHRNet
 
 
 class Experts:
     def __init__(self,
+                 dataset_name,
                  full_experts=True,
                  use_rgb_to_tsk=True,
                  selector_map=None):
@@ -22,10 +21,11 @@ class Experts:
         self.methods = [
             RGBModel(full_experts),
             DepthModelXTC(full_experts),
-            SurfaceNormalsXTC(full_experts),
+            SurfaceNormalsXTC(dataset_name=dataset_name,
+                              full_expert=full_experts),
             EdgesModel(full_experts),
-            SaliencySegmModel(full_experts),
             HalftoneModel(full_experts, 0),
+            SSegHRNet(full_experts)
 
             # Tracking1Model(full_experts),
             # RaftModel(full_experts, 1),
