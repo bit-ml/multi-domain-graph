@@ -238,7 +238,6 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     save_idxes_test = None
     add_rgb_src_in_ensemble = config.getboolean('Ensemble',
                                                 'add_rgb_src_in_ensemble')
-    ensemble_fct = config.get('Ensemble', 'ensemble_fct')
 
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
@@ -276,7 +275,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
             save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
                 edges_1hop, save_idxes, save_idxes_test, device, writer,
                 drop_version, edges_1hop_weights, edges_1hop_test_weights,
-                ensemble_fct, config)
+                config)
 
     writer.close()
 
@@ -286,7 +285,6 @@ def save_1hop_ensembles(space_graph, config, iter_no):
 
     add_rgb_src_in_ensemble = config.getboolean('Ensemble',
                                                 'add_rgb_src_in_ensemble')
-    ensemble_fct = config.get('Ensemble', 'ensemble_fct')
 
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
@@ -305,8 +303,7 @@ def save_1hop_ensembles(space_graph, config, iter_no):
 
         # 2. Eval each ensemble
         if len(edges_1hop) > 0:
-            Edge.save_1hop_ensemble(edges_1hop, device, ensemble_fct, config,
-                                    iter_no)
+            Edge.save_1hop_ensemble(edges_1hop, device, config, iter_no)
 
     writer.close()
 
@@ -530,7 +527,6 @@ def main(argv):
         return
 
     if config.getboolean('Training2Iters', 'train_2_iters'):
-        '''
         use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
         all_experts = Experts(full_experts=False,
                               use_rgb_to_tsk=use_rgb_to_tsk)
@@ -569,7 +565,7 @@ def main(argv):
                             drop_version=-1,
                             silent=silent,
                             config=config)
-
+        '''
         return
 
     # 2. Build graph

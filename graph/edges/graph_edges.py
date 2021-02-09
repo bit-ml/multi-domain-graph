@@ -18,13 +18,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
-from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed, img_for_plot
-from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized
-from utils.utils import EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th
-from utils.utils import EnsembleFilter_TwdExpert_L1, EnsembleFilter_Equal
-from utils.utils import EnsembleFilter_TwdExpert_SSIM_Normalized_Th
-from utils.utils import EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized
-from utils.utils import EnsembleFilter_TwdExpert_PSNR, EnsembleFilter_TwdExpert_LPIPS
+from utils.utils import img_for_plot
+from utils.utils import EnsembleFilter_TwdExpert
 
 
 class Edge:
@@ -34,32 +29,13 @@ class Edge:
         self.config = config
         self.silent = silent
 
-        ensemble_fct = config.get('Ensemble', 'ensemble_fct')
-        self.ensemble_filter = None
-        if ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized(
-                0.5)
-        elif ensemble_fct == 'ssim_maps_twd_exp_mixed_nn_normalized_th':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed_Normalized_Th(
-                0.5)
-        elif ensemble_fct == 'l1_maps_twd_exp_mixed_nn_normalized_th':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_L1(0.5)
-        elif ensemble_fct == 'equal_maps_mixed_nn_normalized_th':
-            self.ensemble_filter = EnsembleFilter_Equal(0.5)
-        elif ensemble_fct == 'ssim_maps_twd_exp_mixed_nn':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Mixed(0.5)
-        elif ensemble_fct == 'ssim_maps_twd_exp_nn_normalized_th':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_SSIM_Normalized_Th(
-                0.5)
-        elif ensemble_fct == 'mssim_maps_twd_exp_mixed_nn_normalized':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_MSSIM_Mixed_Normalized(
-                0.5)
-        elif ensemble_fct == 'psnr_maps_twd_exp_mixed_nn_normalized_th':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_PSNR(0.5)
-        elif ensemble_fct == 'lpips_maps_twd_exp_mixed_nn_normalized_th':
-            self.ensemble_filter = EnsembleFilter_TwdExpert_LPIPS(0.5)
-        if not self.ensemble_filter == None:
-            self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
+        # Initialize ensemble model for destination task
+        similarity_fct = config.get('Ensemble', 'similarity_fct')
+        self.ensemble_filter = EnsembleFilter_TwdExpert(
+            n_channels=expert2.n_maps,
+            similarity_fct=similarity_fct,
+            threshold=0.5)
+        #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
         self.init_loaders(bs=bs_train * torch.cuda.device_count(),
@@ -636,8 +612,7 @@ class Edge:
     ################ [1Hop Ensembles] ##################
     def eval_1hop_ensemble_test_set(loaders, l1_per_edge, l1_ensemble1hop,
                                     l1_expert, edges_1hop, device, save_idxes,
-                                    writer, wtag, edges_1hop_weights,
-                                    ensemble_fct):
+                                    writer, wtag, edges_1hop_weights):
         with torch.no_grad():
             num_batches = len(loaders[0])
             for idx_batch in tqdm(range(num_batches)):
@@ -693,16 +668,11 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
 
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
-                if not edge.ensemble_filter == None:
-                    domain2_1hop_ens = edge.ensemble_filter(
-                        domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                        edge.expert2.domain_name)
-                else:
-                    domain2_1hop_ens = utils.combine_maps(
-                        domain2_1hop_ens_list,
-                        edges_1hop_weights,
-                        edge.expert2.domain_name,
-                        fct=ensemble_fct)
+
+                domain2_1hop_ens = edge.ensemble_filter(
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
+                    edge.expert2.domain_name)
+
                 l1_expert += 100 * edge.l1(domain2_exp_gt, domain2_gt).item()
                 l1_ensemble1hop += 100 * edge.l1(domain2_1hop_ens,
                                                  domain2_gt).item()
@@ -711,8 +681,7 @@ class Edge:
 
     def eval_1hop_ensemble_valid_set(loaders, l1_per_edge, l1_ensemble1hop,
                                      edges_1hop, device, save_idxes, writer,
-                                     wtag, edges_1hop_weights, ensemble_fct,
-                                     config):
+                                     wtag, edges_1hop_weights, config):
         with torch.no_grad():
             #crt_idx = 0
             num_batches = len(loaders[0])
@@ -751,14 +720,9 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                if not edge.ensemble_filter == None:
-                    domain2_1hop_ens = edge.ensemble_filter(
-                        domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                        edge.expert2.domain_name)
-                else:
-                    domain2_1hop_ens = utils.combine_maps(
-                        domain2_1hop_ens_list, edges_1hop_weights,
-                        edge.expert2.domain_name, ensemble_fct)
+                domain2_1hop_ens = edge.ensemble_filter(
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
+                    edge.expert2.domain_name)
                 '''
                 # Save output for second iteration
                 if config.getboolean('Training2Iters', 'train_2_iters'):
@@ -779,7 +743,7 @@ class Edge:
 
     def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
                            writer, drop_version, edges_1hop_weights,
-                           edges_1hop_test_weights, ensemble_fct, config):
+                           edges_1hop_test_weights, config):
         drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
         wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
                                              drop_str)
@@ -796,8 +760,7 @@ class Edge:
         start = time.time()
         l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_valid_set(
             valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag_valid, edges_1hop_weights, ensemble_fct,
-            config)
+            save_idxes, writer, wtag_valid, edges_1hop_weights, config)
         end = time.time()
         print("time for VALID Edge.eval_1hop_ensemble_aux", end - start)
 
@@ -817,7 +780,7 @@ class Edge:
             l1_per_edge_test, l1_ensemble1hop_test, l1_expert_test, save_idxes_test, domain2_1hop_ens_test, domain2_exp_gt_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_test_set(
                 test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
                 l1_expert_test, test_edges, device, save_idxes_test, writer,
-                wtag_test, edges_1hop_test_weights, ensemble_fct)
+                wtag_test, edges_1hop_test_weights)
         end = time.time()
         print("time for TEST Edge.eval_1hop_ensemble_test_set", end - start)
 
@@ -852,7 +815,7 @@ class Edge:
 
         tag = "to_%s_%s" % (edges_1hop[0].expert2.identifier, drop_str)
         print("load_path", config.get('Edge Models', 'load_path'))
-        print("ensemble_fct:", ensemble_fct)
+        print("Ensemble - sim fct: ", config.get('Ensemble', 'similarity_fct'))
         print(
             "%24s  L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
             % (tag))
@@ -899,8 +862,8 @@ class Edge:
         return save_idxes, save_idxes_test
 
     ######## Save 1hop ensembles ###############
-    def save_1hop_ensemble_next_iter_set(loaders, edges_1hop, device,
-                                         ensemble_fct, config, save_dir):
+    def save_1hop_ensemble_next_iter_set(loaders, edges_1hop, device, config,
+                                         save_dir):
         with torch.no_grad():
             crt_idx = 0
             num_batches = len(loaders[0])
@@ -926,14 +889,9 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                if not edge.ensemble_filter == None:
-                    domain2_1hop_ens = edge.ensemble_filter(
-                        domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                        edge.expert2.domain_name)
-                else:
-                    domain2_1hop_ens = utils.combine_maps(
-                        domain2_1hop_ens_list, [], edge.expert2.domain_name,
-                        ensemble_fct)
+                domain2_1hop_ens = edge.ensemble_filter(
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
+                    edge.expert2.domain_name)
 
                 save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
                 for elem_idx in range(domain2_1hop_ens.shape[0]):
@@ -946,7 +904,7 @@ class Edge:
                                                      'train_2_iters'):
                 print("[Iter2] Supervision Saved to:", save_dir_)
 
-    def save_1hop_ensemble(edges_1hop, device, ensemble_fct, config, iter_no):
+    def save_1hop_ensemble(edges_1hop, device, config, iter_no):
         next_iter_train_store_paths = config.get(
             'PathsIter%d' % (iter_no + 1),
             'ITER%d_TRAIN_STORE_PATH' % (iter_no + 1)).split('\n')
@@ -964,8 +922,8 @@ class Edge:
                 local_next_iter_train_loaders.append(
                     iter(edge.next_iter_train_loaders[i]))
             Edge.save_1hop_ensemble_next_iter_set(
-                local_next_iter_train_loaders, edges_1hop, device,
-                ensemble_fct, config, next_iter_train_store_paths[i])
+                local_next_iter_train_loaders, edges_1hop, device, config,
+                next_iter_train_store_paths[i])
 
         for i in range(len(next_iter_valid_store_paths)):
             local_next_iter_valid_loaders = []
@@ -973,8 +931,8 @@ class Edge:
                 local_next_iter_valid_loaders.append(
                     iter(edge.next_iter_valid_loaders[i]))
             Edge.save_1hop_ensemble_next_iter_set(
-                local_next_iter_valid_loaders, edges_1hop, device,
-                ensemble_fct, config, next_iter_valid_store_paths[i])
+                local_next_iter_valid_loaders, edges_1hop, device, config,
+                next_iter_valid_store_paths[i])
 
         for i in range(len(next_iter_test_store_paths)):
             local_next_iter_test_loaders = []
@@ -982,7 +940,7 @@ class Edge:
                 local_next_iter_test_loaders.append(
                     iter(edge.next_iter_test_loaders[i]))
             Edge.save_1hop_ensemble_next_iter_set(
-                local_next_iter_test_loaders, edges_1hop, device, ensemble_fct,
-                config, next_iter_test_store_paths[i])
+                local_next_iter_test_loaders, edges_1hop, device, config,
+                next_iter_test_store_paths[i])
 
         return
