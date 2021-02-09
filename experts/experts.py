@@ -5,6 +5,7 @@ import numpy as np
 
 from experts.depth_expert import DepthModelXTC
 from experts.edges_expert import EdgesModel
+from experts.grayscale_expert import Grayscale
 from experts.halftone_expert import HalftoneModel
 from experts.normals_expert import SurfaceNormalsXTC
 from experts.rgb_expert import RGBModel
@@ -12,7 +13,6 @@ from experts.semantic_segmentation_expert import SSegHRNet
 
 
 class Experts:
-
     def __init__(self, dataset_name, full_experts=True, selector_map=None):
         self.methods = [
             RGBModel(full_experts),
@@ -21,8 +21,8 @@ class Experts:
                               full_expert=full_experts),
             EdgesModel(full_experts),
             HalftoneModel(full_experts, 0),
-            SSegHRNet(full_experts)
-
+            SSegHRNet(full_experts),
+            Grayscale(full_experts)
             # Tracking1Model(full_experts),
             # RaftModel(full_experts, 1),
             # DepthModel(full_experts),

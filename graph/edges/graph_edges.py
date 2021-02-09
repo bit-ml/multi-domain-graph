@@ -444,7 +444,7 @@ class Edge:
                         # Show last but one batch edges
                         writer.add_images(
                             '%s/%s' % (wtag, edge.expert1.identifier),
-                            img_for_plot(one_hop_pred[save_idxes]), 0)
+                            img_for_plot(one_hop_pred[save_idxes], edge.expert2.identifier), 0)
 
                     l1_per_edge[idx_edge] += 100 * edge.l1(
                         one_hop_pred, domain2_gt).item()
@@ -481,7 +481,7 @@ class Edge:
                         # Show last but one batch edges
                         writer.add_images(
                             '%s/%s' % (wtag, edge.expert1.identifier),
-                            img_for_plot(one_hop_pred[save_idxes]), 0)
+                            img_for_plot(one_hop_pred[save_idxes], edge.expert2.identifier), 0)
 
                     l1_per_edge[idx_edge] += 100 * edge.l1(
                         one_hop_pred, domain2_exp_gt).item()
@@ -529,15 +529,15 @@ class Edge:
 
         # valid db
         writer.add_images('%s/EXPERT' % (wtag_valid),
-                          img_for_plot(domain2_exp_gt[save_idxes]), 0)
+                          img_for_plot(domain2_exp_gt[save_idxes], edge.expert2.identifier), 0)
 
         # test db
         if len(test_loaders) > 0:
             writer.add_images(
                 '%s/EXPERT' % (wtag_test),
-                img_for_plot(domain2_exp_gt_test[save_idxes_test]), 0)
+                img_for_plot(domain2_exp_gt_test[save_idxes_test], edge.expert2.identifier), 0)
             writer.add_images('%s/GT' % (wtag_test),
-                              img_for_plot(domain2_gt_test[save_idxes_test]),
+                              img_for_plot(domain2_gt_test[save_idxes_test], edge.expert2.identifier),
                               0)
 
         tag = "to_%s" % (edges_1hop[0].expert2.identifier)

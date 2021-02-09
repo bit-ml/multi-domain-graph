@@ -27,6 +27,7 @@ class MultiDomainGraph:
         self.edges = []
         for i_idx, expert_i in enumerate(all_experts.methods):
             for expert_j in all_experts.methods:
+                # print("identifiers", expert_i.identifier, expert_j.identifier)
                 if expert_i != expert_j:
                     if restricted_graph_type > 0:
                         if restricted_graph_type == 1 and (
@@ -46,10 +47,10 @@ class MultiDomainGraph:
 
                     if expert_j.domain_name in ["normals", "rgb"]:
                         # because it has 3 channels
-                        bs_test = 100
+                        bs_test = 20
                         bs_train = 90
                     else:
-                        bs_test = 200
+                        bs_test = 100
                         bs_train = 100
                     new_edge = Edge(config,
                                     expert_i,

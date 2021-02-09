@@ -41,7 +41,7 @@
                 // split: test valid train
                 "0",
                 "tiny-test",
-                "sem_seg",
+                "grayscale",
             ]
         },
         {

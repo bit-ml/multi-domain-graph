@@ -29,7 +29,7 @@ WORKING_W = 256
 
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = [
-    'rgb', 'depth', 'normals', "halftone_gray_basic", "grayscale"
+    'rgb', 'depth', 'normals', "halftone_gray", "grayscale"
 ]
 
 # our internal domain names
@@ -37,7 +37,7 @@ VALID_GT_DOMAINS = [\
     'rgb',
     'depth',
     'normals',
-    'halftone_gray_basic',
+    'halftone_gray',
     'grayscale'\
 ]
 
@@ -204,15 +204,19 @@ def depth_to_surface_normals(depth, surfnorm_scalar=256):
 
 
 def process_halftone():
-    domain_name = "halftone_gray_basic"
-    get_exp_results(MAIN_GT_OUT_PATH, experts_name=[domain_name])
+    domain_name = "halftone_gray"
+    exp_identifier = "halftone_gray_basic"
+    get_exp_results(MAIN_GT_OUT_PATH, experts_name=[exp_identifier])
 
     # link it in the experts
-    to_unlink = os.path.join(MAIN_EXP_OUT_PATH, domain_name)
-    os.system("unlink %s" % (to_unlink))
+    to_unlink1 = os.path.join(MAIN_EXP_OUT_PATH, domain_name)
+    to_unlink2 = os.path.join(MAIN_EXP_OUT_PATH, exp_identifier)
+    os.system("unlink %s" % (to_unlink1))
+    os.system("unlink %s" % (to_unlink2))
 
     from_path = os.path.join(MAIN_GT_OUT_PATH, domain_name)
-    os.system("ln -s %s %s" % (from_path, MAIN_EXP_OUT_PATH))
+    os.system("ln -s %s %s/%s" %
+              (from_path, MAIN_EXP_OUT_PATH, exp_identifier))
 
 
 def process_grayscale():
@@ -298,7 +302,7 @@ def get_gt_domains():
             process_depth(in_path, out_path)
         elif orig_dom_name == 'normals':
             process_surface_normals(MAIN_DB_PATH, out_path)
-        elif orig_dom_name == 'halftone_gray_basic':
+        elif orig_dom_name == 'halftone_gray':
             process_halftone()
         elif orig_dom_name == 'grayscale':
             process_grayscale()

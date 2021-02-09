@@ -156,10 +156,10 @@ class ImageLevelDataset(Dataset):
 
         CACHE_NAME = config.get('General', 'CACHE_NAME')
 
-        if not (gt_dst_path == None):
+        if gt_dst_path is not None:
             for i in range(len(gt_dst_path)):
                 available_gt_domains = os.listdir(gt_dst_path[i])
-                if not (self.dst_expert.domain_name in available_gt_domains):
+                if self.dst_expert.domain_name not in available_gt_domains:
                     self.src_paths = []
                     self.dst_paths = []
                     self.gt_dst_paths = []
