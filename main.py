@@ -51,15 +51,17 @@ def evaluate_all_edges(ending_edges):
     return np.array(metrics)
 
 
-def eval_1hop(space_graph, silent, config, epoch_idx):
+def eval_1hop(space_graph, silent, config, epoch_idx, iter_idx):
     csv_results_path = config.get('Logs', 'csv_results')
     if not os.path.exists(csv_results_path):
         os.mkdir(csv_results_path)
 
-    valid_dataset = config.get('Paths', 'VALID_PATH')
+    valid_dataset = config.get('PathsIter%d' % iter_idx,
+                               'ITER%d_VALID_SRC_PATH' % iter_idx)
     valid_set_str = pathlib.Path(valid_dataset).parts[-1]
 
-    test_dataset = config.get('Paths', 'TEST_PATH')
+    test_dataset = config.get('PathsIter%d' % iter_idx,
+                              'ITER%d_TEST_SRC_PATH' % iter_idx)
     test_set_str = pathlib.Path(test_dataset).parts[-1]
 
     if silent:
@@ -68,7 +70,6 @@ def eval_1hop(space_graph, silent, config, epoch_idx):
         tb_dir = config.get('Logs', 'tensorboard_dir')
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
         datetime = config.get('Run id', 'datetime')
-
         writer = SummaryWriter(
             log_dir=f'%s/%s_1hop_edges_e%d_valid_%s_test_%s_%s' %
             (tb_dir, tb_prefix, epoch_idx, valid_set_str, test_set_str,
@@ -280,7 +281,7 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
     writer.close()
 
 
-def save_1hop_ensembles(space_graph, config):
+def save_1hop_ensembles(space_graph, config, iter_no):
     writer = DummySummaryWriter()
 
     add_rgb_src_in_ensemble = config.getboolean('Ensemble',
@@ -304,7 +305,8 @@ def save_1hop_ensembles(space_graph, config):
 
         # 2. Eval each ensemble
         if len(edges_1hop) > 0:
-            Edge.save_1hop_ensemble(edges_1hop, device, ensemble_fct, config)
+            Edge.save_1hop_ensemble(edges_1hop, device, ensemble_fct, config,
+                                    iter_no)
 
     writer.close()
 
@@ -372,14 +374,118 @@ def load_2Dtasks(graph, epoch):
 
 
 ############################## MAIN ###############################
+def preprocess_config_file_paths(config):
+    n_iters = config.getint('General', 'n_iters')
+    splits = ['TRAIN', 'TEST', 'VALID']
+    # complete possible None values
+    for i in np.arange(2, n_iters + 1):
+        for split in splits:
+            SRC_PATH = config.get('PathsIter%d' % i,
+                                  'ITER%d_%s_SRC_PATH' % (i, split))
+            DST_PATH = config.get('PathsIter%d' % i,
+                                  'ITER%d_%s_DST_PATH' % (i, split))
+            PATTERNS = config.get('PathsIter%d' % i,
+                                  'ITER%d_%s_PATTERNS' % (i, split))
+            FIRST_K = config.get('PathsIter%d' % i,
+                                 'ITER%d_%s_FIRST_K' % (i, split))
+            if split == 'TEST':
+                GT_DST_PATH = config.get('PathsIter%d' % i,
+                                         'ITER%d_%s_GT_DST_PATH' % (i, split))
+            else:
+                GT_DST_PATH = DST_PATH
+            assert ((SRC_PATH == '' and DST_PATH == '' and PATTERNS == ''
+                     and FIRST_K == '' and GT_DST_PATH == '')
+                    or ((not SRC_PATH == '') and (not DST_PATH == '') and
+                        (not PATTERNS == '') and (not FIRST_K == '') and
+                        (not GT_DST_PATH == '')))
+            if SRC_PATH == '':
+                config.set(
+                    'PathsIter%d' % i, 'ITER%d_%s_SRC_PATH' % (i, split),
+                    config.get('PathsIter1', 'ITER1_%s_SRC_PATH' % split))
+                config.set(
+                    'PathsIter%d' % i, 'ITER%d_%s_DST_PATH' % (i, split),
+                    config.get('PathsIter1', 'ITER1_%s_DST_PATH' % split))
+                config.set(
+                    'PathsIter%d' % i, 'ITER%d_%s_FIRST_K' % (i, split),
+                    config.get('PathsIter1', 'ITER1_%s_FIRST_K' % split))
+                config.set(
+                    'PathsIter%d' % i, 'ITER%d_%s_PATTERNS' % (i, split),
+                    config.get('PathsIter1', 'ITER1_%s_PATTERNS' % split))
+                if split == 'TEST':
+                    config.set(
+                        'PathsIter%d' % i,
+                        'ITER%d_%s_GT_DST_PATH' % (i, split),
+                        config.get('PathsIter1',
+                                   'ITER1_%s_GT_DST_PATH' % split))
+
+    # check consistency
+    for i in np.arange(1, n_iters + 1):
+        for split in splits:
+            SRC_PATH = config.get('PathsIter%d' % i, 'ITER%d_%s_SRC_PATH' %
+                                  (i, split)).split('\n')
+            DST_PATH = config.get('PathsIter%d' % i, 'ITER%d_%s_DST_PATH' %
+                                  (i, split)).split('\n')
+            PATTERNS = config.get('PathsIter%d' % i, 'ITER%d_%s_PATTERNS' %
+                                  (i, split)).split('\n')
+            FIRST_K = config.getint('PathsIter%d' % i,
+                                    'ITER%d_%s_FIRST_K' % (i, split))
+            if split == 'TEST':
+                GT_DST_PATH = config.get('PathsIter%d' % i,
+                                         'ITER%d_%s_GT_DST_PATH' %
+                                         (i, split)).split('\n')
+            assert (len(SRC_PATH) == len(DST_PATH))
+            if split == 'Test':
+                assert (len(SRC_PATH) == len(GT_DST_PATH))
+            if i > 1:
+                STORE_PATH = config.get('PathsIter%d' % i,
+                                        'ITER%d_%s_STORE_PATH' %
+                                        (i, split)).split('\n')
+                assert (len(STORE_PATH) == len(SRC_PATH))
+
+
+def preprocess_config_file(config):
+    '''
+        - s.t. we reduce branching during the actual run 
+        e.g. if ITER2 paths are not set -> will be set to paths of ITER1, except for the store paths 
+    '''
+    # set 'Run id'
+    config.set('Run id', 'datetime', str(datetime.now()))
+    # set paths for iters
+    preprocess_config_file_paths(config)
+
+
+def prepare_store_folders(config, iter_no, all_experts):
+    next_iter_train_store_path = config.get(
+        'PathsIter%d' % iter_no,
+        'ITER%d_TRAIN_STORE_PATH' % iter_no).split('\n')
+    next_iter_valid_store_path = config.get(
+        'PathsIter%d' % iter_no,
+        'ITER%d_VALID_STORE_PATH' % iter_no).split('\n')
+    next_iter_test_store_path = config.get('PathsIter%d' % iter_no,
+                                           'ITER%d_TEST_STORE_PATH' %
+                                           iter_no).split('\n')
+    for expert in all_experts.methods:
+        for i in range(len(next_iter_train_store_path)):
+            save_to_dir = "%s/%s" % (next_iter_train_store_path[i],
+                                     expert.identifier)
+            os.makedirs(save_to_dir, exist_ok=True)
+        for i in range(len(next_iter_valid_store_path)):
+            save_to_dir = "%s/%s" % (next_iter_valid_store_path[i],
+                                     expert.identifier)
+            os.makedirs(save_to_dir, exist_ok=True)
+        for i in range(len(next_iter_test_store_path)):
+            save_to_dir = "%s/%s" % (next_iter_test_store_path[i],
+                                     expert.identifier)
+            os.makedirs(save_to_dir, exist_ok=True)
+
+
 def main(argv):
     config = configparser.ConfigParser()
     config.read(argv[1])
-    config.set('Run id', 'datetime', str(datetime.now()))
+    preprocess_config_file(config)
 
     print(config.get('Run id', 'datetime'))
     print("load_path", config.get('Edge Models', 'load_path'))
-    print("TEST_PATH", config.get('Paths', 'TEST_PATH'))
 
     silent = config.getboolean('Logs', 'silent')
     n_epochs = config.getint('Edge Models', 'n_epochs')
@@ -395,11 +501,15 @@ def main(argv):
                                       silent=silent,
                                       valid_shuffle=False)
             load_2Dtasks(graph, epoch=t_epoch)
-            # eval_1hop(graph, silent=silent, config=config, epoch_idx=t_epoch)
-            eval_1hop_ensembles(graph,
-                                drop_version=-1,
-                                silent=silent,
-                                config=config)
+            eval_1hop(graph,
+                      silent=silent,
+                      config=config,
+                      epoch_idx=t_epoch,
+                      iter_idx=1)
+            #eval_1hop_ensembles(graph,
+            #                    drop_version=-1,
+            #                    silent=silent,
+            #                    config=config)
             # check_models_exists(config, epoch=t_epoch)
         return
 
@@ -420,49 +530,37 @@ def main(argv):
         return
 
     if config.getboolean('Training2Iters', 'train_2_iters'):
+        '''
         use_rgb_to_tsk = config.getboolean('Ensemble', 'use_rgb_to_tsk')
         all_experts = Experts(full_experts=False,
                               use_rgb_to_tsk=use_rgb_to_tsk)
-        next_iter_path = os.path.join(
-            config.get('Training2Iters', 'NEXT_ITER_DST_TRAIN_PATH'),
-            config.get('Training2Iters', 'NEXT_ITER_DB_PATH'))
-        test_set_path = os.path.join(
-            config.get('Training2Iters', 'ENSEMBLE_OUTPUT_PATH_TEST'),
-            config.get('Paths', 'TEST_PATH'))
-
-        for expert in all_experts.methods:
-            save_to_dir = "%s/%s" % (next_iter_path, expert.identifier)
-            os.makedirs(save_to_dir, exist_ok=True)
-            save_to_dir = "%s/%s" % (test_set_path, expert.identifier)
-            os.makedirs(save_to_dir, exist_ok=True)
+        prepare_store_folders(config=config,
+                              iter_no=2,
+                              all_experts=all_experts)
 
         # 00. Build graph
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
                                   iter_no=1)
+
         load_2Dtasks(graph, epoch=start_epoch)
 
         # ; 1. Run eval on trainingset2 + save outputs
-        save_1hop_ensembles(graph, config=config)
-
+        save_1hop_ensembles(graph, config=config, iter_no=1)
+        '''
         # ; 2. Train on trainset2 using previously saved outputs
         # 00. Build graph
-        print("Start Training")
-
         graph = build_space_graph(config,
                                   silent=silent,
                                   valid_shuffle=False,
                                   iter_no=2)
-        load_2Dtasks(
-            graph,
-            epoch=0  # from scratch
-            # epoch=start_epoch
-        )
+
+        load_2Dtasks(graph, epoch=start_epoch)
         train_2Dtasks(
             graph,
-            start_epoch=0,  # doar pt numaratoare
-            n_epochs=n_epochs,
+            start_epoch=start_epoch,
+            n_epochs=0,  # doar pt numaratoare
             silent=silent,
             config=config)
 

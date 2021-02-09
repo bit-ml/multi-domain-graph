@@ -6,12 +6,13 @@ import numpy as np
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "tracking/pytracking"))
 
-from experts.tracking_expert_iface import TrackingModel
+#from experts.tracking_expert_iface import TrackingModel
 
 W, H = 256, 256
 
 
-class Tracking1Model(TrackingModel):
+#class Tracking1Model(TrackingModel):
+class Tracking1Model():
     def __init__(self, full_expert=True):
         tracker_name, tracker_param = "dimp", "prdimp50"
         # tracker_name, tracker_param = "dimp", "dimp18"
