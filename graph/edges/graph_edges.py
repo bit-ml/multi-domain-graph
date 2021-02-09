@@ -317,15 +317,18 @@ class Edge:
             eval_l1_loss += l1_loss.item()
 
         writer.add_images('Valid_%s/Input' % wtag,
-                          img_for_plot(domain1[:3], self.expert1.identifier), self.global_step)
-
-        writer.add_images('Valid_%s/GT_EXPERT' % wtag,
-                          img_for_plot(domain2_gt[:3], self.expert2.identifier),
+                          img_for_plot(domain1[:3], self.expert1.identifier),
                           self.global_step)
 
-        writer.add_images('Valid_%s/Output' % wtag,
-                          img_for_plot(domain2_pred[:3], self.expert2.identifier),
-                          self.global_step)
+        writer.add_images(
+            'Valid_%s/GT_EXPERT' % wtag,
+            img_for_plot(domain2_gt[:3], self.expert2.identifier),
+            self.global_step)
+
+        writer.add_images(
+            'Valid_%s/Output' % wtag,
+            img_for_plot(domain2_pred[:3], self.expert2.identifier),
+            self.global_step)
 
         return eval_l2_loss / len(self.valid_loader) * 100, eval_l1_loss / len(
             self.valid_loader) * 100
@@ -776,11 +779,14 @@ class Edge:
         print("time for TEST Edge.eval_1hop_ensemble_test_set", end - start)
 
         # Show Ensemble
-        writer.add_images('%s/ENSEMBLE' % (wtag_valid),
-                          img_for_plot(domain2_1hop_ens[save_idxes], edges_1hop[0].expert2.identifier),
-                          0)
-        writer.add_images('%s/EXPERT' % (wtag_valid),
-                          img_for_plot(domain2_gt[save_idxes], edges_1hop[0].expert2.identifier), 0)
+        writer.add_images(
+            '%s/ENSEMBLE' % (wtag_valid),
+            img_for_plot(domain2_1hop_ens[save_idxes],
+                         edges_1hop[0].expert2.identifier), 0)
+        writer.add_images(
+            '%s/EXPERT' % (wtag_valid),
+            img_for_plot(domain2_gt[save_idxes],
+                         edges_1hop[0].expert2.identifier), 0)
         l1_ensemble1hop = np.array(l1_ensemble1hop) / num_batches
         writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_valid),
                           l1_ensemble1hop, 0)
@@ -789,11 +795,12 @@ class Edge:
         if len(test_loaders) > 0:
             writer.add_images(
                 '%s/ENSEMBLE' % (wtag_test),
-                img_for_plot(domain2_1hop_ens_test[save_idxes_test], edges_1hop[0].expert2.identifier),
-                0)
+                img_for_plot(domain2_1hop_ens_test[save_idxes_test],
+                             edges_1hop[0].expert2.identifier), 0)
             writer.add_images(
                 '%s/EXPERT' % (wtag_test),
-                img_for_plot(domain2_exp_gt_test[save_idxes_test], edges_1hop[0].expert2.identifier), 0)
+                img_for_plot(domain2_exp_gt_test[save_idxes_test],
+                             edges_1hop[0].expert2.identifier), 0)
             # from PIL import Image
             # pred_logits = domain2_exp_gt_test[1]
             # rgb_img = (pred_logits * 255.).permute(1, 2, 0).data.cpu().numpy().astype(np.uint8)
@@ -820,7 +827,8 @@ class Edge:
             # Image.fromarray(rgb_img).save("t_modificat210.png")
             writer.add_images(
                 '%s/GT' % (wtag_test),
-                img_for_plot(domain2_gt_test[save_idxes_test], edges_1hop[0].expert2.identifier), 0)
+                img_for_plot(domain2_gt_test[save_idxes_test],
+                             edges_1hop[0].expert2.identifier), 0)
             l1_ensemble1hop_test = np.array(
                 l1_ensemble1hop_test) / num_batches_test
             l1_expert_test = np.array(l1_expert_test) / num_batches_test
@@ -911,8 +919,7 @@ class Edge:
                             domain2_1hop_ens[elem_idx].data.cpu().numpy())
                 crt_idx += domain2_1hop_ens.shape[0]
 
-            if num_batches > 0 and config.getboolean('Training2Iters',
-                                                     'train_2_iters'):
+            if num_batches > 0:
                 print("[Iter2] Supervision Saved to:", save_dir_)
 
     def save_1hop_ensemble(edges_1hop, device, config, iter_no):
