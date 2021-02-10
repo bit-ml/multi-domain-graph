@@ -16,6 +16,7 @@ import experts.depth_expert
 import experts.edges_expert
 import experts.grayscale_expert
 import experts.halftone_expert
+import experts.hsv_expert
 import experts.liteflownet_of_expert
 import experts.normals_expert
 import experts.raft_of_expert
@@ -30,7 +31,7 @@ WORKING_W = 256
 # dataset domain names
 VALID_ORIG_GT_DOMAINS = [
     'rgb', 'depth_zbuffer', 'edge_texture', 'normal', 'halftone_gray',
-    'segment_semantic', 'grayscale'
+    'segment_semantic', 'grayscale', 'hsv'
 ]
 
 # our internal domain names
@@ -41,7 +42,8 @@ VALID_GT_DOMAINS = [\
     'normals',
     'halftone_gray',
     'sem_seg',
-    'grayscale'\
+    'grayscale',
+    'hsv'\
 ]
 
 VALID_EXPERTS_NAME = [\
@@ -175,7 +177,7 @@ def get_expert(exp_name):
     elif exp_name == 'vmos_stm':
         return experts.vmos_stm_expert.STMModel(
             'experts/vmos_stm/STM_weights.pth', 0, 21)
-    elif exp_name == 'halftone_gray_basic':
+    elif exp_name == 'halftone_gray':
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=0)
     elif exp_name == 'halftone_rgb_basic':
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=1)
@@ -201,6 +203,8 @@ def get_expert(exp_name):
         return experts.semantic_segmentation_expert.SSegHRNet(full_expert=True)
     elif exp_name == 'grayscale':
         return experts.grayscale_expert.Grayscale(full_expert=True)
+    elif exp_name == 'hsv':
+        return experts.hsv_expert.HSVExpert(full_expert=True)
 
 
 def get_data_range(in_path, right_dtype):
@@ -268,24 +272,7 @@ def process_sem_seg(in_path, out_path):
         np.save(out_img_path, img)
 
 
-def process_halftone():
-    domain_name = "halftone_gray"
-    exp_identifier = "halftone_gray_basic"
-    get_exp_results(MAIN_GT_OUT_PATH, experts_name=[exp_identifier])
-
-    # link it in the experts
-    to_unlink1 = os.path.join(MAIN_EXP_OUT_PATH, domain_name)
-    to_unlink2 = os.path.join(MAIN_EXP_OUT_PATH, exp_identifier)
-    os.system("unlink %s" % (to_unlink1))
-    os.system("unlink %s" % (to_unlink2))
-
-    from_path = os.path.join(MAIN_GT_OUT_PATH, domain_name)
-    os.system("ln -s %s %s/%s" %
-              (from_path, MAIN_EXP_OUT_PATH, exp_identifier))
-
-
-def process_grayscale():
-    domain_name = "grayscale"
+def process_gt_from_expert(domain_name):
     get_exp_results(MAIN_GT_OUT_PATH, experts_name=[domain_name])
 
     # link it in the experts
@@ -437,12 +424,10 @@ def get_gt_domains():
             process_edges(in_path, out_path)
         elif orig_dom_name == 'normal':
             process_surface_normals(in_path, out_path)
-        elif orig_dom_name == 'halftone_gray':
-            process_halftone()
         elif orig_dom_name == 'segment_semantic':
             process_sem_seg(in_path, out_path)
-        elif orig_dom_name == 'grayscale':
-            process_grayscale()
+        elif orig_dom_name in ['grayscale', 'halftone_gray', 'hsv']:
+            process_gt_from_expert(orig_dom_name)
 
 
 class Dataset_ImgLevel(Dataset):
