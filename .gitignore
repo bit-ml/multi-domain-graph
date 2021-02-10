@@ -25,3 +25,4 @@ my_script.sh
 my_configs/*
 logs/*.log
 csv_results/*.csv
+z_my_configs
