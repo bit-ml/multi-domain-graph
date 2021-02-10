@@ -29,7 +29,7 @@ class HalftoneModel(BasicExpert):
             self.n_maps = 1
             self.domain_name = "halftone_rot_gray"
         self.str_id = "basic"
-        self.identifier = self.domain_name + "_" + self.str_id
+        self.identifier = self.domain_name  # + "_" + self.str_id
 
     def apply_expert_batch(self, batch_rgb_frames):
         halftone_maps = []
