@@ -341,6 +341,7 @@ def check_models_exists(config, epoch):
 
 def load_2Dtasks(graph, epoch):
     print("Load nets from checkpoints. From epoch: %2d" % epoch)
+
     for net_idx, edge in enumerate(graph.edges):
         path = os.path.join(edge.load_model_dir, 'epoch_%05d.pth' % (epoch))
         if os.path.exists(path):
@@ -467,10 +468,74 @@ def main(argv):
     print(config.get('Run id', 'datetime'))
     print("load_path", config.get('Edge Models', 'load_path'))
 
-    silent = config.getboolean('Logs', 'silent')
-    n_epochs = config.getint('Edge Models', 'n_epochs')
-    start_epoch = config.getint('Edge Models', 'start_epoch')
+    n_iters = config.getint('General', 'n_iters')
 
+    for iteration_idx in np.arange(1, n_iters + 1):
+
+        iter_train_flag = config.getboolean(
+            'General', 'Steps_Iter%d_train' % iteration_idx)
+        iter_test_flag = config.getboolean('General',
+                                           'Steps_Iter%d_test' % iteration_idx)
+        iter_saveNextIter_flag = config.getboolean(
+            'General', 'Steps_Iter%d_saveNextIter' % iteration_idx)
+
+        iter_testEpochs = config.getboolean(
+            'General', 'Steps_Iter%d_testEpochs' % iteration_idx)
+
+        # Build graph
+        silent = config.getboolean('Logs', 'silent')
+        graph = build_space_graph(config,
+                                  silent=silent,
+                                  valid_shuffle=True,
+                                  iter_no=iteration_idx)
+
+        # Load models
+        start_epoch = config.getint('Edge Models', 'start_epoch')
+        if start_epoch > 0:
+            load_2Dtasks(graph, epoch=start_epoch)
+
+        # Train models
+        if iter_train_flag:
+            n_epochs = config.getint('Edge Models', 'n_epochs')
+            train_2Dtasks(graph,
+                          start_epoch=start_epoch,
+                          n_epochs=n_epochs,
+                          silent=silent,
+                          config=config)
+
+        # Test models - fixed epoch
+        if iter_test_flag:
+            eval_1hop_ensembles(graph,
+                                drop_version=-1,
+                                silent=silent,
+                                config=config)
+
+        # Save data for next iter
+        if iter_saveNextIter_flag:
+            all_experts = Experts(full_experts=False,
+                                  selector_map=config.get(
+                                      'Experts', 'selector_map'))
+            prepare_store_folders(config=config,
+                                  iter_no=iteration_idx + 1,
+                                  all_experts=all_experts)
+
+            save_1hop_ensembles(graph, config=config, iter_no=iteration_idx)
+
+        # Test various epochs of the based models
+        if iter_testEpochs:
+            min_epoch = config.getint('Testing', 'test_min_epoch')
+            max_epoch = config.getint('Testing', 'test_max_epoch')
+            epoch_step = max(1, config.getint('Testing', 'test_epoch_step'))
+            for t_epoch in np.arange(min_epoch, max_epoch + 1, epoch_step):
+                load_2Dtasks(graph, epoch=t_epoch)
+                eval_1hop(graph,
+                          silent=silent,
+                          config=config,
+                          epoch_idx=t_epoch,
+                          iter_idx=1)
+
+        return
+    '''
     # Eval 1hop models
     if config.getboolean('Testing', 'test_1hop_edges'):
         min_epoch = config.getint('Testing', 'test_min_epoch')
@@ -492,7 +557,8 @@ def main(argv):
             #                    config=config)
             # check_models_exists(config, epoch=t_epoch)
         return
-
+    '''
+    '''
     if config.getboolean('Training', 'train_basic_edges'):
         # 1. Build graph + Train 1Hop
         graph = build_space_graph(config, silent=silent, valid_shuffle=True)
@@ -508,7 +574,8 @@ def main(argv):
                             silent=silent,
                             config=config)
         return
-
+    '''
+    '''
     if config.getboolean('Training2Iters', 'train_2_iters'):
         all_experts = Experts(full_experts=False,
                               selector_map=config.get('Experts',
@@ -527,7 +594,7 @@ def main(argv):
 
         # ; 1. Run eval on trainingset2 + save outputs
         save_1hop_ensembles(graph, config=config, iter_no=1)
-        '''
+        
         # ; 2. Train on trainset2 using previously saved outputs
         # 00. Build graph
         graph = build_space_graph(config,
@@ -548,9 +615,10 @@ def main(argv):
                             drop_version=-1,
                             silent=silent,
                             config=config)
-        '''
+        
         return
-
+    '''
+    '''
     # 2. Build graph
     graph = build_space_graph(config, silent=silent, valid_shuffle=False)
 
@@ -581,6 +649,7 @@ def main(argv):
     #                     use_expert_gt=True,
     #                     silent=silent,
     #                     config=config)
+    '''
 
 
 if __name__ == "__main__":
