@@ -46,6 +46,7 @@ VALID_GT_DOMAINS = [\
 
 VALID_EXPERTS_NAME = [\
     'depth_xtc',
+    'depth_sgdepth',
     'edges_dexined',
     'normals_xtc',
     'sem_seg_hrnet'\
@@ -96,8 +97,8 @@ def check_arguments_without_delete(argv):
     print('SPLIT:', split_name)
 
     MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/Taskonomy/%s' % split_name
-    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/%s' % split_name
-    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/taskonomy/%s' % split_name
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/taskonomy/%s' % split_name
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/taskonomy/%s' % split_name
 
     if RUN_TYPE == 0:
         if argv[3] == 'all':
@@ -327,16 +328,11 @@ def process_depth(in_path, out_path):
     os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
-    min_value, max_value, second_max_value = get_data_range(in_path, np.int32)
-    #min_value = 102
-    #max_value = 65535
-    #second_max_value = 7683
     idx = 0
     for idx, filename in enumerate(filenames):
         out_img_path = os.path.join(out_path, '%08d.npy' % idx)
-        if os.path.exists(out_img_path):
-            continue
-
+        #if os.path.exists(out_img_path):
+        #    continue
         data_path = os.path.join(in_path, filename)
         try:
             data = Image.open(data_path)
@@ -349,9 +345,8 @@ def process_depth(in_path, out_path):
         data = torch.from_numpy(data[None]).float()
         data = torch.nn.functional.interpolate(data[None],
                                                (WORKING_H, WORKING_W))[0]
-        data[data == max_value] = (min_value + second_max_value) / 2
-        data = (data - min_value) / second_max_value
-        data = 1 - data
+        data = data / 8000.0
+        data = torch.clamp(data, 0, 1)
         data = data.numpy()
         np.save(out_img_path, data)
 
