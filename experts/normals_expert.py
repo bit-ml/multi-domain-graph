@@ -73,7 +73,7 @@ class SurfaceNormalsXTC(BasicExpert):
         return pred_logits
 
     def expert_specific(self, inp):
-        #inp[:, 2, :, :] = self.chan_replace
+        inp[:, 2, :, :] = self.chan_replace
         return inp
 
     def edge_specific_train(self, inp):
