@@ -23,6 +23,6 @@ configs/configs_*ian*
 configs/configs_*feb*
 my_script.sh
 my_configs/*
-logs/*.log
+logs/*.log*
 csv_results/*.csv
 z_my_configs

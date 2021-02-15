@@ -20,19 +20,30 @@ import multiprocessing
 
 EPSILON = 0.00001
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+COLORS_SHORT = ('red', 'blue', 'yellow', 'magenta', 'green', 'indigo',
+                'darkorange', 'cyan', 'pink', 'yellowgreen', 'chocolate',
+                'lightsalmon', 'lime', 'silver', 'gainsboro', 'gold', 'coral',
+                'aquamarine', 'lightcyan', 'oldlace', 'darkred', 'snow')
 
 
-def img_for_plot(img, dst_id):
+def img_for_plot(img, dst_id, is_gt=False):
     '''
     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
     '''
+    img = img.clone()
     n, c, _, _ = img.shape
     if c == 2:
         img = img[:, 0:1]
         c = 1
     if dst_id.find("sem_seg") >= 0:
-        # ADE20k labels https://github.com/CSAILVision/sceneparsing/blob/master/objectInfo150.csv, 150 classes
-        result = color.label2rgb((img[:, 0] * 150).data.cpu().numpy(),
+        tasko_labels = img
+        all_classes = 12
+        for idx in range(all_classes):
+            tasko_labels[:, 0, 0, idx] = idx
+            tasko_labels[:, 0, idx, 0] = idx
+
+        result = color.label2rgb((tasko_labels[:, 0]).data.cpu().numpy(),
+                                 colors=COLORS_SHORT,
                                  bg_label=0).transpose(0, 3, 1, 2)
         img = torch.from_numpy(result.astype(np.float32)).contiguous()
         c = 3
@@ -316,12 +327,12 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return data
 
     def twd_expert_distances(self, data):
-        _, _, _, _, n_tasks = data.shape
+        bs, n_chs, h, w, n_tasks = data.shape
 
         similarity_maps = []
         for i in range(n_tasks):
             similarity_map = self.similarity_model.get_similarity_score(
-                data[:, :, :, :, -1], data[:, :, :, :, i])
+                data[..., -1], data[..., i])
             similarity_maps.append(similarity_map)
 
         similarity_maps = torch.stack(similarity_maps, 0)

@@ -39,9 +39,9 @@
                 // gt: ['rgb', 'depth', 'edges', 'normals', 'halftone_gray_basic']
                 // exp: ['depth_xtc', 'edges_dexined', 'normals_xtc', 'sem_seg_hrnet']
                 // split: test valid train
-                "0",
-                "tiny-test",
-                "hsv",
+                "1",
+                "tiny-train-0.15-part1",
+                "sem_seg_hrnet",
             ]
         },
         {
@@ -84,7 +84,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "custom_config.ini"
+                "z_my_configs/custom_config.ini"
             ]
         },
     ]

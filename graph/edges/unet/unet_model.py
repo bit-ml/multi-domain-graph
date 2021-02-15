@@ -92,7 +92,8 @@ class UNetGood(nn.Module):
         self.up4 = Up(32, 16, bilinear)
         self.outc = OutConv(16, n_classes)
 
-    def forward(self, x):
+    def forward(self, inp):
+        x, post_proc_specific_fcn = inp
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -103,7 +104,7 @@ class UNetGood(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return self.to_exp.post_process_ops(logits, self.to_exp.edge_specific)
+        return self.to_exp.post_process_ops(logits, post_proc_specific_fcn)
 
 
 # class UNetSmall(nn.Module):

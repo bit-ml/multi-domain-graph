@@ -265,11 +265,11 @@ def process_sem_seg(in_path, out_path):
         except:
             traceback.print_exc()
             print("ERROARE::: path", img_path, "index", idx, "process_rgb")
-            img = np.zeros((WORKING_W, WORKING_H, 3), dtype=np.uint8)
+            img = np.zeros((WORKING_W, WORKING_H, 3), dtype=np.float32)
 
-        img = img.astype('float32').transpose(2, 0, 1) / max_cls
+        img = img[:, :, 0].astype('float32') / max_cls
         out_img_path = os.path.join(out_path, '%08d.npy' % idx)
-        np.save(out_img_path, img)
+        np.save(out_img_path, img[None])
 
 
 def process_gt_from_expert(domain_name):
@@ -466,8 +466,11 @@ def get_exp_results(main_exp_out_path, experts_name):
     for exp_name in experts_name:
         print('EXPERT: %20s' % exp_name)
         if exp_name in ["sem_seg_hrnet", "normals_xtc"]:
+            batch_size = 80
+            if exp_name in ["sem_seg_hrnet"]:
+                batch_size = 40
             dataloader = torch.utils.data.DataLoader(dataset,
-                                                     batch_size=80,
+                                                     batch_size=batch_size,
                                                      shuffle=False,
                                                      drop_last=False,
                                                      num_workers=8)
