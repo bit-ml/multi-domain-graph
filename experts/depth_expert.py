@@ -31,7 +31,7 @@ class DepthModel():
         self.n_maps = 1
         self.str_id = "sgdepth"
         self.identifier = self.domain_name + "_" + self.str_id
-        
+
     def apply_expert_batch(self, batch_rgb_frames):
         depth_maps = []
         for idx, rgb_frame in enumerate(batch_rgb_frames):
@@ -96,4 +96,4 @@ class DepthModelXTC(BasicExpert):
         depth_maps = self.model(batch_rgb_frames.to(self.device))
         depth_maps = depth_maps.clamp(min=0, max=1).data.cpu().numpy()
         depth_maps = np.array(depth_maps).astype('float32')
-        return 1 - depth_maps
+        return depth_maps

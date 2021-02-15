@@ -45,6 +45,7 @@ VALID_GT_DOMAINS = [\
 
 VALID_EXPERTS_NAME = [\
     'depth_xtc',
+    'depth_sgdepth',
     'edges_dexined',
     'normals_xtc',
     'sem_seg_hrnet'\
@@ -97,8 +98,8 @@ def check_arguments_without_delete(argv):
         return status, status_code
 
     MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/replica_raw/%s' % split_name
-    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/%s' % split_name
-    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica/%s' % split_name
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/%s' % split_name
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/%s' % split_name
 
     if RUN_TYPE == 0:
         if argv[3] == 'all':
@@ -235,8 +236,9 @@ def process_depth(in_path, out_path):
 
     for idx_file, file_ in enumerate(files):
         depth_map = np.load(os.path.join(in_path, file_))
-        depth_map = depth_map / 14
-        depth_map = 1 - depth_map
+        depth_map = depth_map / 15.625
+        #depth_map = depth_map / 14
+        #depth_map = 1 - depth_map
         depth_map = depth_map[None]
         np.save(os.path.join(out_path, file_), depth_map)
 
