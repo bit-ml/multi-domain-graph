@@ -76,9 +76,16 @@ class SurfaceNormalsXTC(BasicExpert):
         #inp[:, 2, :, :] = self.chan_replace
         return inp
 
-    def edge_specific(self, inp):
+    def edge_specific_train(self, inp):
         inp = torch.cat((inp, self.chan_gen_fcn(inp[:, 1][:, None])), dim=1)
         return inp
 
-    def get_n_final_maps(self):
+    def edge_specific_eval(self, inp):
+        inp = torch.cat((inp, self.chan_gen_fcn(inp[:, 1][:, None])), dim=1)
+        return inp
+
+    def no_maps_as_input(self):
         return 3
+
+    def no_maps_as_output(self):
+        return self.n_maps

@@ -49,6 +49,10 @@ class MultiDomainGraph:
                         # because it has 3 channels
                         bs_test = 20
                         bs_train = 90
+                    elif expert_j.domain_name in ["sem_seg"]:
+                        # because it has 12 channels
+                        bs_test = 10
+                        bs_train = 70
                     else:
                         bs_test = 100
                         bs_train = 100

@@ -1,10 +1,10 @@
 # use SGDepth code for depth expert - https://github.com/xavysp/DexiNed/blob/master/DexiNed-Pytorch/
 import os
 
-import cv2
 import numpy as np
 import tensorflow as tf
 import torch
+import torch.nn.functional as F
 
 from experts.basic_expert import BasicExpert
 from experts.edges.model import DexiNed
@@ -41,31 +41,3 @@ class EdgesModel(BasicExpert):
         edge_maps = edge_maps[:, None, :, :]
         edge_maps = edge_maps.astype('float32')
         return edge_maps
-
-    '''
-    def apply_expert(self, rgb_frames):
-        edge_maps = []
-        for idx, rgb_frame in enumerate(rgb_frames):
-            resized_rgb_frame = cv2.resize(np.array(rgb_frame),
-                                           (W, H)).astype(np.float32)
-            preds = self.model(resized_rgb_frame, training=False)
-            edge_map = tf.sigmoid(preds).numpy()[:, :, :, 0]
-
-            #save_fname = "edge_test.png"
-            #print("Save Edges to %s" % save_fname)
-            #self.model.save_pred_to_disk(edge_map[0], save_fname)
-
-            edge_maps.append(edge_map)
-
-        #edge_maps = np.concatenate(edge_maps, axis=0)
-        #return torch.from_numpy(edge_maps)
-        return edge_maps
-
-    def apply_expert_one_frame(self, rgb_frame):
-        resized_rgb_frame = cv2.resize(np.array(rgb_frame),
-                                       (W, H)).astype(np.float32)
-        preds = self.model(resized_rgb_frame, training=False)
-        edge_map = tf.sigmoid(preds).numpy()[:, :, :, 0]
-
-        return edge_map
-    '''

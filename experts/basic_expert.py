@@ -1,9 +1,21 @@
 class BasicExpert():
-    def post_process_ops(self, logits, specific_fcn):
-        return logits
+    TASK_CLASSIFICATION = 0
+    TASK_REGRESSION = 1
 
-    def edge_specific(self, inp):
+    def post_process_ops(self, logits, specific_fcn):
+        return specific_fcn(logits)
+
+    def edge_specific_train(self, inp):
         return inp
 
-    def get_n_final_maps(self):
+    def edge_specific_eval(self, inp):
+        return inp
+
+    def get_task_type(self):
+        return BasicExpert.TASK_REGRESSION
+
+    def no_maps_as_input(self):
+        return self.n_maps
+
+    def no_maps_as_output(self):
         return self.n_maps

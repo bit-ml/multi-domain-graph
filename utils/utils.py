@@ -20,19 +20,30 @@ import multiprocessing
 
 EPSILON = 0.00001
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+COLORS_SHORT = ('red', 'blue', 'yellow', 'magenta', 'green', 'indigo',
+                'darkorange', 'cyan', 'pink', 'yellowgreen', 'chocolate',
+                'lightsalmon', 'lime', 'silver', 'gainsboro', 'gold', 'coral',
+                'aquamarine', 'lightcyan', 'oldlace', 'darkred', 'snow')
 
 
-def img_for_plot(img, dst_id):
+def img_for_plot(img, dst_id, is_gt=False):
     '''
     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
     '''
+    img = img.clone()
     n, c, _, _ = img.shape
     if c == 2:
         img = img[:, 0:1]
         c = 1
     if dst_id.find("sem_seg") >= 0:
-        # ADE20k labels https://github.com/CSAILVision/sceneparsing/blob/master/objectInfo150.csv, 150 classes
-        result = color.label2rgb((img[:, 0] * 150).data.cpu().numpy(),
+        tasko_labels = img
+        all_classes = 12
+        for idx in range(all_classes):
+            tasko_labels[:, 0, 0, idx] = idx
+            tasko_labels[:, 0, idx, 0] = idx
+
+        result = color.label2rgb((tasko_labels[:, 0]).data.cpu().numpy(),
+                                 colors=COLORS_SHORT,
                                  bg_label=0).transpose(0, 3, 1, 2)
         img = torch.from_numpy(result.astype(np.float32)).contiguous()
         c = 3
@@ -48,6 +59,20 @@ def img_for_plot(img, dst_id):
     min_img = img_view.min(axis=1)[0][:, None, None, None]
     max_img = img_view.max(axis=1)[0][:, None, None, None]
     return (img - min_img) / (max_img - min_img)
+
+
+def get_gaussian_filter(n_channels, win_size, sigma):
+    # build gaussian filter for SSIM
+    h_win_size = win_size // 2
+    yy, xx = torch.meshgrid([
+        torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
+        torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32)
+    ])
+    g_filter = torch.exp((-0.5) * ((xx**2 + yy**2) / (2 * sigma**2)))
+    g_filter = g_filter.unsqueeze(0).unsqueeze(0)
+    g_filter = g_filter.repeat(n_channels, 1, 1, 1)
+    g_filter = g_filter / torch.sum(g_filter)
+    return g_filter
 
 
 class DummySummaryWriter:
@@ -68,22 +93,8 @@ class SimScore_SSIM():
         self.win_size = win_size
         self.sigma = self.win_size / 7
         self.reduction = reduction
-        self.g_filter = self.get_gaussian_filter(self.n_channels,
-                                                 self.win_size,
-                                                 self.sigma).to(device)
-
-    def get_gaussian_filter(self, n_channels, win_size, sigma):
-        # build gaussian filter for SSIM
-        h_win_size = win_size // 2
-        yy, xx = torch.meshgrid([
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32)
-        ])
-        g_filter = torch.exp((-0.5) * ((xx**2 + yy**2) / (2 * sigma**2)))
-        g_filter = g_filter.unsqueeze(0).unsqueeze(0)
-        g_filter = g_filter.repeat(n_channels, 1, 1, 1)
-        g_filter = g_filter / torch.sum(g_filter)
-        return g_filter
+        self.g_filter = get_gaussian_filter(self.n_channels, self.win_size,
+                                            self.sigma).to(device)
 
     def get_similarity_score(self, batch1, batch2):
         mu1 = torch.nn.functional.conv2d(batch1,
@@ -141,21 +152,8 @@ class SimScore_MSSIM():
         self.g_filters = []
         for i in range(len(self.win_sizes)):
             self.g_filters.append(
-                self.get_gaussian_filter(self.n_channels, self.win_sizes[i],
-                                         self.sigmas[i]).to(device))
-
-    def get_gaussian_filter(self, n_channels, win_size, sigma):
-        # build gaussian filter for SSIM
-        h_win_size = win_size // 2
-        yy, xx = torch.meshgrid([
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32)
-        ])
-        g_filter = torch.exp((-0.5) * ((xx**2 + yy**2) / (2 * sigma**2)))
-        g_filter = g_filter.unsqueeze(0).unsqueeze(0)
-        g_filter = g_filter.repeat(n_channels, 1, 1, 1)
-        g_filter = g_filter / torch.sum(g_filter)
-        return g_filter
+                get_gaussian_filter(self.n_channels, self.win_sizes[i],
+                                    self.sigmas[i]).to(device))
 
     def get_similarity_score_aux(self, batch1, batch2, g_filter, win_size):
         mu1 = torch.nn.functional.conv2d(batch1,
@@ -316,12 +314,12 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return data
 
     def twd_expert_distances(self, data):
-        _, _, _, _, n_tasks = data.shape
+        bs, n_chs, h, w, n_tasks = data.shape
 
         similarity_maps = []
         for i in range(n_tasks):
             similarity_map = self.similarity_model.get_similarity_score(
-                data[:, :, :, :, -1], data[:, :, :, :, i])
+                data[..., -1], data[..., i])
             similarity_maps.append(similarity_map)
 
         similarity_maps = torch.stack(similarity_maps, 0)
