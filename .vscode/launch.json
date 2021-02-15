@@ -41,7 +41,7 @@
                 // split: test valid train
                 "0",
                 "tiny-test",
-                "grayscale",
+                "hsv",
             ]
         },
         {
@@ -61,7 +61,7 @@
                 // split: test val train
                 "0",
                 "test",
-                "halftone_gray_basic"
+                "hsv"
             ]
         },
         {
