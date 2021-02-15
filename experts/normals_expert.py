@@ -55,28 +55,25 @@ class SurfaceNormalsXTC(BasicExpert):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
         normals_maps = self.model(batch_rgb_frames.to(self.device))
 
-        normals_maps = self.post_process_ops(normals_maps,
-                                             self.expert_specific)
+        #normals_maps = self.post_process_ops(normals_maps,
+        #                                     self.expert_specific)
 
         normals_maps = normals_maps.data.cpu().numpy().astype('float32')
         return normals_maps
 
     def post_process_ops(self, pred_logits, specific_fcn):
-        # normalize normals in [-1, 1]
-        aux = 2 * (pred_logits - 0.5)
 
-        aux = specific_fcn(aux)
+        pred_logits = torch.clamp(pred_logits, 0, 1)
+        pred_logits = pred_logits * 2 - 1
+        norm_pred_logits = torch.norm(pred_logits, dim=1, keepdim=True)
 
-        aux_norm = aux.norm(dim=1, keepdim=True)
-        aux_renormed = aux / aux_norm
+        pred_logits = pred_logits / norm_pred_logits
+        pred_logits = (pred_logits + 1) / 2
 
-        # transform it back to RGB
-        normals_maps = 0.5 * aux_renormed + 0.5
-
-        return normals_maps
+        return pred_logits
 
     def expert_specific(self, inp):
-        inp[:, 2, :, :] = self.chan_replace
+        #inp[:, 2, :, :] = self.chan_replace
         return inp
 
     def edge_specific(self, inp):
