@@ -61,6 +61,20 @@ def img_for_plot(img, dst_id, is_gt=False):
     return (img - min_img) / (max_img - min_img)
 
 
+def get_gaussian_filter(n_channels, win_size, sigma):
+    # build gaussian filter for SSIM
+    h_win_size = win_size // 2
+    yy, xx = torch.meshgrid([
+        torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
+        torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32)
+    ])
+    g_filter = torch.exp((-0.5) * ((xx**2 + yy**2) / (2 * sigma**2)))
+    g_filter = g_filter.unsqueeze(0).unsqueeze(0)
+    g_filter = g_filter.repeat(n_channels, 1, 1, 1)
+    g_filter = g_filter / torch.sum(g_filter)
+    return g_filter
+
+
 class DummySummaryWriter:
     def __init__(*args, **kwargs):
         pass
@@ -79,22 +93,8 @@ class SimScore_SSIM():
         self.win_size = win_size
         self.sigma = self.win_size / 7
         self.reduction = reduction
-        self.g_filter = self.get_gaussian_filter(self.n_channels,
-                                                 self.win_size,
-                                                 self.sigma).to(device)
-
-    def get_gaussian_filter(self, n_channels, win_size, sigma):
-        # build gaussian filter for SSIM
-        h_win_size = win_size // 2
-        yy, xx = torch.meshgrid([
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32)
-        ])
-        g_filter = torch.exp((-0.5) * ((xx**2 + yy**2) / (2 * sigma**2)))
-        g_filter = g_filter.unsqueeze(0).unsqueeze(0)
-        g_filter = g_filter.repeat(n_channels, 1, 1, 1)
-        g_filter = g_filter / torch.sum(g_filter)
-        return g_filter
+        self.g_filter = get_gaussian_filter(self.n_channels, self.win_size,
+                                            self.sigma).to(device)
 
     def get_similarity_score(self, batch1, batch2):
         mu1 = torch.nn.functional.conv2d(batch1,
@@ -152,21 +152,8 @@ class SimScore_MSSIM():
         self.g_filters = []
         for i in range(len(self.win_sizes)):
             self.g_filters.append(
-                self.get_gaussian_filter(self.n_channels, self.win_sizes[i],
-                                         self.sigmas[i]).to(device))
-
-    def get_gaussian_filter(self, n_channels, win_size, sigma):
-        # build gaussian filter for SSIM
-        h_win_size = win_size // 2
-        yy, xx = torch.meshgrid([
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32),
-            torch.arange(-h_win_size, h_win_size + 1, dtype=torch.float32)
-        ])
-        g_filter = torch.exp((-0.5) * ((xx**2 + yy**2) / (2 * sigma**2)))
-        g_filter = g_filter.unsqueeze(0).unsqueeze(0)
-        g_filter = g_filter.repeat(n_channels, 1, 1, 1)
-        g_filter = g_filter / torch.sum(g_filter)
-        return g_filter
+                get_gaussian_filter(self.n_channels, self.win_sizes[i],
+                                    self.sigmas[i]).to(device))
 
     def get_similarity_score_aux(self, batch1, batch2, g_filter, win_size):
         mu1 = torch.nn.functional.conv2d(batch1,
