@@ -99,8 +99,8 @@ def check_arguments_without_delete(argv):
     print('SPLIT:', split_name)
 
     MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/Taskonomy/%s' % split_name
-    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/taskonomy/%s' % split_name
-    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/taskonomy/%s' % split_name
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/%s' % split_name
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/taskonomy/%s' % split_name
 
     if RUN_TYPE == 0:
         if argv[3] == 'all':
@@ -376,9 +376,6 @@ def process_surface_normals(in_path, out_path):
     os.makedirs(out_path, exist_ok=True)
     filenames = os.listdir(in_path)
     filenames.sort()
-    _, max_value, _ = get_data_range(in_path, np.uint8)
-    # min_value = 0
-    # max_value = 255
     idx = 0
     for idx, filename in enumerate(filenames):
         out_img_path = os.path.join(out_path, '%08d.npy' % idx)
@@ -398,7 +395,11 @@ def process_surface_normals(in_path, out_path):
         data = data.permute(2, 0, 1)
         data = torch.nn.functional.interpolate(data[None],
                                                (WORKING_H, WORKING_W))[0]
-        data = data / max_value
+        data = data / 255.
+        data = data * 2 - 1
+        data_norm = torch.norm(data, dim=0, keepdim=True)
+        data = data / data_norm
+        data = (data + 1) / 2
         data = data.numpy()
         np.save(out_img_path, data)
 
@@ -485,7 +486,12 @@ def get_exp_results(main_exp_out_path, experts_name):
 
             with torch.no_grad():
                 results = expert.apply_expert_batch(frames)
-
+            if exp_name == "normals_xtc":
+                results = np.clip(results, 0, 1)
+                results = results * 2 - 1
+                norm_res = np.linalg.norm(results, axis=1, keepdims=True)
+                results = results / norm_res
+                results = (results + 1) / 2
             for sample in zip(results, indexes):
                 expert_res, sample_idx = sample
 
