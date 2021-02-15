@@ -26,6 +26,30 @@ COLORS_SHORT = ('red', 'blue', 'yellow', 'magenta', 'green', 'indigo',
                 'aquamarine', 'lightcyan', 'oldlace', 'darkred', 'snow')
 
 
+# for normals - call with val = 0.788, tol=1e-3, kernel=1
+# for depth - call with val=1.0, tol=1e-3, kernel=1
+def build_mask(target, val=0.0, tol=1e-3, kernel=1):
+    padding = (kernel - 1) // 2
+    if target.shape[1] == 1:
+        mask = ((target >= val - tol) & (target <= val + tol))
+        mask = F.conv2d(mask.float(),
+                        torch.ones(1, 1, kernel, kernel, device=mask.device),
+                        padding=padding) != 0
+        return (~mask).expand_as(target)
+
+    mask1 = (target[:, 0, :, :] >= val - tol) & (target[:, 0, :, :] <=
+                                                 val + tol)
+    mask2 = (target[:, 1, :, :] >= val - tol) & (target[:, 1, :, :] <=
+                                                 val + tol)
+    mask3 = (target[:, 2, :, :] >= val - tol) & (target[:, 2, :, :] <=
+                                                 val + tol)
+    mask = (mask1 & mask2 & mask3).unsqueeze(1)
+    mask = F.conv2d(mask.float(),
+                    torch.ones(1, 1, kernel, kernel, device=mask.device),
+                    padding=padding) != 0
+    return (~mask).expand_as(target)
+
+
 def img_for_plot(img, dst_id, is_gt=False):
     '''
     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
