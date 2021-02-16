@@ -25,9 +25,6 @@ class Experts:
             SSegHRNet(full_experts),
             Grayscale(full_experts),
             HSVExpert(full_experts)
-            # Tracking1Model(full_experts),
-            # RaftModel(full_experts, 1),
-            # DepthModel(full_experts),
         ]
         if selector_map is None:
             selector_map = np.arange(len(self.methods))
