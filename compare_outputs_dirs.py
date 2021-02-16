@@ -6,6 +6,8 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+import torch.nn.functional as F
+
 
 class FilesDataset(Dataset):
     def __init__(self, dir1, dir2):
@@ -31,14 +33,30 @@ class FilesDataset(Dataset):
         return len(self.files1)
 
 
-# OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/edges"
-# OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_cu_rgb_iter1_elena/taskonomy/tiny-train_0.15/part2/edges_dexined"
+def build_mask(target, val=0.0, tol=1e-3, kernel=1):
+    padding = (kernel - 1) // 2
+    if target.shape[1] == 1:
+        mask = ((target >= val - tol) & (target <= val + tol))
+        mask = F.conv2d(mask.float(),
+                        torch.ones(1, 1, kernel, kernel, device=mask.device),
+                        padding=padding) != 0
+        return (~mask).expand_as(target)
 
-# OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/depth"
-# OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_cu_rgb_iter1_elena/taskonomy/tiny-train_0.15/part2/depth_xtc"
+    mask1 = (target[:, 0, :, :] >= val - tol) & (target[:, 0, :, :] <=
+                                                 val + tol)
+    mask2 = (target[:, 1, :, :] >= val - tol) & (target[:, 1, :, :] <=
+                                                 val + tol)
+    mask3 = (target[:, 2, :, :] >= val - tol) & (target[:, 2, :, :] <=
+                                                 val + tol)
+    mask = (mask1 & mask2 & mask3).unsqueeze(1)
+    mask = F.conv2d(mask.float(),
+                    torch.ones(1, 1, kernel, kernel, device=mask.device),
+                    padding=padding) != 0
+    return (~mask).expand_as(target)
 
-OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train_0.15/part2/rgb"
-OUTPUT_DIR2 = "/data/multi-domain-graph/datasets/datasets_preproc_ens_cu_rgb_iter1_elena/taskonomy/tiny-train_0.15/part2/rgb"
+
+OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train-0.15-part3/normals"
+OUTPUT_DIR2 = "/data/multi-domain-graph-2/datasets/datasets_preproc_exp/taskonomy/tiny-train-0.15-part3/normals_xtc"
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -62,7 +80,11 @@ with torch.no_grad():
 
         f1 = f1.to(device=device, dtype=torch.float32)
         f2 = f2.to(device=device, dtype=torch.float32)
-
+        '''
+        mask = build_mask(f1, 0.788, tol=1e-3)
+        f1 = f1 * mask
+        f2 - f2 * mask
+        '''
         l2_loss = loss_l2(f1, f2)
         l1_loss = loss_l1(f1, f2)
 
