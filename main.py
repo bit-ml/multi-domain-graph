@@ -232,8 +232,6 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
         writer = SummaryWriter(log_dir=f'%s/%s_1hop_ens_dropV%d_%s' %
                                (tb_dir, tb_prefix, drop_version, datetime),
                                flush_secs=30)
-    save_idxes = None
-    save_idxes_test = None
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         tag = "Valid_1Hop_%s" % end_id
@@ -251,24 +249,20 @@ def eval_1hop_ensembles(space_graph, drop_version, silent, config):
                 edges_1hop.append(edge_xk)
                 edge_weights = edge_xk.in_edge_weights
                 edge_src_identifiers = edge_xk.in_edge_src_identifiers
-                if drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
+                if drop_version in [14, 15, 16, 17, 22, 23]:
                     index = edge_src_identifiers.index(
                         edge_xk.expert1.identifier)
                     edges_1hop_weights.append(edge_weights[index])
                     if edge_xk.test_loader != None:
                         edges_1hop_test_weights.append(edge_weights[index])
 
-        if drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
+        if drop_version in [14, 15, 16, 17, 22, 23]:
             # add weight of the expert pseudo gt
             edges_1hop_weights.append(edge_weights[-1])
             edges_1hop_test_weights.append(edge_weights[-1])
 
         # 2. Eval each ensemble
-        if len(edges_1hop) > 0:
-            save_idxes, save_idxes_test = Edge.eval_1hop_ensemble(
-                edges_1hop, save_idxes, save_idxes_test, device, writer,
-                drop_version, edges_1hop_weights, edges_1hop_test_weights,
-                config)
+        Edge.eval_all_1hop_ensembles(edges_1hop, device, writer, config)
 
     writer.close()
 
