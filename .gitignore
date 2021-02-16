@@ -4,11 +4,12 @@
 *.npy
 *.DS_Store
 experts/models/edges_dexined23.h5
-experts/models/prdimp50.pth.tar
-experts/models/prdimp18.pth.tar
 experts/models/edges_dexined.h5
 experts/models/of_liteflownet
 experts/models/cartoon_wb
+experts/models/*.tar
+experts/spixel/third_party/cython/build/temp.linux-x86_64-3.8/connectivity.o
+
 nohup.out
 *events.out.tfevents*
 .ropeproject/objectdb

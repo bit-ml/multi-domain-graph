@@ -25,6 +25,7 @@ import experts.rgb_expert
 import experts.saliency_seg_expert
 import experts.semantic_segmentation_expert
 import experts.sobel_expert
+import experts.superpixel_expert
 import experts.vmos_stm_expert
 
 WORKING_H = 256
@@ -55,6 +56,7 @@ VALID_EXPERTS_NAME = [\
     'normals_xtc',
     'sem_seg_hrnet',
     'cartoon_wb',
+    'superpixel_fcn',
     'sobel_small',
     'sobel_medium',
     'sobel_large'\
@@ -221,6 +223,9 @@ def get_expert(exp_name):
         return experts.sobel_expert.SobelEdgesExpertSigmaMedium()
     elif exp_name == 'sobel_large':
         return experts.sobel_expert.SobelEdgesExpertSigmaLarge()
+    elif exp_name == 'superpixel_fcn':
+        return experts.superpixel_expert.SuperPixel()
+
 
 def get_data_range(in_path, right_dtype):
     filenames = os.listdir(in_path)

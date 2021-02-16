@@ -11,6 +11,7 @@ from experts.hsv_expert import HSVExpert
 from experts.normals_expert import SurfaceNormalsXTC
 from experts.rgb_expert import RGBModel
 from experts.semantic_segmentation_expert import SSegHRNet
+from experts.superpixel_expert import SuperPixel
 
 
 class Experts:
@@ -24,8 +25,10 @@ class Experts:
             HalftoneModel(full_experts, 0),
             SSegHRNet(full_experts),
             Grayscale(full_experts),
-            HSVExpert(full_experts)
+            HSVExpert(full_experts),
+            SuperPixel(full_experts)
         ]
+
         if selector_map is None:
             selector_map = np.arange(len(self.methods))
 

@@ -46,7 +46,7 @@ class SurfaceNormalsXTC(BasicExpert):
         else:
             self.chan_replace = 1
             self.chan_gen_fcn = torch.ones_like
-            self.n_maps = 2
+            self.n_maps = 3
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -62,7 +62,6 @@ class SurfaceNormalsXTC(BasicExpert):
         return normals_maps
 
     def post_process_ops(self, pred_logits, specific_fcn):
-
         pred_logits = torch.clamp(pred_logits, 0, 1)
         pred_logits = pred_logits * 2 - 1
         norm_pred_logits = torch.norm(pred_logits, dim=1, keepdim=True)
