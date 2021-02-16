@@ -321,20 +321,27 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def forward_median(self, data, weights):
         bs, n_chs, h, w, n_exps = data.shape
 
-        data = data.view(bs * n_chs * h * w, n_exps)
-        weights = weights.view(bs * n_chs * h * w, n_exps)
-        indices = torch.argsort(data, 1)
+        for chan in range(n_chs):
+            data_chan = data[:, chan].contiguous()
+            data_chan = data_chan.view(bs * h * w, n_exps)
+            weights_chan = weights[:, chan].contiguous()
+            weights_chan = weights_chan.view(bs * h * w, n_exps)
+            indices = torch.argsort(data_chan, 1)
 
-        data = data[torch.arange(bs * n_chs * h * w).unsqueeze(1).repeat(
-            (1, n_exps)), indices]
-        weights = weights[torch.arange(bs * n_chs * h * w).unsqueeze(1).repeat(
-            (1, n_exps)), indices]
-        weights = torch.cumsum(weights, 1)
+            data_chan = data_chan[torch.arange(bs * h * w).unsqueeze(1).repeat(
+                (1, n_exps)), indices]
+            weights_chan = weights_chan[torch.arange(bs * h *
+                                                     w).unsqueeze(1).repeat(
+                                                         (1, n_exps)), indices]
+            weights_chan = torch.cumsum(weights_chan, 1)
 
-        weights[weights < 0.5] = 2
-        _, indices = torch.min(weights, 1, keepdim=True)
-        data = data[torch.arange(bs * n_chs * h * w).unsqueeze(1), indices]
-        data = data.contiguous().view(bs, n_chs, h, w)
+            weights_chan[weights_chan < 0.5] = 2
+            _, indices = torch.min(weights_chan, dim=1, keepdim=True)
+            data_chan = data_chan[torch.arange(bs * h * w).unsqueeze(1),
+                                  indices]
+            data_chan = data_chan.view(bs, h, w)
+            data[:, chan, ..., 0] = data_chan
+        data = data[..., 0]
         return data
 
     def twd_expert_distances(self, data):
@@ -346,22 +353,24 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 data[..., -1], data[..., i])
             similarity_maps.append(similarity_map)
 
-        similarity_maps = torch.stack(similarity_maps, 0)
+        similarity_maps = torch.stack(similarity_maps,
+                                      0).permute(1, 2, 3, 4, 0)
 
         return similarity_maps
 
     def forward(self, data, dst_domain_name):
         similarity_maps = self.twd_expert_distances(data)
-        similarity_maps = similarity_maps.permute(1, 2, 3, 4, 0)
+        bs, n_chs, h, w, n_tasks = data.shape
+        for chan in range(n_chs):
+            chan_mask = similarity_maps[:, chan] < self.threshold
+            data[:, chan][chan_mask] = 0
+            similarity_maps[:, chan][chan_mask] = 0
 
-        data[similarity_maps < self.threshold] = 0
-        similarity_maps[similarity_maps < self.threshold] = 0
-
-        sum_ = torch.sum(similarity_maps, -1)[:, :, :, :, None]
+        sum_ = torch.sum(similarity_maps, dim=-1, keepdim=True)
         sum_[sum_ == 0] = 1
-        weights = similarity_maps / sum_
+        similarity_maps = similarity_maps / sum_
 
         if dst_domain_name == 'edges':
-            return self.forward_mean(data, weights)
+            return self.forward_mean(data, similarity_maps)
         else:
-            return self.forward_median(data, weights)
+            return self.forward_median(data, similarity_maps)
