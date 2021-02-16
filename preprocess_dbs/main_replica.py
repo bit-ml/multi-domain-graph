@@ -24,6 +24,7 @@ import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
 import experts.semantic_segmentation_expert
+import experts.sobel_expert
 import experts.vmos_stm_expert
 
 WORKING_H = 256
@@ -50,7 +51,10 @@ VALID_EXPERTS_NAME = [\
     'edges_dexined',
     'normals_xtc',
     'sem_seg_hrnet',
-    'cartoon_wb'\
+    'cartoon_wb',
+    'sobel_small',
+    'sobel_medium',
+    'sobel_large'\
 ]
 VALID_SPLITS_NAME = ["val", "test", "train"]
 
@@ -101,8 +105,8 @@ def check_arguments_without_delete(argv):
         return status, status_code
 
     MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/replica_raw/%s' % split_name
-    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/%s' % split_name
-    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/%s' % split_name
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/%s' % split_name
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica/%s' % split_name
 
     if RUN_TYPE == 0:
         if argv[3] == 'all':
@@ -200,6 +204,12 @@ def get_expert(exp_name):
         return experts.hsv_expert.HSVExpert(full_expert=True)
     elif exp_name == 'cartoon_wb':
         return experts.cartoon_expert.CartoonWB(full_expert=True)
+    elif exp_name == 'sobel_small':
+        return experts.sobel_expert.SobelEdgesExpertSigmaSmall()
+    elif exp_name == 'sobel_medium':
+        return experts.sobel_expert.SobelEdgesExpertSigmaMedium()
+    elif exp_name == 'sobel_large':
+        return experts.sobel_expert.SobelEdgesExpertSigmaLarge()
 
 
 def depth_to_surface_normals(depth, surfnorm_scalar=256):

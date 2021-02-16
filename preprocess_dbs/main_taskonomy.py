@@ -24,6 +24,7 @@ import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
 import experts.semantic_segmentation_expert
+import experts.sobel_expert
 import experts.vmos_stm_expert
 
 WORKING_H = 256
@@ -53,7 +54,10 @@ VALID_EXPERTS_NAME = [\
     'edges_dexined',
     'normals_xtc',
     'sem_seg_hrnet',
-    'cartoon_wb'\
+    'cartoon_wb',
+    'sobel_small',
+    'sobel_medium',
+    'sobel_large'\
 ]
 
 VALID_SPLITS_NAME = [\
@@ -211,7 +215,12 @@ def get_expert(exp_name):
         return experts.hsv_expert.HSVExpert(full_expert=True)
     elif exp_name == 'cartoon_wb':
         return experts.cartoon_expert.CartoonWB(full_expert=True)
-
+    elif exp_name == 'sobel_small':
+        return experts.sobel_expert.SobelEdgesExpertSigmaSmall()
+    elif exp_name == 'sobel_medium':
+        return experts.sobel_expert.SobelEdgesExpertSigmaMedium()
+    elif exp_name == 'sobel_large':
+        return experts.sobel_expert.SobelEdgesExpertSigmaLarge()
 
 def get_data_range(in_path, right_dtype):
     filenames = os.listdir(in_path)
