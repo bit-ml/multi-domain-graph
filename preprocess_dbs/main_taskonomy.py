@@ -12,6 +12,7 @@ from tqdm import tqdm
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import experts.cartoon_expert
 import experts.depth_expert
 import experts.edges_expert
 import experts.grayscale_expert
@@ -51,7 +52,8 @@ VALID_EXPERTS_NAME = [\
     'depth_sgdepth',
     'edges_dexined',
     'normals_xtc',
-    'sem_seg_hrnet'\
+    'sem_seg_hrnet',
+    'cartoon_wb'\
 ]
 
 VALID_SPLITS_NAME = [\
@@ -94,7 +96,8 @@ def check_arguments_without_delete(argv):
     split_name = argv[2]
     if split_name not in VALID_SPLITS_NAME:
         status = 0
-        status_code = 'Split %s is not valid' % split_name
+        status_code = 'Split %s is not valid. Valid ones are: %s' % (
+            split_name, VALID_SPLITS_NAME)
         return status, status_code
     print('SPLIT:', split_name)
 
@@ -206,6 +209,8 @@ def get_expert(exp_name):
         return experts.grayscale_expert.Grayscale(full_expert=True)
     elif exp_name == 'hsv':
         return experts.hsv_expert.HSVExpert(full_expert=True)
+    elif exp_name == 'cartoon_wb':
+        return experts.cartoon_expert.CartoonWB(full_expert=True)
 
 
 def get_data_range(in_path, right_dtype):

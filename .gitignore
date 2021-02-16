@@ -8,12 +8,12 @@ experts/models/prdimp50.pth.tar
 experts/models/prdimp18.pth.tar
 experts/models/edges_dexined.h5
 experts/models/of_liteflownet
+experts/models/cartoon_wb
 nohup.out
 *events.out.tfevents*
 .ropeproject/objectdb
 histograms
 .gitignore
-experts/normals_expert.py
 csv_results*/results_*.csv
 notebooks/*
 nohup*.out
