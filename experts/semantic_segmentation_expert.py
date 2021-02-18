@@ -202,6 +202,9 @@ class SSegHRNet(BasicExpert):
         self.str_id = "hrnet"
         self.identifier = self.domain_name + "_" + self.str_id
 
+    def normalize_output_fcn(self, outp):
+        return outp
+
     def get_task_type(self):
         return BasicExpert.TASK_CLASSIFICATION
 

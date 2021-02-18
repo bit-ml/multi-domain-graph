@@ -11,6 +11,9 @@ class BasicExpert():
     def edge_specific_eval(self, inp):
         return inp
 
+    def normalize_output_fcn(self, outp):
+        return outp.clamp(min=0, max=1)
+
     def get_task_type(self):
         return BasicExpert.TASK_REGRESSION
 

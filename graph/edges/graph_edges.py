@@ -43,7 +43,9 @@ class Edge:
         self.ensemble_filter = EnsembleFilter_TwdExpert(
             n_channels=expert2.no_maps_as_output(),
             similarity_fct=similarity_fct,
-            threshold=0.5)
+            normalize_output_fcn=expert2.normalize_output_fcn,
+            threshold=0.5,
+            dst_domain_name=expert2.domain_name)
         #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
@@ -110,7 +112,7 @@ class Edge:
         else:
             self.training_losses = [nn.L1Loss(), nn.MSELoss()]
             self.gt_transform = (lambda x: x)
-            self.to_ens_transform = (lambda x: x)
+            self.to_ens_transform = (lambda x, y: x)
 
         self.l2_detailed_eval = nn.MSELoss(reduction='none')
         self.l1_detailed_eval = nn.L1Loss(reduction='none')
@@ -303,7 +305,6 @@ class Edge:
             self.optimizer.zero_grad()
 
             domain1, domain2_gt = batch
-            domain1 = domain1.float()
 
             domain2_gt = domain2_gt.to(device=device)
 
@@ -335,7 +336,6 @@ class Edge:
 
         for batch in loader:
             domain1, domain2_gt = batch
-            domain1 = domain1.float()
             domain2_gt = domain2_gt.to(device=device)
 
             with torch.no_grad():
@@ -407,7 +407,6 @@ class Edge:
                     edge, loader = data_edge
 
                     domain1, domain2_exp_gt, domain2_gt = next(loader)
-                    domain1 = domain1.float()
 
                     assert domain1.shape[1] == edge.net.module.n_channels
                     assert domain2_exp_gt.shape[1] == edge.net.module.n_classes
@@ -451,7 +450,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt = next(loader)
-                    domain1 = domain1.float()
 
                     assert domain1.shape[1] == edge.net.module.n_channels
                     assert domain2_exp_gt.shape[1] == edge.net.module.n_classes
@@ -677,7 +675,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt, domain2_gt = next(loader)
-                    domain1 = domain1.float()
 
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
                                                        dtype=torch.float32)
@@ -707,22 +704,24 @@ class Edge:
                     l1_edge[idx_edge] += edge.training_losses[0](
                         one_hop_pred, edge.gt_transform(domain2_gt)).item()
 
-                domain2_1hop_ens_list.append(domain2_exp_gt)
+                domain2_1hop_ens_list.append(
+                    edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
+                                          edge.expert2.no_maps_as_output()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                    edge.expert2.domain_name)
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
                 l1_expert += edge.training_losses[0](domain2_exp_gt,
-                                                           domain2_gt).item()
+                                                     domain2_gt).item()
                 l1_ensemble1hop += edge.training_losses[0](
                     domain2_1hop_ens, edge.gt_transform(domain2_gt)).item()
 
         multiply = 1.
-        if edges_1hop[0].expert2.get_task_type() == BasicExpert.TASK_REGRESSION:
+        if edges_1hop[0].expert2.get_task_type(
+        ) == BasicExpert.TASK_REGRESSION:
             multiply = 100.
-        
+
         l1_edge = multiply * np.array(l1_edge) / num_batches
         l1_ensemble1hop = multiply * np.array(l1_ensemble1hop) / num_batches
         l1_expert = multiply * np.array(l1_expert) / num_batches
@@ -746,7 +745,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt = next(loader)
-                    domain1 = domain1.float()
 
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
                                                        dtype=torch.float32)
@@ -781,20 +779,20 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                    edge.expert2.domain_name)
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
                 l1_ensemble1hop += edge.training_losses[0](
                     domain2_1hop_ens,
                     edge.gt_transform(domain2_exp_gt)).item()
 
         multiply = 1.
-        if edges_1hop[0].expert2.get_task_type() == BasicExpert.TASK_REGRESSION:
+        if edges_1hop[0].expert2.get_task_type(
+        ) == BasicExpert.TASK_REGRESSION:
             multiply = 100.
-        
+
         l1_edge = multiply * np.array(l1_edge) / num_batches
         l1_ensemble1hop = multiply * np.array(l1_ensemble1hop) / num_batches
-        
+
         return l1_edge, l1_ensemble1hop, domain2_1hop_ens, domain2_exp_gt, save_idxes
 
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
@@ -865,7 +863,6 @@ class Edge:
                 for idx_edge, data_edge in enumerate(zip(edges_1hop, loaders)):
                     edge, loader = data_edge
                     domain1, domain2_exp_gt = next(loader)
-                    domain1 = domain1.float()
 
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
                                                        dtype=torch.float32)
@@ -882,8 +879,7 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                    edge.expert2.domain_name)
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
                 save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
                 for elem_idx in range(domain2_1hop_ens.shape[0]):

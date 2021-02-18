@@ -297,11 +297,23 @@ class SimScore_LPIPS():
 
 
 class EnsembleFilter_TwdExpert(torch.nn.Module):
-    def __init__(self, n_channels, similarity_fct='ssim', threshold=0.5):
+    def __init__(self,
+                 n_channels,
+                 dst_domain_name,
+                 normalize_output_fcn,
+                 similarity_fct='ssim',
+                 threshold=0.5):
         super(EnsembleFilter_TwdExpert, self).__init__()
         self.threshold = threshold
         self.similarity_fct = similarity_fct
         self.n_channels = n_channels
+        self.dst_domain_name = dst_domain_name
+        self.normalize_output_fcn = normalize_output_fcn
+
+        if dst_domain_name == 'edges':
+            self.ens_aggregation_fcn = self.forward_mean
+        else:
+            self.ens_aggregation_fcn = self.forward_median
 
         if similarity_fct == 'ssim':
             self.similarity_model = SimScore_SSIM(self.n_channels, 11)
@@ -361,7 +373,9 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
         return similarity_maps
 
-    def forward(self, data, dst_domain_name):
+    def forward(self, data):
+        # 1. clamp before using it in ensemble
+        data = self.normalize_output_fcn(data)
         similarity_maps = self.twd_expert_distances(data)
         bs, n_chs, h, w, n_tasks = data.shape
         for chan in range(n_chs):
@@ -373,7 +387,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         sum_[sum_ == 0] = 1
         similarity_maps = similarity_maps / sum_
 
-        if dst_domain_name == 'edges':
-            return self.forward_mean(data, similarity_maps)
-        else:
-            return self.forward_median(data, similarity_maps)
+        ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
+
+        # 2. clamp the ensemble
+        ensemble_result = self.normalize_output_fcn(ensemble_result)
+        return ensemble_result
