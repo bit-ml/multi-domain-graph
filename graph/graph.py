@@ -45,8 +45,10 @@ class MultiDomainGraph:
                                      == restricted_graph_exp_identifier)):
                             continue
 
-                    bs_test = 60
-                    bs_train = 150
+                    bs_test = 50
+                    bs_train = 90
+                    # if expert_j.identifier in ["sem_seg_hrnet"]:
+                    #     bs_train = 90
 
                     # no_experts = len(all_experts.methods)
                     no_out_ch_reduction = max(

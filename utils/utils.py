@@ -50,7 +50,7 @@ def build_mask(target, val=0.0, tol=1e-3, kernel=1):
     return (~mask).expand_as(target)
 
 
-def img_for_plot(img, dst_id, is_gt=False):
+def img_for_plot(img, dst_id):
     '''
     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
     '''

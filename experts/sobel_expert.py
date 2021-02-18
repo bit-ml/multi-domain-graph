@@ -11,7 +11,7 @@ class SobelEdgesExpert(BasicExpert):
         self.identifier = self.domain_name + "_" + self.str_id
         self.n_maps = 1
         self.sigma = sigma
-        self.win_size = 2 * (int(2.0 * sigma + 0.5)) + 1
+        self.win_size = max(2 * (int(2.0 * sigma + 0.5)) + 1, 3)
         self.n_channels = 1
 
         if full_expert:
@@ -27,17 +27,14 @@ class SobelEdgesExpert(BasicExpert):
 
         blurred = torch.nn.functional.conv2d(batch_rgb_frames,
                                              self.g_filter,
-                                             padding=self.win_size // 2,
-                                             groups=self.n_channels).float()
+                                             padding=self.win_size // 2).float()
         sx = torch.nn.functional.conv2d(blurred,
                                         self.sobel_filter,
-                                        padding=self.win_size // 2,
-                                        groups=self.n_channels)
+                                        padding=1)
         sy = torch.nn.functional.conv2d(blurred,
                                         self.sobel_filter.permute(
                                             (0, 1, 3, 2)),
-                                        padding=self.win_size // 2,
-                                        groups=self.n_channels)
+                                        padding=1)
         edges = torch.hypot(sx, sy)
 
         return edges.data.cpu().numpy()
@@ -47,18 +44,18 @@ class SobelEdgesExpertSigmaLarge(SobelEdgesExpert):
     def __init__(self, full_expert=True):
         SobelEdgesExpert.__init__(self, sigma=4., full_expert=full_expert)
         self.str_id = "sobel_large"
-        self.identifier = self.domain_name + "_" + self.str_id
+        self.identifier = self.str_id
 
 
 class SobelEdgesExpertSigmaMedium(SobelEdgesExpert):
     def __init__(self, full_expert=True):
         SobelEdgesExpert.__init__(self, sigma=1., full_expert=full_expert)
         self.str_id = "sobel_medium"
-        self.identifier = self.domain_name + "_" + self.str_id
+        self.identifier = self.str_id
 
 
 class SobelEdgesExpertSigmaSmall(SobelEdgesExpert):
     def __init__(self, full_expert=True):
         SobelEdgesExpert.__init__(self, sigma=0.1, full_expert=full_expert)
         self.str_id = "sobel_small"
-        self.identifier = self.domain_name + "_" + self.str_id
+        self.identifier = self.str_id

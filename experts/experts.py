@@ -3,6 +3,7 @@
 # print(sys.path)
 import numpy as np
 
+from experts.cartoon_expert import CartoonWB
 from experts.depth_expert import DepthModelXTC
 from experts.edges_expert import EdgesModel
 from experts.grayscale_expert import Grayscale
@@ -11,6 +12,9 @@ from experts.hsv_expert import HSVExpert
 from experts.normals_expert import SurfaceNormalsXTC
 from experts.rgb_expert import RGBModel
 from experts.semantic_segmentation_expert import SSegHRNet
+from experts.sobel_expert import (SobelEdgesExpertSigmaLarge,
+                                  SobelEdgesExpertSigmaMedium,
+                                  SobelEdgesExpertSigmaSmall)
 from experts.superpixel_expert import SuperPixel
 
 
@@ -26,7 +30,11 @@ class Experts:
             SSegHRNet(full_experts),
             Grayscale(full_experts),
             HSVExpert(full_experts),
-            SuperPixel(full_experts)
+            CartoonWB(full_experts),
+            SobelEdgesExpertSigmaLarge(full_experts),
+            SobelEdgesExpertSigmaMedium(full_experts),
+            SobelEdgesExpertSigmaSmall(full_experts),
+            SuperPixel(full_experts),
         ]
 
         if selector_map is None:
