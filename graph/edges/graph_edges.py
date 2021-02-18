@@ -21,6 +21,16 @@ from utils import utils
 from utils.utils import EnsembleFilter_TwdExpert, img_for_plot
 
 
+def labels_to_multichan(inp_1chan_cls, n_classes):
+    bs, h, w = inp_1chan_cls.shape
+
+    outp_multichan = torch.zeros(
+        (bs, n_classes, h, w)).to(inp_1chan_cls.device).float()
+    for chan in range(n_classes):
+        outp_multichan[:, chan][inp_1chan_cls == chan] = 1.
+    return outp_multichan
+
+
 class Edge:
     def __init__(self, config, expert1, expert2, device, rnd_sampler, silent,
                  valid_shuffle, iter_no, bs_train, bs_test):
@@ -31,15 +41,25 @@ class Edge:
         # Initialize ensemble model for destination task
         similarity_fct = config.get('Ensemble', 'similarity_fct')
         self.ensemble_filter = EnsembleFilter_TwdExpert(
-            n_channels=expert2.no_maps_as_input(),
+            n_channels=expert2.no_maps_as_output(),
             similarity_fct=similarity_fct,
-            threshold=0.5)
+            normalize_output_fcn=expert2.normalize_output_fcn,
+            threshold=0.5,
+            dst_domain_name=expert2.domain_name)
         #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
+
+        test1 = config.get('General', 'Steps_Iter1_test')
+        test2 = config.get('General', 'Steps_Iter2_test')
+        if test1 or test2:
+            n_workers = 8
+        else:
+            n_workers = max(8, 7 * torch.cuda.device_count())
+
         self.init_loaders(bs=bs_train * torch.cuda.device_count(),
                           bs_test=bs_test * torch.cuda.device_count(),
-                          n_workers=10,
+                          n_workers=n_workers,
                           rnd_sampler=rnd_sampler,
                           valid_shuffle=valid_shuffle,
                           iter_no=iter_no)
@@ -84,13 +104,15 @@ class Edge:
                                            min_lr=reduce_lr_min_lr)
 
         if self.expert2.get_task_type() == BasicExpert.TASK_CLASSIFICATION:
-            weight = torch.tensor(
-                self.expert2.classification_weights).to(device)
-            self.training_losses = [nn.CrossEntropyLoss(weight=weight)]
-            self.gt_transform = (lambda x: x.squeeze(1))
+            self.training_losses = [
+                nn.CrossEntropyLoss(weight=self.expert2.classification_weights)
+            ]
+            self.gt_transform = (lambda x: x.squeeze(1).long())
+            self.to_ens_transform = labels_to_multichan
         else:
             self.training_losses = [nn.L1Loss(), nn.MSELoss()]
             self.gt_transform = (lambda x: x)
+            self.to_ens_transform = (lambda x, y: x)
 
         self.l2_detailed_eval = nn.MSELoss(reduction='none')
         self.l1_detailed_eval = nn.L1Loss(reduction='none')
@@ -117,11 +139,6 @@ class Edge:
 
             self.save_epochs_distance = config.getint('Edge Models',
                                                       'save_epochs_distance')
-
-        trainable_params = sum(p.numel() for p in self.net.parameters()
-                               if p.requires_grad)
-        total_params = sum(p.numel() for p in self.net.parameters())
-        print("trainable_params", trainable_params, "out of", total_params)
 
     def init_edge(self, expert1, expert2, device):
         self.expert1 = expert1
@@ -319,7 +336,6 @@ class Edge:
 
         for batch in loader:
             domain1, domain2_gt = batch
-
             domain2_gt = domain2_gt.to(device=device)
 
             with torch.no_grad():
@@ -585,9 +601,72 @@ class Edge:
         return save_idxes, save_idxes_test
 
     ################ [1Hop Ensembles] ##################
-    def eval_1hop_ensemble_test_set(loaders, l1_per_edge, l1_ensemble1hop,
-                                    l1_expert, edges_1hop, device, save_idxes,
-                                    writer, wtag, edges_1hop_weights):
+    def val_test_stats(config, writer, edges_1hop, l1_ens_valid, l1_ens_test,
+                       l1_per_edge_valid, l1_per_edge_test, l1_expert_test,
+                       wtag_valid, wtag_test):
+        tag = "to_%s" % (edges_1hop[0].expert2.identifier)
+
+        print("load_path", config.get('Edge Models', 'load_path'))
+        print("Ensemble - sim fct: ", config.get('Ensemble', 'similarity_fct'))
+        print(
+            "%24s  L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
+            % (tag))
+
+        print("Loss %19s: %30.2f   %30.2f %20.2f" %
+              ("Ensemble1Hop", l1_ens_valid, l1_ens_test, l1_expert_test))
+        print(
+            "%25s-------------------------------------------------------------------------------------"
+            % (" "))
+
+        # Show Individual Losses
+        mean_l1_per_edge = np.mean(l1_per_edge_valid)
+        mean_l1_per_edge_test = 0
+        if len(l1_per_edge_test) > 0:
+            mean_l1_per_edge_test = np.mean(l1_per_edge_test)
+
+        idx_test_edge = 0
+        for idx_edge, edge in enumerate(edges_1hop):
+            writer.add_scalar(
+                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
+                l1_per_edge_valid[idx_edge], 0)
+            if edge.test_loader != None:
+                writer.add_scalar(
+                    '1hop_%s/L1_Loss_%s' %
+                    (wtag_test, edge.expert1.identifier),
+                    l1_per_edge_test[idx_test_edge], 0)
+                print("Loss %19s: %30.2f   %30.2f" %
+                      (edge.expert1.identifier, l1_per_edge_valid[idx_edge],
+                       l1_per_edge_test[idx_test_edge]))
+                idx_test_edge = idx_test_edge + 1
+            else:
+                print("Loss %19s: %30.2f    %30s" %
+                      (edge.expert1.identifier, l1_per_edge_valid[idx_edge],
+                       '-'))
+        print(
+            "%25s-------------------------------------------------------------------------------------"
+            % (" "))
+        print("Loss %-20s %30.2f   %30.2f" %
+              ("average", mean_l1_per_edge, mean_l1_per_edge_test))
+
+        print("")
+        print("")
+
+    def eval_1hop_ensemble_test_set(edges_1hop, device, writer, wtag):
+        loaders = []
+        test_edges = []
+        l1_edge = []
+        l1_ensemble1hop = 0
+        l1_expert = 0
+        save_idxes = None
+        for edge in edges_1hop:
+            if edge.test_loader != None:
+                loaders.append(iter(edge.test_loader))
+                test_edges.append(edge)
+                l1_edge.append(0)
+
+        if len(l1_edge) == 0:
+            return l1_edge, l1_ensemble1hop, l1_expert, None, None, None, None
+
         with torch.no_grad():
             num_batches = len(loaders[0])
             for idx_batch in tqdm(range(num_batches)):
@@ -602,12 +681,10 @@ class Edge:
                     domain2_gt = domain2_gt.to(device=device,
                                                dtype=torch.float32)
 
-                    with torch.no_grad():
-                        # Ensemble1Hop: 1hop preds
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific_eval
-                        ])
-                        domain2_1hop_ens_list.append(one_hop_pred.clone())
+                    # Ensemble1Hop: 1hop preds
+                    one_hop_pred = edge.net(
+                        [domain1, edge.net.module.to_exp.edge_specific_eval])
+                    domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -616,7 +693,7 @@ class Edge:
                                                           replace=False)
                         # Show last but one batch edges
                         writer.add_images(
-                            '%s/%s' % (wtag, edge.expert1.identifier),
+                            '%s/output_%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes],
                                          edge.expert2.identifier), 0)
                         writer.add_images(
@@ -624,28 +701,44 @@ class Edge:
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
 
-                    l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
+                    l1_edge[idx_edge] += edge.training_losses[0](
                         one_hop_pred, edge.gt_transform(domain2_gt)).item()
 
-                domain2_1hop_ens_list.append(domain2_exp_gt)
+                domain2_1hop_ens_list.append(
+                    edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
+                                          edge.expert2.no_maps_as_output()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                    edge.expert2.domain_name)
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_expert += 100 * edge.training_losses[0](domain2_exp_gt,
-                                                           domain2_gt).item()
-                l1_ensemble1hop += 100 * edge.training_losses[0](
+                l1_expert += edge.training_losses[0](domain2_exp_gt,
+                                                     domain2_gt).item()
+                l1_ensemble1hop += edge.training_losses[0](
                     domain2_1hop_ens, edge.gt_transform(domain2_gt)).item()
 
-            return l1_per_edge, l1_ensemble1hop, l1_expert, save_idxes, domain2_1hop_ens, domain2_exp_gt, domain2_gt, num_batches
+        multiply = 1.
+        if edges_1hop[0].expert2.get_task_type(
+        ) == BasicExpert.TASK_REGRESSION:
+            multiply = 100.
 
-    def eval_1hop_ensemble_valid_set(loaders, l1_per_edge, l1_ensemble1hop,
-                                     edges_1hop, device, save_idxes, writer,
-                                     wtag, edges_1hop_weights, config):
+        l1_edge = multiply * np.array(l1_edge) / num_batches
+        l1_ensemble1hop = multiply * np.array(l1_ensemble1hop) / num_batches
+        l1_expert = multiply * np.array(l1_expert) / num_batches
+
+        return l1_edge, l1_ensemble1hop, l1_expert, domain2_1hop_ens, domain2_exp_gt, domain2_gt, save_idxes
+
+    def eval_1hop_ensemble_valid_set(edges_1hop, device, writer, wtag):
+
+        save_idxes = None
+        loaders = []
+        l1_edge = []
+        l1_ensemble1hop = 0
+        for edge in edges_1hop:
+            loaders.append(iter(edge.valid_loader))
+            l1_edge.append(0)
+
         with torch.no_grad():
-            #crt_idx = 0
             num_batches = len(loaders[0])
             for idx_batch in tqdm(range(num_batches)):
                 domain2_1hop_ens_list = []
@@ -656,12 +749,10 @@ class Edge:
                     domain2_exp_gt = domain2_exp_gt.to(device=device,
                                                        dtype=torch.float32)
 
-                    with torch.no_grad():
-                        # Ensemble1Hop: 1hop preds
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific_eval
-                        ])
-                        domain2_1hop_ens_list.append(one_hop_pred.clone())
+                    # Ensemble1Hop: 1hop preds
+                    one_hop_pred = edge.net(
+                        [domain1, edge.net.module.to_exp.edge_specific_eval])
+                    domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -670,156 +761,96 @@ class Edge:
                                                           replace=True)
                         # Show last but one batch edges
                         writer.add_images(
-                            '%s/%s' % (wtag, edge.expert1.identifier),
+                            '%s/output_%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(one_hop_pred[save_idxes],
                                          edge.expert2.identifier), 0)
                         writer.add_images(
                             '%s/input_%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
-                    l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
+                    l1_edge[idx_edge] += edge.training_losses[0](
                         one_hop_pred,
                         edge.gt_transform(domain2_exp_gt)).item()
 
                 # with_expert
-                domain2_1hop_ens_list.append(domain2_exp_gt)
+                domain2_1hop_ens_list.append(
+                    edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
+                                          edge.expert2.no_maps_as_output()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                    edge.expert2.domain_name)
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_ensemble1hop += 100 * edge.training_losses[0](
+                l1_ensemble1hop += edge.training_losses[0](
                     domain2_1hop_ens,
                     edge.gt_transform(domain2_exp_gt)).item()
-            return l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_exp_gt, num_batches
 
-    def eval_1hop_ensemble(edges_1hop, save_idxes, save_idxes_test, device,
-                           writer, drop_version, edges_1hop_weights,
-                           edges_1hop_test_weights, config):
-        drop_str = 'with_drop' if drop_version >= 0 else 'no_drop'
-        wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
-                                             drop_str)
-        wtag_test = "to_%s_test_set_%s" % (edges_1hop[0].expert2.identifier,
-                                           drop_str)
+        multiply = 1.
+        if edges_1hop[0].expert2.get_task_type(
+        ) == BasicExpert.TASK_REGRESSION:
+            multiply = 100.
 
-        valid_loaders = []
-        l1_per_edge = []
-        l1_ensemble1hop = 0
-        for edge in edges_1hop:
-            valid_loaders.append(iter(edge.valid_loader))
-            l1_per_edge.append(0)
+        l1_edge = multiply * np.array(l1_edge) / num_batches
+        l1_ensemble1hop = multiply * np.array(l1_ensemble1hop) / num_batches
 
-        start = time.time()
-        l1_per_edge, l1_ensemble1hop, save_idxes, domain2_1hop_ens, domain2_gt, num_batches = Edge.eval_1hop_ensemble_valid_set(
-            valid_loaders, l1_per_edge, l1_ensemble1hop, edges_1hop, device,
-            save_idxes, writer, wtag_valid, edges_1hop_weights, config)
-        end = time.time()
-        print("time for VALID Edge.eval_1hop_ensemble_aux", end - start)
+        return l1_edge, l1_ensemble1hop, domain2_1hop_ens, domain2_exp_gt, save_idxes
 
-        test_loaders = []
-        test_edges = []
-        l1_per_edge_test = []
-        l1_ensemble1hop_test = 0
-        l1_expert_test = 0
-        for edge in edges_1hop:
-            if edge.test_loader != None:
-                test_loaders.append(iter(edge.test_loader))
-                test_edges.append(edge)
-                l1_per_edge_test.append(0)
+    def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
+        if len(edges_1hop) == 0:
+            return
 
-        start = time.time()
-        if len(test_loaders) > 0:
-            l1_per_edge_test, l1_ensemble1hop_test, l1_expert_test, save_idxes_test, domain2_1hop_ens_test, domain2_exp_gt_test, domain2_gt_test, num_batches_test = Edge.eval_1hop_ensemble_test_set(
-                test_loaders, l1_per_edge_test, l1_ensemble1hop_test,
-                l1_expert_test, test_edges, device, save_idxes_test, writer,
-                wtag_test, edges_1hop_test_weights)
-        end = time.time()
-        print("time for TEST Edge.eval_1hop_ensemble_test_set", end - start)
+        # === VALID ====
+        wtag_valid = "to_%s_valid_set" % (edges_1hop[0].expert2.identifier)
 
-        # Show Ensemble
+        l1_edge_valid, l1_ens_valid, domain2_1hop_ens, domain2_gt, save_idxes_valid = Edge.eval_1hop_ensemble_valid_set(
+            edges_1hop, device, writer, wtag_valid)
+
+        # Log Valid in Tensorboard
         writer.add_images(
-            '%s/ENSEMBLE' % (wtag_valid),
-            img_for_plot(domain2_1hop_ens[save_idxes],
+            '%s/output_ENSEMBLE' % (wtag_valid),
+            img_for_plot(domain2_1hop_ens[save_idxes_valid],
                          edges_1hop[0].expert2.identifier), 0)
         writer.add_images(
-            '%s/EXPERT' % (wtag_valid),
-            img_for_plot(domain2_gt[save_idxes],
+            '%s/output_EXPERT' % (wtag_valid),
+            img_for_plot(domain2_gt[save_idxes_valid],
                          edges_1hop[0].expert2.identifier), 0)
 
-        l1_ensemble1hop = np.array(l1_ensemble1hop) / num_batches
         writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_valid),
-                          l1_ensemble1hop, 0)
+                          l1_ens_valid, 0)
 
-        # Show Ensemble - Test DB
-        if len(test_loaders) > 0:
+        del domain2_1hop_ens, domain2_gt
+        torch.cuda.empty_cache()
+
+        # === TEST ====
+        wtag_test = "to_%s_test_set" % (edges_1hop[0].expert2.identifier)
+
+        l1_edge_test, l1_ens_test, l1_expert_test, domain2_1hop_ens_test, domain2_exp_gt_test, domain2_gt_test, save_idxes_test = Edge.eval_1hop_ensemble_test_set(
+            edges_1hop, device, writer, wtag_test)
+
+        if len(l1_edge_test) > 0:
+            # # Log Test in Tensorboard
             writer.add_images(
-                '%s/ENSEMBLE' % (wtag_test),
+                '%s/output_ENSEMBLE' % (wtag_test),
                 img_for_plot(domain2_1hop_ens_test[save_idxes_test],
                              edges_1hop[0].expert2.identifier), 0)
             writer.add_images(
-                '%s/EXPERT' % (wtag_test),
+                '%s/output_EXPERT' % (wtag_test),
                 img_for_plot(domain2_exp_gt_test[save_idxes_test],
-                             edges_1hop[0].expert2.identifier, 0))
+                             edges_1hop[0].expert2.identifier), 0)
 
             writer.add_images(
-                '%s/GT' % (wtag_test),
+                '%s/output_GT' % (wtag_test),
                 img_for_plot(domain2_gt_test[save_idxes_test],
-                             edges_1hop[0].expert2.identifier,
-                             is_gt=True), 0)
-            l1_ensemble1hop_test = np.array(
-                l1_ensemble1hop_test) / num_batches_test
-            l1_expert_test = np.array(l1_expert_test) / num_batches_test
+                             edges_1hop[0].expert2.identifier), 0)
             writer.add_scalar('1hop_%s/L1_Loss_ensemble' % (wtag_test),
-                              l1_ensemble1hop_test, 0)
+                              l1_ens_test, 0)
 
-        tag = "to_%s_%s" % (edges_1hop[0].expert2.identifier, drop_str)
-        print("load_path", config.get('Edge Models', 'load_path'))
-        print("Ensemble - sim fct: ", config.get('Ensemble', 'similarity_fct'))
-        print(
-            "%24s  L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
-            % (tag))
+        # Val+Test STATS
+        Edge.val_test_stats(config, writer, edges_1hop, l1_ens_valid,
+                            l1_ens_test, l1_edge_valid, l1_edge_test,
+                            l1_expert_test, wtag_valid, wtag_test)
 
-        print("Loss %19s: %30.2f   %30.2f %20.2f" %
-              ("Ensemble1Hop", l1_ensemble1hop, l1_ensemble1hop_test,
-               l1_expert_test))
-        print(
-            "%25s-------------------------------------------------------------------------------------"
-            % (" "))
-
-        # Show Individual Losses
-        l1_per_edge = np.array(l1_per_edge) / num_batches
-        mean_l1_per_edge = np.mean(l1_per_edge)
-        mean_l1_per_edge_test = 0
-        if len(test_loaders) > 0:
-            l1_per_edge_test = np.array(l1_per_edge_test) / num_batches_test
-            mean_l1_per_edge_test = np.mean(l1_per_edge_test)
-        idx_test_edge = 0
-        for idx_edge, edge in enumerate(edges_1hop):
-            writer.add_scalar(
-                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
-                l1_per_edge[idx_edge], 0)
-            if edge.test_loader != None:
-                writer.add_scalar(
-                    '1hop_%s/L1_Loss_%s' %
-                    (wtag_test, edge.expert1.identifier),
-                    l1_per_edge_test[idx_test_edge], 0)
-                print("Loss %19s: %30.2f   %30.2f" %
-                      (edge.expert1.identifier, l1_per_edge[idx_edge],
-                       l1_per_edge_test[idx_test_edge]))
-                idx_test_edge = idx_test_edge + 1
-            else:
-                print("Loss %19s: %30.2f    %30s" %
-                      (edge.expert1.identifier, l1_per_edge[idx_edge], '-'))
-        print(
-            "%25s-------------------------------------------------------------------------------------"
-            % (" "))
-        print("Loss %-20s %30.2f   %30.2f" %
-              ("average", mean_l1_per_edge, mean_l1_per_edge_test))
-
-        print("")
-        print("")
-        return save_idxes, save_idxes_test
+        return
 
     ######## Save 1hop ensembles ###############
     def save_1hop_ensemble_next_iter_set(loaders, edges_1hop, device, config,
@@ -848,8 +879,7 @@ class Edge:
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0),
-                    edge.expert2.domain_name)
+                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
                 save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
                 for elem_idx in range(domain2_1hop_ens.shape[0]):

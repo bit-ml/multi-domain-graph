@@ -6,6 +6,7 @@ import torch
 import torchvision
 from skimage import color
 from torch import nn
+from torch.utils.data import dataset
 from torchvision import models
 
 from experts.basic_expert import BasicExpert
@@ -16,7 +17,6 @@ ss_model_path = os.path.join(current_dir_name, 'models/')
 
 # ADE20k labels https://github.com/CSAILVision/sceneparsing/blob/master/objectInfo150.csv
 # Taskonomy labels https://github.com/StanfordVL/taskonomy/blob/master/taskbank/assets/web_assets/pseudosemantics/coco_selected_classes.txt
-
 
 all_classes_occurences_ade = [
     (0.0, 549870074), (5.0, 196085021), (3.0, 130539277), (14.0, 57923488),
@@ -159,7 +159,7 @@ def analyze_cls():
 
 
 class SSegHRNet(BasicExpert):
-    def __init__(self, full_expert=True):
+    def __init__(self, dataset_name, full_expert=True):
         if full_expert:
             self.trained_num_class = 150
             # Network Builders
@@ -182,11 +182,15 @@ class SSegHRNet(BasicExpert):
             self.encoder.to(device)
             self.decoder.to(device)
 
-        self.classification_weights = [
-            0.03933823, 0.11031396, 0.16570427, 0.3632622, 0.52115117,
-            0.51646098, 1.14297737, 0.96902266, 1.31444027, 1.76809316,
-            1.89247963, 1.1967561
-        ]
+        if dataset_name == "taskonomy":
+            weights = [
+                0.03933823, 0.11031396, 0.16570427, 0.3632622, 0.52115117,
+                0.51646098, 1.14297737, 0.96902266, 1.31444027, 1.76809316,
+                1.89247963, 1.1967561
+            ]
+            self.classification_weights = torch.tensor(weights).to(device)
+        else:
+            self.classification_weights = None
 
         self.combine_list = [(19, 30, 75, 31), (14, 58), (15, 64),
                              (38, 96, 59, 53), (10, 35, 44)]
@@ -194,9 +198,12 @@ class SSegHRNet(BasicExpert):
 
         self.domain_name = "sem_seg"
         self.n_maps = 1
-        
+
         self.str_id = "hrnet"
         self.identifier = self.domain_name + "_" + self.str_id
+
+    def normalize_output_fcn(self, outp):
+        return outp
 
     def get_task_type(self):
         return BasicExpert.TASK_CLASSIFICATION
@@ -227,12 +234,13 @@ class SSegHRNet(BasicExpert):
         class_labels = inp[:, self.to_keep_list].argmax(dim=1)[:, None]
 
         return class_labels
-    
+
     def no_maps_as_input(self):
         return 1
 
     def no_maps_as_output(self):
         return len(self.to_keep_list)
+
 
 class SSegResNeSt(BasicExpert):
     def __init__(self, full_expert=True):

@@ -45,17 +45,17 @@ class MultiDomainGraph:
                                      == restricted_graph_exp_identifier)):
                             continue
 
-                    if expert_j.domain_name in ["normals", "rgb"]:
-                        # because it has 3 channels
-                        bs_test = 20
-                        bs_train = 90
-                    elif expert_j.domain_name in ["sem_seg"]:
-                        # because it has 12 channels
-                        bs_test = 10
-                        bs_train = 70
-                    else:
-                        bs_test = 100
-                        bs_train = 100
+                    bs_test = 50
+                    bs_train = 90
+                    # if expert_j.identifier in ["sem_seg_hrnet"]:
+                    #     bs_train = 90
+
+                    # no_experts = len(all_experts.methods)
+                    no_out_ch_reduction = max(
+                        expert_j.no_maps_as_output() * 0.5, 1)
+                    bs_test = int(bs_test / no_out_ch_reduction)
+                    bs_train = int(bs_train / no_out_ch_reduction)
+
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,

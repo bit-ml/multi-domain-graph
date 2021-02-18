@@ -12,6 +12,7 @@ from tqdm import tqdm
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import experts.cartoon_expert
 import experts.depth_expert
 import experts.edges_expert
 import experts.grayscale_expert
@@ -23,6 +24,8 @@ import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
 import experts.semantic_segmentation_expert
+import experts.sobel_expert
+import experts.superpixel_expert
 import experts.vmos_stm_expert
 
 WORKING_H = 256
@@ -48,7 +51,12 @@ VALID_EXPERTS_NAME = [\
     'depth_sgdepth',
     'edges_dexined',
     'normals_xtc',
-    'sem_seg_hrnet'\
+    'sem_seg_hrnet',
+    'cartoon_wb',
+    'superpixel_fcn',
+    'sobel_small',
+    'sobel_medium',
+    'sobel_large'\
 ]
 VALID_SPLITS_NAME = ["val", "test", "train"]
 
@@ -94,12 +102,13 @@ def check_arguments_without_delete(argv):
     split_name = argv[2]
     if split_name not in VALID_SPLITS_NAME:
         status = 0
-        status_code = 'Split %s is not valid' % split_name
+        status_code = 'Split %s is not valid. Valid ones are: %s' % (
+            split_name, VALID_SPLITS_NAME)
         return status, status_code
 
     MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/replica_raw/%s' % split_name
-    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_gt/replica/%s' % split_name
-    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-6/datasets/datasets_preproc_exp/replica/%s' % split_name
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/%s' % split_name
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica/%s' % split_name
 
     if RUN_TYPE == 0:
         if argv[3] == 'all':
@@ -190,11 +199,22 @@ def get_expert(exp_name):
     elif exp_name == 'rgb':
         return experts.rgb_expert.RGBModel(full_expert=True)
     elif exp_name == 'sem_seg_hrnet':
-        return experts.semantic_segmentation_expert.SSegHRNet(full_expert=True)
+        return experts.semantic_segmentation_expert.SSegHRNet(
+            dataset_name="replica", full_expert=True)
     elif exp_name == 'grayscale':
         return experts.grayscale_expert.Grayscale(full_expert=True)
     elif exp_name == 'hsv':
         return experts.hsv_expert.HSVExpert(full_expert=True)
+    elif exp_name == 'cartoon_wb':
+        return experts.cartoon_expert.CartoonWB(full_expert=True)
+    elif exp_name == 'sobel_small':
+        return experts.sobel_expert.SobelEdgesExpertSigmaSmall()
+    elif exp_name == 'sobel_medium':
+        return experts.sobel_expert.SobelEdgesExpertSigmaMedium()
+    elif exp_name == 'sobel_large':
+        return experts.sobel_expert.SobelEdgesExpertSigmaLarge()
+    elif exp_name == 'superpixel_fcn':
+        return experts.superpixel_expert.SuperPixel()
 
 
 def depth_to_surface_normals(depth, surfnorm_scalar=256):

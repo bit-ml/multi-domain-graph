@@ -220,7 +220,7 @@ class ImageLevelDataset(Dataset):
                 assert (len(self.src_paths) == len(self.gt_dst_paths))
 
     def __getitem__(self, index):
-        src_data = np.load(self.src_paths[index])
+        src_data = np.load(self.src_paths[index]).astype(np.float32)
         dst_data = np.load(self.dst_paths[index])
 
         if len(self.gt_dst_paths) > 0:
