@@ -141,7 +141,7 @@ def get_task_split_paths(dataset_path, splits_csv_path, split_name, folder_str,
 
     paths = []
     scenes = df['scene_name'].unique()
-    #scenes = scenes[0:1]
+    scenes = scenes[0:1]
     for scene in scenes:
         df_scene = df[df['scene_name'] == scene]
         cameras = df_scene['camera_name'].unique()
@@ -288,9 +288,16 @@ def get_expert(exp_name):
     if exp_name == 'depth_xtc':
         return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return expert.normal_expert.SurfaceNormalsXTC(dataset_name='hypersim',
-                                                      full_expert=True)
+        return experts.normal_expert.SurfaceNormalsXTC(dataset_name='hypersim',
+                                                       full_expert=True)
+    elif exp_name == 'edges_dexined':
+        return experts.edges_expert.EdgesModel(full_expert=True)
+
     return None
+
+
+def add_depth_process(data):
+    return data / 2
 
 
 def get_exp_results():
@@ -305,6 +312,22 @@ def get_exp_results():
         exp_out_path = os.path.join(EXP_OUT_PATH, exp)
         os.makedirs(exp_out_path, exist_ok=True)
         expert = get_expert(exp)
+        process_fct = expert.apply_expert_batch
+        if exp == 'depth_xtc':
+            add_process_fct = add_depth_process
+        else:
+            add_process_fct = lambda x: x
+        file_idx = 0
+        for batch in tqdm(dataloader):
+            exp_info, paths = batch
+            exp_info = process_fct(exp_info)
+            exp_info = add_process_fct(exp_info)
+            for i in range(exp_info.shape[0]):
+                exp_info_ = exp_info[i]
+                exp_info_ = np.array(exp_info_)
+                np.save(os.path.join(exp_out_path, '%08d.npy' % file_idx),
+                        exp_info_)
+                file_idx += 1
     return
 
 
