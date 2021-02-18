@@ -480,7 +480,7 @@ def main(argv):
         silent = config.getboolean('Logs', 'silent')
         graph = build_space_graph(config,
                                   silent=silent,
-                                  valid_shuffle=True,
+                                  valid_shuffle=False,
                                   iter_no=iteration_idx)
 
         # Load models
