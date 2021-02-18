@@ -210,7 +210,8 @@ def get_expert(exp_name):
     elif exp_name == 'rgb':
         return experts.rgb_expert.RGBModel(full_expert=True)
     elif exp_name == 'sem_seg_hrnet':
-        return experts.semantic_segmentation_expert.SSegHRNet(full_expert=True)
+        return experts.semantic_segmentation_expert.SSegHRNet(
+            dataset_name="taskonomy", full_expert=True)
     elif exp_name == 'grayscale':
         return experts.grayscale_expert.Grayscale(full_expert=True)
     elif exp_name == 'hsv':

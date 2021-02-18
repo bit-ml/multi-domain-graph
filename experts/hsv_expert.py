@@ -14,5 +14,5 @@ class HSVExpert(BasicExpert):
     def apply_expert_batch(self, batch_rgb_frames):
         batch_rgb_frames = batch_rgb_frames
         outp_maps = rgb2hsv(batch_rgb_frames)
-        hsv_maps = outp_maps.astype('float32').transpose(0, 3, 1, 2)
+        hsv_maps = outp_maps.astype('float32').transpose(0, 3, 1, 2) / 255.
         return hsv_maps

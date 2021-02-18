@@ -50,7 +50,7 @@ def build_mask(target, val=0.0, tol=1e-3, kernel=1):
     return (~mask).expand_as(target)
 
 
-def img_for_plot(img, dst_id, is_gt=False):
+def img_for_plot(img, dst_id):
     '''
     img shape NCHW, ex: torch.Size([3, 1, 256, 256])
     '''
@@ -60,7 +60,10 @@ def img_for_plot(img, dst_id, is_gt=False):
         img = img[:, 0:1]
         c = 1
     if dst_id.find("sem_seg") >= 0:
-        tasko_labels = img
+        if img.shape[1] > 1:
+            tasko_labels = img.argmax(dim=1, keepdim=True)
+        else:
+            tasko_labels = img
         all_classes = 12
         for idx in range(all_classes):
             tasko_labels[:, 0, 0, idx] = idx
