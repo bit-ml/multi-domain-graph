@@ -35,6 +35,10 @@ import experts.hsv_expert
 import experts.normals_expert
 import experts.depth_expert
 import experts.edges_expert
+import experts.cartoon_expert
+import experts.sobel_expert
+import experts.superpixel_expert
+import experts.semantic_segmentation_expert
 
 usage_str = 'usage: python main_hypersim.py type split_name exp1 exp2 ...'
 #    type                   - [0/1] - 0 create preprocessed gt samples
@@ -44,7 +48,11 @@ usage_str = 'usage: python main_hypersim.py type split_name exp1 exp2 ...'
 #                           - should be one of the VALID_EXPERTS_NAME / VALID_GT_DOMAINS
 #                           - 'all' to run all available experts / domains
 
-VALID_EXPERTS_NAME = ['depth_xtc', 'normals_xtc', 'edges_dexined']
+VALID_EXPERTS_NAME = [
+    'depth_xtc', 'normals_xtc', 'edges_dexined', 'cartoon_wb',
+    'superpixel_fcn', 'sobel_small', 'sobel_medium', 'sobel_large',
+    'sem_seg_hrnet'
+]
 VALID_DOMAINS_NAME = [
     'rgb', 'grayscale', 'hsv', 'halftone_gray', 'depth', 'normals', 'sem_seg'
 ]
@@ -116,6 +124,8 @@ def check_arguments_without_delete(argv):
             EXPERTS_NAME = VALID_EXPERTS_NAME
         else:
             potential_experts = argv[3:]
+            print('valid experts ', VALID_EXPERTS_NAME)
+            print('potential experts ', potential_experts)
             EXPERTS_NAME = []
             for i in range(len(potential_experts)):
                 exp_name = potential_experts[i]
@@ -246,6 +256,8 @@ class NormalsDataset(Dataset):
         normal_info = torch.nn.functional.interpolate(
             normal_info[None], (WORKING_H, WORKING_W))[0]
 
+        nan_mask = normal_info != normal_info
+
         normal_info[1, :, :] = normal_info[1, :, :] * (-1)
         normal_info[2, :, :] = normal_info[2, :, :] * (-1)
 
@@ -253,7 +265,7 @@ class NormalsDataset(Dataset):
         normal_info = normal_info / norm
 
         normal_info = (normal_info + 1) / 2
-
+        normal_info[nan_mask] = 2
         return normal_info, self.paths[index]
 
     def __len__(self):
@@ -288,16 +300,38 @@ def get_expert(exp_name):
     if exp_name == 'depth_xtc':
         return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'normals_xtc':
-        return experts.normal_expert.SurfaceNormalsXTC(dataset_name='hypersim',
-                                                       full_expert=True)
+        return experts.normals_expert.SurfaceNormalsXTC(
+            dataset_name='hypersim', full_expert=True)
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
+    elif exp_name == 'cartoon_wb':
+        return experts.cartoon_expert.CartoonWB(full_expert=True)
+    elif exp_name == 'sobel_small':
+        return experts.sobel_expert.SobelEdgesExpertSigmaSmall()
+    elif exp_name == 'sobel_medium':
+        return experts.sobel_expert.SobelEdgesExpertSigmaMedium()
+    elif exp_name == 'sobel_large':
+        return experts.sobel_expert.SobelEdgesExpertSigmaLarge()
+    elif exp_name == 'superpixel_fcn':
+        return experts.superpixel_expert.SuperPixel()
+    elif exp_name == 'sem_seg_hrnet':
+        return experts.semantic_segmentation_expert(dataset_name='hypersim',
+                                                    full_expert=True)
 
     return None
 
 
 def add_depth_process(data):
     return data / 2
+
+
+def add_normals_process(data):
+    data = np.clip(data, 0, 1)
+    data = data * 2 - 1
+    norm_data = np.linalg.norm(data, axis=1, keepdims=True)
+    data = data / norm_data
+    data = (data + 1) / 2
+    return data
 
 
 def get_exp_results():
@@ -315,8 +349,12 @@ def get_exp_results():
         process_fct = expert.apply_expert_batch
         if exp == 'depth_xtc':
             add_process_fct = add_depth_process
+        elif exp == 'normals_xtc':
+            add_process_fct = add_normals_process
         else:
             add_process_fct = lambda x: x
+        import pdb
+        pdb.set_trace()
         file_idx = 0
         for batch in tqdm(dataloader):
             exp_info, paths = batch
