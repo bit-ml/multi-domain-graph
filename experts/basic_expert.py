@@ -5,10 +5,7 @@ class BasicExpert():
     def post_process_ops(self, logits, specific_fcn):
         return specific_fcn(logits)
 
-    def edge_specific_train(self, inp):
-        return inp
-
-    def edge_specific_eval(self, inp):
+    def edge_specific(self, inp):
         return inp
 
     def normalize_output_fcn(self, outp):
@@ -17,8 +14,11 @@ class BasicExpert():
     def get_task_type(self):
         return BasicExpert.TASK_REGRESSION
 
-    def no_maps_as_input(self):
+    def no_maps_as_nn_input(self):
         return self.n_maps
 
-    def no_maps_as_output(self):
+    def no_maps_as_nn_output(self):
+        return self.n_maps
+
+    def no_maps_as_ens_input(self):
         return self.n_maps

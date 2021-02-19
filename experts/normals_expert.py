@@ -46,7 +46,7 @@ class SurfaceNormalsXTC(BasicExpert):
         else:
             self.chan_replace = 1
             self.chan_gen_fcn = torch.ones_like
-            self.n_maps = 3
+            self.n_maps = 2
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -55,8 +55,8 @@ class SurfaceNormalsXTC(BasicExpert):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
         normals_maps = self.model(batch_rgb_frames.to(self.device))
 
-        #normals_maps = self.post_process_ops(normals_maps,
-        #                                     self.expert_specific)
+        normals_maps = self.post_process_ops(normals_maps,
+                                             self.expert_specific)
 
         normals_maps = normals_maps.data.cpu().numpy().astype('float32')
         return normals_maps
@@ -64,6 +64,10 @@ class SurfaceNormalsXTC(BasicExpert):
     def post_process_ops(self, pred_logits, specific_fcn):
         pred_logits = torch.clamp(pred_logits, 0, 1)
         pred_logits = pred_logits * 2 - 1
+
+        pred_logits = specific_fcn(pred_logits)
+
+        # normalize normals in [-1, 1]
         norm_pred_logits = torch.norm(pred_logits, dim=1, keepdim=True)
 
         pred_logits = pred_logits / norm_pred_logits
@@ -75,16 +79,18 @@ class SurfaceNormalsXTC(BasicExpert):
         inp[:, 2, :, :] = self.chan_replace
         return inp
 
-    def edge_specific_train(self, inp):
+    def edge_specific(self, inp):
         inp = torch.cat((inp, self.chan_gen_fcn(inp[:, 1][:, None])), dim=1)
         return inp
 
-    def edge_specific_eval(self, inp):
-        inp = torch.cat((inp, self.chan_gen_fcn(inp[:, 1][:, None])), dim=1)
-        return inp
+    def no_maps_as_nn_input(self):
+        return self.n_final_maps
 
-    def no_maps_as_input(self):
-        return 3
-
-    def no_maps_as_output(self):
+    def no_maps_as_nn_output(self):
         return self.n_maps
+
+    def no_maps_as_ens_input(self):
+        return self.n_final_maps
+
+    def normalize_output_fcn(self, outp):
+        return self.post_process_ops(outp, self.expert_specific)

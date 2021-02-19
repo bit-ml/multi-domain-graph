@@ -160,6 +160,8 @@ def analyze_cls():
 
 class SSegHRNet(BasicExpert):
     def __init__(self, dataset_name, full_expert=True):
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
         if full_expert:
             self.trained_num_class = 150
             # Network Builders
@@ -177,8 +179,6 @@ class SSegHRNet(BasicExpert):
             self.encoder.eval()
             self.decoder.eval()
 
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.device = device
             self.encoder.to(device)
             self.decoder.to(device)
 
@@ -188,7 +188,7 @@ class SSegHRNet(BasicExpert):
                 0.51646098, 1.14297737, 0.96902266, 1.31444027, 1.76809316,
                 1.89247963, 1.1967561
             ]
-            self.classification_weights = torch.tensor(weights).to(device)
+            self.classification_weights = torch.tensor(weights).to(self.device)
         else:
             self.classification_weights = None
 
@@ -198,6 +198,7 @@ class SSegHRNet(BasicExpert):
 
         self.domain_name = "sem_seg"
         self.n_maps = 1
+        self.n_final_maps = len(self.to_keep_list)
 
         self.str_id = "hrnet"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -235,11 +236,15 @@ class SSegHRNet(BasicExpert):
 
         return class_labels
 
-    def no_maps_as_input(self):
+    def no_maps_as_nn_input(self):
         return 1
 
-    def no_maps_as_output(self):
+    def no_maps_as_nn_output(self):
         return len(self.to_keep_list)
+    
+    def no_maps_as_ens_input(self):
+        return len(self.to_keep_list)
+
 
 
 class SSegResNeSt(BasicExpert):

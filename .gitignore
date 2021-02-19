@@ -28,3 +28,4 @@ logs/*.log*
 csv_results/*.csv
 z_my_configs
 preprocess_dbs/logs/*
+logs/*

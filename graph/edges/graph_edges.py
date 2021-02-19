@@ -41,7 +41,7 @@ class Edge:
         # Initialize ensemble model for destination task
         similarity_fct = config.get('Ensemble', 'similarity_fct')
         self.ensemble_filter = EnsembleFilter_TwdExpert(
-            n_channels=expert2.no_maps_as_output(),
+            n_channels=expert2.no_maps_as_ens_input(),
             similarity_fct=similarity_fct,
             normalize_output_fcn=expert2.normalize_output_fcn,
             threshold=0.5,
@@ -110,7 +110,7 @@ class Edge:
             self.gt_transform = (lambda x: x.squeeze(1).long())
             self.to_ens_transform = labels_to_multichan
         else:
-            self.training_losses = [nn.L1Loss(), nn.MSELoss()]
+            self.training_losses = [nn.SmoothL1Loss(beta=2.)]
             self.gt_transform = (lambda x: x)
             self.to_ens_transform = (lambda x, y: x)
 
@@ -145,8 +145,8 @@ class Edge:
         self.expert2 = expert2
         self.name = "%s -> %s" % (expert1.identifier, expert2.identifier)
 
-        net = UNetGood(n_channels=expert1.no_maps_as_input(),
-                       n_classes=expert2.no_maps_as_output(),
+        net = UNetGood(n_channels=expert1.no_maps_as_nn_input(),
+                       n_classes=expert2.no_maps_as_nn_output(),
                        from_exp=expert1,
                        to_exp=expert2).to(device)
         self.net = nn.DataParallel(net)
@@ -157,8 +157,8 @@ class Edge:
         #       (total_params, trainable_params))
 
     def copy_model(self, device):
-        prev_net = UNetGood(n_channels=self.expert1.no_maps_as_input(),
-                            n_classes=self.expert2.no_maps_as_output(),
+        prev_net = UNetGood(n_channels=self.expert1.no_maps_as_nn_input(),
+                            n_classes=self.expert2.no_maps_as_nn_output(),
                             from_exp=self.expert1,
                             to_exp=self.expert2).to(device)
         self.prev_net = nn.DataParallel(prev_net)
@@ -290,8 +290,9 @@ class Edge:
             losses *= 100.
             writer.add_scalar('%s_%s/L1_Loss' % (split_tag, wtag), losses[0],
                               self.global_step)
-            writer.add_scalar('%s_%s/L2_Loss' % (split_tag, wtag), losses[1],
-                              self.global_step)
+            if len(losses) > 1:
+                writer.add_scalar('%s_%s/L2_Loss' % (split_tag, wtag),
+                                  losses[1], self.global_step)
         else:
             writer.add_scalar("%s_%s/CrossEntropy_Loss" % (split_tag, wtag),
                               losses[0], self.global_step)
@@ -309,7 +310,7 @@ class Edge:
             domain2_gt = domain2_gt.to(device=device)
 
             domain2_pred = self.net(
-                [domain1, self.net.module.to_exp.edge_specific_train])
+                [domain1, self.net.module.to_exp.edge_specific])
 
             backward_losses = 0
             for idx_loss, loss in enumerate(self.training_losses):
@@ -340,7 +341,7 @@ class Edge:
 
             with torch.no_grad():
                 domain2_pred = self.net(
-                    [domain1, self.net.module.to_exp.edge_specific_eval])
+                    [domain1, self.net.module.to_exp.edge_specific])
 
             for idx_loss, loss in enumerate(self.training_losses):
                 crt_loss = loss(domain2_pred, self.gt_transform(domain2_gt))
@@ -378,10 +379,14 @@ class Edge:
 
             # verbose
             if self.expert2.get_task_type() == BasicExpert.TASK_REGRESSION:
-                print(
-                    "[%d epoch] VAL [L1_Loss %.2f   L2_Loss %.2f]   TRAIN [L1_Loss %.2f   L2_Loss %.2f]"
-                    % (epoch, valid_losses[0], valid_losses[1],
-                       train_losses[0], train_losses[1]))
+                if len(train_losses) > 1:
+                    print(
+                        "[%d epoch] VAL [L1_Loss %.2f   L2_Loss %.2f]   TRAIN [L1_Loss %.2f   L2_Loss %.2f]"
+                        % (epoch, valid_losses[0], valid_losses[1],
+                           train_losses[0], train_losses[1]))
+                else:
+                    print("[%d epoch] VAL [Loss %.2f]  TRAIN [Loss %.2f]" %
+                          (epoch, valid_losses[0], train_losses[0]))
             else:
                 print(
                     "[%d epoch] VAL [CrossEntr %.2f]   TRAIN [CrossEntr %.2f]"
@@ -419,7 +424,7 @@ class Edge:
 
                     with torch.no_grad():
                         one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific_eval
+                            domain1, edge.net.module.to_exp.edge_specific
                         ])
 
                     if idx_batch == len(loader) - 1:
@@ -459,7 +464,7 @@ class Edge:
 
                     with torch.no_grad():
                         one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific_eval
+                            domain1, edge.net.module.to_exp.edge_specific
                         ])
 
                     if idx_batch == len(loader) - 1:
@@ -683,7 +688,7 @@ class Edge:
 
                     # Ensemble1Hop: 1hop preds
                     one_hop_pred = edge.net(
-                        [domain1, edge.net.module.to_exp.edge_specific_eval])
+                        [domain1, edge.net.module.to_exp.edge_specific])
                     domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
@@ -706,7 +711,7 @@ class Edge:
 
                 domain2_1hop_ens_list.append(
                     edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
-                                          edge.expert2.no_maps_as_output()))
+                                          edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
@@ -751,7 +756,7 @@ class Edge:
 
                     # Ensemble1Hop: 1hop preds
                     one_hop_pred = edge.net(
-                        [domain1, edge.net.module.to_exp.edge_specific_eval])
+                        [domain1, edge.net.module.to_exp.edge_specific])
                     domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
@@ -775,7 +780,7 @@ class Edge:
                 # with_expert
                 domain2_1hop_ens_list.append(
                     edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
-                                          edge.expert2.no_maps_as_output()))
+                                          edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
@@ -870,7 +875,7 @@ class Edge:
                     with torch.no_grad():
                         # Ensemble1Hop: 1hop preds
                         one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific_eval
+                            domain1, edge.net.module.to_exp.edge_specific
                         ])
                         domain2_1hop_ens_list.append(one_hop_pred.clone())
 

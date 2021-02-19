@@ -52,7 +52,7 @@ class MultiDomainGraph:
 
                     # no_experts = len(all_experts.methods)
                     no_out_ch_reduction = max(
-                        expert_j.no_maps_as_output() * 0.5, 1)
+                        expert_j.no_maps_as_nn_output() * 0.5, 1)
                     bs_test = int(bs_test / no_out_ch_reduction)
                     bs_train = int(bs_train / no_out_ch_reduction)
 
