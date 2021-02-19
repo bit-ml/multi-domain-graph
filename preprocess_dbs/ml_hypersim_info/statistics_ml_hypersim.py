@@ -1,10 +1,15 @@
 import os
 import shutil
 import sys
+import h5py
+import torch
+from tqdm import tqdm
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+import glob
+from torch.utils.data import DataLoader, Dataset
 
 csv_path = 'metadata_images_split_scene_v1.csv'
 df = pd.read_csv(csv_path)
@@ -38,5 +43,51 @@ print(np.max(n_frames))
 pos = np.argwhere(n_frames == np.max(n_frames))[0][0]
 
 print('smallest scene %s' % (all_scenes[pos]))
+
+main_path = r'/data/multi-domain-graph-6/datasets/ml_hypersim'
+# scenes/images/scene_cam_00_geometry_hdf5
+
+
+class DepthDataset(Dataset):
+    def __init__(self, main_path):
+        super(DepthDataset, self).__init__()
+        self.all_frames_paths = sorted(
+            glob.glob('%s/*/images/*geometry_hdf5/frame*depth_meters.hdf5' %
+                      (main_path)))
+
+    def __getitem__(self, index):
+        depth_file = h5py.File(self.all_frames_paths[index], "r")
+        depth_info = np.array(depth_file.get('dataset')).astype('float32')
+        depth_info = torch.from_numpy(depth_info).unsqueeze(0)
+        depth_info = torch.nn.functional.interpolate(depth_info[None],
+                                                     (256, 256))[0]
+        return depth_info, self.all_frames_paths[index]
+
+    def __len__(self):
+        return len(self.all_frames_paths)
+
+
+depth_dataset = DepthDataset(main_path)
+dataloader = DataLoader(depth_dataset,
+                        batch_size=100,
+                        shuffle=False,
+                        num_workers=20)
 import pdb
 pdb.set_trace()
+min_values = []
+max_values = []
+for batch in tqdm(dataloader):
+    depth_info, paths = batch
+    nan_mask = depth_info != depth_info
+    non_nan_mask = ~nan_mask
+    min_values.append(torch.min(depth_info[non_nan_mask]))
+    max_values.append(torch.max(depth_info[non_nan_mask]))
+
+    if torch.max(depth_info[non_nan_mask] > 1800):
+        import pdb
+        pdb.set_trace()
+        print(paths)
+
+min_val = np.min(np.array(min_values))
+max_val = np.max(np.array(max_values))
+print('Depth: min %8.4f -- max %8.4f' % (min_val, max_val))

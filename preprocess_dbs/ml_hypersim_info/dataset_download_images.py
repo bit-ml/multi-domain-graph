@@ -4,7 +4,8 @@
 #
 
 # nohup python dataset_download_images.py --downloads_dir /data/multi-domain-graph-6/datasets/ml_hypersim --decompress_dir /data/multi-domain-graph-6/datasets/ml_hypersim --delete_archive_after_decompress &> logs_download.out &
-
+# nohup python dataset_download_images.py --downloads_dir /data/multi-domain-graph-6/datasets/hypersim --decompress_dir /data/multi-domain-graph-6/datasets/hypersim/data --delete_archive_after_decompress &> logs_download.out &
+# process 4760 - mdg
 import argparse
 import os
 import shutil
@@ -12,7 +13,12 @@ import glob
 
 non_required_color_data = [
     'diff', 'diffuse_illumination', 'diffuse_reflectance', 'gamma',
-    'lambertian', 'non_lambertian', 'residual', 'tonemap'
+    'lambertian', 'non_lambertian', 'residual'
+]  #, 'tonemap'
+#]
+non_required_color_hdf5_data = [
+    'diff', 'diffuse_illumination', 'diffuse_reflectance', 'gamma',
+    'lambertian', 'non_lambertian', 'residual'
 ]
 non_required_geo_data = [
     'normal_bump_cam', 'normal_bump_world', 'normal_world', 'position',
@@ -73,7 +79,8 @@ def download(url):
     scene_name = url[pos:-4]
     if scene_name == "ai_001_001":
         return
-    scene_path = os.path.join(args.downloads_dir, scene_name)
+
+    scene_path = os.path.join(args.decompress_dir, scene_name)
     # remove dataset details
     details_path = os.path.join(scene_path, '_detail')
     if os.path.exists(details_path):
@@ -86,7 +93,13 @@ def download(url):
 
     # remove non required final hdf5 data
     glob_path = "%s/*final_hdf5" % (images_path)
-    remove_all(glob.glob(glob_path))
+    all_final_preview = sorted(glob.glob(glob_path))
+    for cam_path in all_final_preview:
+        for str_color in non_required_color_hdf5_data:
+            glob_path_ = "%s/*%s.hdf5" % (cam_path, str_color)
+            remove_all(glob.glob(glob_path_))
+    #remove_all(glob.glob(glob_path))
+
     # remove non required final preview data
     glob_path = "%s/*final_preview" % (images_path)
     all_final_preview = sorted(glob.glob(glob_path))
@@ -103,7 +116,6 @@ def download(url):
             remove_all(glob.glob(glob_path_))
 
 
-'''
 urls_to_download = [
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_001_001.zip",
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_001_002.zip",
@@ -389,8 +401,6 @@ urls_to_download = [
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_033_008.zip",
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_033_009.zip",
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_033_010.zip",
-'''
-urls_to_download = [
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_034_001.zip",
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_034_002.zip",
     "https://docs-assets.developer.apple.com/ml-research/datasets/hypersim/v1/scenes/ai_034_003.zip",
