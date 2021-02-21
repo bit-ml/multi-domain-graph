@@ -7,11 +7,11 @@ import torchvision
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-logs_out_path = r'/data/multi-domain-graph-6/datasets/ml_hypersim/runs'
+logs_out_path = r'/data/multi-domain-graph-6/datasets/hypersim/runs'
 
 experts_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim'
 gt_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim'
-split_name = 'train1'
+split_name = 'test'
 n_samples = 100
 
 experts_path = os.path.join(experts_path, split_name)

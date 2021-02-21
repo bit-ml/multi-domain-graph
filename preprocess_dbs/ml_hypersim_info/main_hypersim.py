@@ -35,10 +35,11 @@ import experts.hsv_expert
 import experts.normals_expert
 import experts.depth_expert
 import experts.edges_expert
-import experts.cartoon_expert
 import experts.sobel_expert
 import experts.superpixel_expert
-import experts.semantic_segmentation_expert
+#import experts.semantic_segmentation_expert
+# cartoon expert disables eager execution for tf, which is not indicated for edges_expert => should not be used simultaneous
+#import experts.cartoon_expert
 
 usage_str = 'usage: python main_hypersim.py type split_name exp1 exp2 ...'
 #    type                   - [0/1] - 0 create preprocessed gt samples
@@ -50,9 +51,10 @@ usage_str = 'usage: python main_hypersim.py type split_name exp1 exp2 ...'
 
 VALID_EXPERTS_NAME = [
     'depth_xtc', 'normals_xtc', 'edges_dexined', 'cartoon_wb',
-    'superpixel_fcn', 'sobel_small', 'sobel_medium', 'sobel_large',
-    'sem_seg_hrnet'
+    'superpixel_fcn', 'sobel_small', 'sobel_medium', 'sobel_large'
 ]
+#'sem_seg_hrnet'
+#]
 VALID_DOMAINS_NAME = [
     'rgb', 'grayscale', 'hsv', 'halftone_gray', 'depth', 'normals', 'sem_seg'
 ]
@@ -66,8 +68,8 @@ WORKING_W = 256
 
 EXP_OUT_PATH_ = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim'
 GT_OUT_PATH_ = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim'
-DATASET_PATH = r'/data/multi-domain-graph-6/datasets/ml_hypersim/data'
-SPLITS_CSV_PATH = r'/data/multi-domain-graph-6/datasets/ml_hypersim/metadata_images_split_scene_v1_selection.csv'
+DATASET_PATH = r'/data/multi-domain-graph-6/datasets/hypersim/data'
+SPLITS_CSV_PATH = r'/data/multi-domain-graph-6/datasets/hypersim/metadata_images_split_scene_v1_selection.csv'
 
 RUN_TYPE = 0
 EXPERTS_NAME = []
@@ -151,7 +153,6 @@ def get_task_split_paths(dataset_path, splits_csv_path, split_name, folder_str,
 
     paths = []
     scenes = df['scene_name'].unique()
-    scenes = scenes[0:1]
     for scene in scenes:
         df_scene = df[df['scene_name'] == scene]
         cameras = df_scene['camera_name'].unique()
@@ -353,8 +354,6 @@ def get_exp_results():
             add_process_fct = add_normals_process
         else:
             add_process_fct = lambda x: x
-        import pdb
-        pdb.set_trace()
         file_idx = 0
         for batch in tqdm(dataloader):
             exp_info, paths = batch
