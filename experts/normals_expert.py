@@ -44,9 +44,12 @@ class SurfaceNormalsXTC(BasicExpert):
             self.expert_specific = lambda x: x
             self.n_maps = 3
         else:
-            self.chan_replace = 1
-            self.chan_gen_fcn = torch.ones_like
-            self.n_maps = 2
+            # self.chan_replace = 1
+            # self.chan_gen_fcn = torch.ones_like
+            # self.n_maps = 2
+            self.edge_specific = lambda x: x
+            self.expert_specific = lambda x: x
+            self.n_maps = 3
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -93,4 +96,5 @@ class SurfaceNormalsXTC(BasicExpert):
         return self.n_final_maps
 
     def normalize_output_fcn(self, outp):
-        return self.post_process_ops(outp, self.expert_specific)
+        # return self.post_process_ops(outp, self.expert_specific)
+        return outp

@@ -111,6 +111,8 @@ class Edge:
             self.to_ens_transform = labels_to_multichan
         else:
             self.training_losses = [nn.SmoothL1Loss(beta=2.)]
+            # self.eval_losses = [nn.SmoothL1Loss(beta=2.)]
+            self.eval_losses = [nn.L1Loss()]
             self.gt_transform = (lambda x: x)
             self.to_ens_transform = (lambda x, y: x)
 
@@ -151,10 +153,10 @@ class Edge:
                        to_exp=expert2).to(device)
         self.net = nn.DataParallel(net)
 
-        # total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        # trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        # print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
-        #       (total_params, trainable_params))
+        total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
+              (total_params, trainable_params))
 
     def copy_model(self, device):
         prev_net = UNetGood(n_channels=self.expert1.no_maps_as_nn_input(),
@@ -423,9 +425,8 @@ class Edge:
                                                dtype=torch.float32)
 
                     with torch.no_grad():
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific
-                        ])
+                        one_hop_pred = edge.net(
+                            [domain1, edge.net.module.to_exp.edge_specific])
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -463,9 +464,8 @@ class Edge:
                                                        dtype=torch.float32)
 
                     with torch.no_grad():
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific
-                        ])
+                        one_hop_pred = edge.net(
+                            [domain1, edge.net.module.to_exp.edge_specific])
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -706,7 +706,7 @@ class Edge:
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
 
-                    l1_edge[idx_edge] += edge.training_losses[0](
+                    l1_edge[idx_edge] += edge.eval_losses[0](
                         one_hop_pred, edge.gt_transform(domain2_gt)).item()
 
                 domain2_1hop_ens_list.append(
@@ -717,9 +717,9 @@ class Edge:
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_expert += edge.training_losses[0](domain2_exp_gt,
-                                                     domain2_gt).item()
-                l1_ensemble1hop += edge.training_losses[0](
+                l1_expert += edge.eval_losses[0](domain2_exp_gt,
+                                                 domain2_gt).item()
+                l1_ensemble1hop += edge.eval_losses[0](
                     domain2_1hop_ens, edge.gt_transform(domain2_gt)).item()
 
         multiply = 1.
@@ -773,7 +773,7 @@ class Edge:
                             '%s/input_%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
-                    l1_edge[idx_edge] += edge.training_losses[0](
+                    l1_edge[idx_edge] += edge.eval_losses[0](
                         one_hop_pred,
                         edge.gt_transform(domain2_exp_gt)).item()
 
@@ -786,7 +786,7 @@ class Edge:
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_ensemble1hop += edge.training_losses[0](
+                l1_ensemble1hop += edge.eval_losses[0](
                     domain2_1hop_ens,
                     edge.gt_transform(domain2_exp_gt)).item()
 
@@ -874,9 +874,8 @@ class Edge:
 
                     with torch.no_grad():
                         # Ensemble1Hop: 1hop preds
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific
-                        ])
+                        one_hop_pred = edge.net(
+                            [domain1, edge.net.module.to_exp.edge_specific])
                         domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                 # with_expert
