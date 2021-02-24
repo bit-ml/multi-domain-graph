@@ -397,7 +397,7 @@ class Dataset_ImgLevel(Dataset):
 
 
 def post_process_depth_xtc_fct(data):
-    data = data / depth_scale_factor_exp
+    data = data * depth_scale_factor_exp
     data = data - depth_exp_th_5
     data = data / (depth_exp_th_95 - depth_exp_th_5)
     return data
