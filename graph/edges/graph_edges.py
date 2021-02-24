@@ -43,7 +43,7 @@ class Edge:
         self.ensemble_filter = EnsembleFilter_TwdExpert(
             n_channels=expert2.no_maps_as_ens_input(),
             similarity_fct=similarity_fct,
-            normalize_output_fcn=expert2.normalize_output_fcn,
+            normalize_output_fcn=expert2.postprocess_eval,
             threshold=0.5,
             dst_domain_name=expert2.domain_name)
         #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
@@ -110,8 +110,7 @@ class Edge:
             self.gt_transform = (lambda x: x.squeeze(1).long())
             self.to_ens_transform = labels_to_multichan
         else:
-            self.training_losses = [nn.SmoothL1Loss(beta=2.)]
-            # self.eval_losses = [nn.SmoothL1Loss(beta=2.)]
+            self.training_losses = [nn.SmoothL1Loss(beta=0.8)]
             self.eval_losses = [nn.L1Loss()]
             self.gt_transform = (lambda x: x)
             self.to_ens_transform = (lambda x, y: x)
@@ -312,7 +311,7 @@ class Edge:
             domain2_gt = domain2_gt.to(device=device)
 
             domain2_pred = self.net(
-                [domain1, self.net.module.to_exp.edge_specific])
+                [domain1, self.net.module.to_exp.postprocess_train])
 
             backward_losses = 0
             for idx_loss, loss in enumerate(self.training_losses):
@@ -343,7 +342,7 @@ class Edge:
 
             with torch.no_grad():
                 domain2_pred = self.net(
-                    [domain1, self.net.module.to_exp.edge_specific])
+                    [domain1, self.net.module.to_exp.postprocess_eval])
 
             for idx_loss, loss in enumerate(self.training_losses):
                 crt_loss = loss(domain2_pred, self.gt_transform(domain2_gt))
@@ -426,7 +425,7 @@ class Edge:
 
                     with torch.no_grad():
                         one_hop_pred = edge.net(
-                            [domain1, edge.net.module.to_exp.edge_specific])
+                            [domain1, edge.net.module.to_exp.postprocess_eval])
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -465,7 +464,7 @@ class Edge:
 
                     with torch.no_grad():
                         one_hop_pred = edge.net(
-                            [domain1, edge.net.module.to_exp.edge_specific])
+                            [domain1, edge.net.module.to_exp.postprocess_eval])
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -688,7 +687,7 @@ class Edge:
 
                     # Ensemble1Hop: 1hop preds
                     one_hop_pred = edge.net(
-                        [domain1, edge.net.module.to_exp.edge_specific])
+                        [domain1, edge.net.module.to_exp.postprocess_eval])
                     domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
@@ -756,7 +755,7 @@ class Edge:
 
                     # Ensemble1Hop: 1hop preds
                     one_hop_pred = edge.net(
-                        [domain1, edge.net.module.to_exp.edge_specific])
+                        [domain1, edge.net.module.to_exp.postprocess_eval])
                     domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                     if idx_batch == len(loader) - 1:
@@ -875,7 +874,7 @@ class Edge:
                     with torch.no_grad():
                         # Ensemble1Hop: 1hop preds
                         one_hop_pred = edge.net(
-                            [domain1, edge.net.module.to_exp.edge_specific])
+                            [domain1, edge.net.module.to_exp.postprocess_eval])
                         domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                 # with_expert
