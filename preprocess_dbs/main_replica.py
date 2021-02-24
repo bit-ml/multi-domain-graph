@@ -276,6 +276,7 @@ class GT_DepthDataset(Dataset):
         depth = depth - self.th_5
         depth = depth / (self.th_95 - self.th_5)
         # depth = depth / 15.625 - old version
+        depth = depth[None]
         return depth
 
     def __len__(self):
