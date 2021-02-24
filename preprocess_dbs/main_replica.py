@@ -1,18 +1,18 @@
 import os
 import sys
 import traceback
-
+import glob
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import experts.cartoon_expert
+#import experts.cartoon_expert
 import experts.depth_expert
 import experts.edges_expert
 import experts.grayscale_expert
@@ -23,10 +23,18 @@ import experts.normals_expert
 import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
-import experts.semantic_segmentation_expert
+#import experts.semantic_segmentation_expert
 import experts.sobel_expert
 import experts.superpixel_expert
 import experts.vmos_stm_expert
+
+depth_gt_th_50 = 1.5025
+depth_exp_th_50 = 0.0999
+depth_scale_factor_exp = depth_gt_th_50 / depth_exp_th_50
+depth_gt_th_5 = 0.6077
+depth_gt_th_95 = 3.6066
+depth_exp_th_5 = 0.6889
+depth_exp_th_95 = 3.6226
 
 WORKING_H = 256
 WORKING_W = 256
@@ -39,7 +47,7 @@ VALID_ORIG_GT_DOMAINS = [
 # our internal domain names
 VALID_GT_DOMAINS = [\
     'rgb',
-    'depth',
+    'depth_n',
     'normals',
     'halftone_gray',
     'grayscale',
@@ -47,7 +55,7 @@ VALID_GT_DOMAINS = [\
 ]
 
 VALID_EXPERTS_NAME = [\
-    'depth_xtc',
+    'depth_n_xtc',
     'depth_sgdepth',
     'edges_dexined',
     'normals_xtc',
@@ -64,6 +72,7 @@ RUN_TYPE = []
 EXPERTS_NAME = []
 ORIG_DOMAINS = []
 DOMAINS = []
+SPLIT_NAME = ''
 
 usage_str = 'usage: python main_taskonomy.py type split-name exp1 exp2 ...'
 #    type                   - [0/1] - 0 create preprocessed gt samples
@@ -91,6 +100,7 @@ def check_arguments_without_delete(argv):
     global MAIN_DB_PATH
     global MAIN_GT_OUT_PATH
     global MAIN_EXP_OUT_PATH
+    global SPLIT_NAME
 
     if len(argv) < 4:
         return 0, 'incorrect usage'
@@ -105,6 +115,7 @@ def check_arguments_without_delete(argv):
         status_code = 'Split %s is not valid. Valid ones are: %s' % (
             split_name, VALID_SPLITS_NAME)
         return status, status_code
+    SPLIT_NAME = split_name
 
     MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/replica_raw/%s' % split_name
     MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/%s' % split_name
@@ -187,7 +198,7 @@ def get_expert(exp_name):
     elif exp_name == 'depth_sgdepth':
         sys.argv = ['']
         return experts.depth_expert.DepthModel(full_expert=True)
-    elif exp_name == 'depth_xtc':
+    elif exp_name == 'depth_xtc' or exp_name == 'depth_n_xtc':
         return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
@@ -249,18 +260,48 @@ def process_rgb(in_path, out_path):
     os.system("ln -s %s %s" % (out_path, MAIN_EXP_OUT_PATH))
 
 
+class GT_DepthDataset(Dataset):
+    def __init__(self, depth_path, split_name):
+        super(GT_DepthDataset, self).__init__()
+        self.th_5 = depth_gt_th_5
+        self.th_95 = depth_gt_th_95
+        if split_name == 'valid':
+            split_name = 'val'
+        glob_pattern = '%s/*.npy' % (depth_path)
+        self.depth_paths = sorted(glob.glob(glob_pattern))
+
+    def __getitem__(self, index):
+        depth = np.load(self.depth_paths[index])
+        depth[depth == 0] = float("nan")
+        depth = depth - self.th_5
+        depth = depth / (self.th_95 - self.th_5)
+        # depth = depth / 15.625 - old version
+        return depth
+
+    def __len__(self):
+        return len(self.depth_paths)
+
+
 def process_depth(in_path, out_path):
     os.makedirs(out_path, exist_ok=True)
+
+    depth_dataset = GT_DepthDataset(in_path, SPLIT_NAME)
+    dataloader = DataLoader(depth_dataset,
+                            batch_size=100,
+                            shuffle=False,
+                            num_workers=20,
+                            drop_last=False)
     files = os.listdir(in_path)
     files.sort()
 
-    for idx_file, file_ in enumerate(files):
-        depth_map = np.load(os.path.join(in_path, file_))
-        depth_map = depth_map / 15.625
-        #depth_map = depth_map / 14
-        #depth_map = 1 - depth_map
-        depth_map = depth_map[None]
-        np.save(os.path.join(out_path, file_), depth_map)
+    file_idx = 0
+    for batch in tqdm(dataloader):
+        depth = batch
+        for i in range(depth.shape[0]):
+            depth_ = depth[i]
+            depth_ = np.array(depth_)
+            np.save(os.path.join(out_path, '%08d.npy' % file_idx), depth_)
+            file_idx += 1
 
 
 def process_surface_normals(main_db_path, out_path):
@@ -355,6 +396,13 @@ class Dataset_ImgLevel(Dataset):
         return len(self.rgbs_path)
 
 
+def post_process_depth_xtc_fct(data):
+    data = data / depth_scale_factor_exp
+    data = data - depth_exp_th_5
+    data = data / (depth_exp_th_95 - depth_exp_th_5)
+    return data
+
+
 def get_exp_results(main_exp_out_path, experts_name):
     with torch.no_grad():
         rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')
@@ -377,6 +425,10 @@ def get_exp_results(main_exp_out_path, experts_name):
             print('EXPERT: %20s' % exp_name)
             expert = get_expert(exp_name)
 
+            if exp_name == 'depth_n_xtc':
+                post_process_fct = post_process_depth_xtc_fct
+            else:
+                post_process_fct = lambda x: x
             exp_out_path = os.path.join(main_exp_out_path, exp_name)
             os.makedirs(exp_out_path, exist_ok=True)
 
@@ -387,7 +439,7 @@ def get_exp_results(main_exp_out_path, experts_name):
 
                 frames = frames.permute(0, 2, 3, 1) * 255.
                 results = expert.apply_expert_batch(frames)
-
+                results = post_process_fct(results)
                 for sample in zip(results, indexes):
                     expert_res, sample_idx = sample
 
@@ -395,58 +447,6 @@ def get_exp_results(main_exp_out_path, experts_name):
                                             '%08d.npy' % sample_idx)
 
                     np.save(out_path, expert_res)
-
-
-def split_train_gt_ds():
-    all_domains = VALID_GT_DOMAINS
-
-    for domain in all_domains:
-        dom_in_path = os.path.join(MAIN_GT_OUT_PATH, domain)
-
-        dom_out_path1 = os.path.join(main_gt_out_path_1, domain)
-        dom_out_path2 = os.path.join(main_gt_out_path_2, domain)
-        os.makedirs(dom_out_path1, exist_ok=True)
-        os.makedirs(dom_out_path2, exist_ok=True)
-
-        files = os.listdir(dom_in_path)
-        files.sort()
-        files1 = files[0:4800]
-        files2 = files[4800:]
-
-        for file_ in files1:
-            src_path = os.path.join(dom_in_path, file_)
-            dst_path = os.path.join(dom_out_path1, file_)
-            os.system("cp -r %s %s" % (src_path, dst_path))
-        for file_ in files2:
-            src_path = os.path.join(dom_in_path, file_)
-            dst_path = os.path.join(dom_out_path2, file_)
-            os.system("cp -r %s %s" % (src_path, dst_path))
-
-
-def split_train_exp_ds():
-    all_domains = VALID_EXPERTS_NAME
-
-    for domain in all_domains:
-        dom_in_path = os.path.join(MAIN_EXP_OUT_PATH, domain)
-
-        dom_out_path1 = os.path.join(main_exp_out_path_1, domain)
-        dom_out_path2 = os.path.join(main_exp_out_path_2, domain)
-        os.makedirs(dom_out_path1, exist_ok=True)
-        os.makedirs(dom_out_path2, exist_ok=True)
-
-        files = os.listdir(dom_in_path)
-        files.sort()
-        files1 = files[0:4800]
-        files2 = files[4800:]
-
-        for file_ in files1:
-            src_path = os.path.join(dom_in_path, file_)
-            dst_path = os.path.join(dom_out_path1, file_)
-            os.system("cp -r %s %s" % (src_path, dst_path))
-        for file_ in files2:
-            src_path = os.path.join(dom_in_path, file_)
-            dst_path = os.path.join(dom_out_path2, file_)
-            os.system("cp -r %s %s" % (src_path, dst_path))
 
 
 if __name__ == "__main__":
@@ -459,7 +459,3 @@ if __name__ == "__main__":
         get_gt_domains()
     elif RUN_TYPE == 1:
         get_exp_results(MAIN_EXP_OUT_PATH, EXPERTS_NAME)
-    elif RUN_TYPE == 2:
-        split_train_gt_ds()
-    else:
-        split_train_exp_ds()
