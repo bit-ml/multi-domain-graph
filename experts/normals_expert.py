@@ -39,19 +39,8 @@ class SurfaceNormalsXTC(BasicExpert):
         self.domain_name = "normals"
         self.n_final_maps = 3
 
-        if dataset_name == "taskonomy":
-            # self.chan_replace = 0
-            # self.chan_gen_fcn = torch.zeros_like
-            self.edge_specific = lambda x: x
-            self.expert_specific = lambda x: x
-            self.n_maps = 3
-        else:
-            self.chan_replace = 0
-            self.chan_gen_fcn = torch.ones_like
-            self.n_maps = 2
-            # self.edge_specific = lambda x: x
-            # self.expert_specific = lambda x: x
-            # self.n_maps = 3
+        self.chan_gen_fcn = torch.ones_like
+        self.n_maps = 2
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -125,5 +114,3 @@ class SurfaceNormalsXTC(BasicExpert):
 
     def gt_train_transform(edge, gt_inp):
         return gt_inp[:, :2]
-
-    # to_ens_transform = (lambda x, y: x)
