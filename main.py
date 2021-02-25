@@ -53,7 +53,7 @@ def eval_1hop_ensembles(space_graph, silent, config):
                                flush_secs=30)
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
-        tag = "Valid_1Hop_%s" % end_id
+
         edges_1hop = []
 
         # 1. Select edges that ends in end_id
@@ -63,8 +63,55 @@ def eval_1hop_ensembles(space_graph, silent, config):
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
 
+        if len(edges_1hop) == 0:
+            continue
+
         # 2. Eval each ensemble
-        Edge.eval_all_1hop_ensembles(edges_1hop, device, writer, config)
+        edges_order = Edge.eval_all_1hop_ensembles(edges_1hop, device, writer,
+                                                   config)
+
+        # 3. print expert indexes - in ascending order of l1 per test set
+        ordered_identifiers = []
+        for i in edges_order:
+            ordered_identifiers.append(edges_1hop[i].expert1.identifier)
+
+        if config.has_option('Ensemble', 'eval_top_edges_nr'):
+            eval_top_edges_nr = np.int32(
+                config.get('Ensemble', 'eval_top_edges_nr').split(','))
+
+            for top_nr in eval_top_edges_nr:
+                to_keep_src_identifiers = ordered_identifiers[0:top_nr]
+                print('Top %d sources: ' % (top_nr))
+                print(to_keep_src_identifiers)
+                if silent:
+                    top_writer = DummySummaryWriter()
+                else:
+                    tb_dir = config.get('Logs', 'tensorboard_dir')
+                    tb_prefix = config.get('Logs', 'tensorboard_prefix')
+                    datetime = config.get('Run id', 'datetime')
+                    top_writer = SummaryWriter(
+                        log_dir=f'%s/%s_1hop_ens_top_%d_%s' %
+                        (tb_dir, tb_prefix, top_nr, datetime),
+                        flush_secs=30)
+
+                edges_1hop = []
+
+                # 1. Select edges that ends in end_id
+                for edge_xk in space_graph.edges:
+                    if not edge_xk.trained:
+                        continue
+                    if not edge_xk.expert1.identifier in to_keep_src_identifiers:
+                        continue
+                    if edge_xk.expert2.identifier == end_id:
+                        edges_1hop.append(edge_xk)
+
+                if len(edges_1hop) == 0:
+                    continue
+
+                _ = Edge.eval_all_1hop_ensembles(edges_1hop, device,
+                                                 top_writer, config)
+
+                top_writer.close()
 
     writer.close()
 

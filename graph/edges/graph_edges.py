@@ -49,7 +49,7 @@ class Edge:
             normalize_output_fcn=expert2.normalize_output_fcn,
             threshold=0.5,
             dst_domain_name=expert2.domain_name)
-        #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
+        self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         model_type = config.getint('Edge Models', 'model_type')
         self.init_edge(expert1, expert2, device, model_type)
@@ -452,6 +452,7 @@ class Edge:
     def val_test_stats(config, writer, edges_1hop, l1_ens_valid, l1_ens_test,
                        l1_per_edge_valid, l1_per_edge_test, l1_expert_test,
                        wtag_valid, wtag_test):
+
         tag = "to_%s" % (edges_1hop[0].expert2.identifier)
 
         print("load_path", config.get('Edge Models', 'load_path'))
@@ -655,8 +656,8 @@ class Edge:
         return l1_edge, l1_ensemble1hop, domain2_1hop_ens, domain2_exp_gt, save_idxes
 
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
-        if len(edges_1hop) == 0:
-            return
+        #if len(edges_1hop) == 0:
+        #    return
         #import pdb
         #pdb.set_trace()
 
@@ -710,8 +711,10 @@ class Edge:
         Edge.val_test_stats(config, writer, edges_1hop, l1_ens_valid,
                             l1_ens_test, l1_edge_valid, l1_edge_test,
                             l1_expert_test, wtag_valid, wtag_test)
+        edges_order = np.argsort(
+            l1_edge_test)  # first - best edge according to testing set
 
-        return
+        return edges_order
 
     ######## Save 1hop ensembles ###############
     def save_1hop_ensemble_next_iter_set(loaders, edges_1hop, device, config,
