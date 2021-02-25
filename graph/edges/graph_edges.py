@@ -122,6 +122,8 @@ class Edge:
                             weight=self.expert2.classification_weights))
             self.training_losses_weights = classif_losses_weights
 
+            self.testing_loss = nn.L1Loss()
+
             self.gt_transform = (lambda x: x.squeeze(1).long())
             self.to_ens_transform = labels_to_multichan
         else:
@@ -144,8 +146,12 @@ class Edge:
                         SSIMLoss(self.expert2.no_maps_as_nn_output(), kernel))
             self.training_losses_weights = regression_losses_weights
 
+            self.testing_loss = nn.L1Loss()
+
             self.gt_transform = (lambda x: x)
             self.to_ens_transform = (lambda x, y: x)
+
+        self.test_gt = expert2.test_gt
 
         self.l2_detailed_eval = nn.MSELoss(reduction='none')
         self.l1_detailed_eval = nn.L1Loss(reduction='none')
@@ -481,10 +487,17 @@ class Edge:
                             img_for_plot(one_hop_pred[save_idxes],
                                          edge.expert2.identifier), 0)
 
-                    l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
-                        one_hop_pred, edge.gt_transform(domain2_gt)).item()
-                l1_expert += 100 * edge.training_losses[0](
-                    domain2_exp_gt, edge.gt_transform(domain2_gt)).item()
+                    l1_per_edge[idx_edge] += 100 * edge.test_gt(
+                        edge.testing_loss, one_hop_pred,
+                        edge.gt_transform(domain2_gt))
+                    #l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
+                    #    one_hop_pred, edge.gt_transform(domain2_gt)).item()
+                #l1_expert += 100 * edge.training_losses[0](
+                #    domain2_exp_gt, edge.gt_transform(domain2_gt)).item()
+                l1_expert += 100 * edge.test_gt(edge.testing_loss,
+                                                domain2_exp_gt,
+                                                edge.gt_transform(domain2_gt))
+
             l1_per_edge = np.array(l1_per_edge) / num_batches
             l1_expert = np.array(l1_expert) / num_batches
             return l1_per_edge, l1_expert, save_idxes, domain2_exp_gt, domain2_gt
@@ -520,7 +533,7 @@ class Edge:
                             img_for_plot(one_hop_pred[save_idxes],
                                          edge.expert2.identifier), 0)
 
-                    l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
+                    l1_per_edge[idx_edge] += 100 * edge.testing_loss(
                         one_hop_pred,
                         edge.gt_transform(domain2_exp_gt)).item()
             l1_per_edge = np.array(l1_per_edge) / num_batches
@@ -528,6 +541,7 @@ class Edge:
 
     def eval_1hop(edges_1hop, save_idxes, save_idxes_test, device, writer,
                   valid_set_str, test_set_str, csv_results_path, epoch_str):
+
         wtag_valid = "to_%s_valid_set_%s" % (edges_1hop[0].expert2.identifier,
                                              valid_set_str)
 
@@ -748,8 +762,14 @@ class Edge:
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
 
-                    l1_edge[idx_edge] += edge.training_losses[0](
-                        one_hop_pred, edge.gt_transform(domain2_gt)).item()
+                    #l1_edge[idx_edge] += edge.training_losses[0](
+                    #    one_hop_pred, edge.gt_transform(domain2_gt)).item()
+
+                    l1_edge[idx_edge] += edge.test_gt(
+                        edge.testing_loss, one_hop_pred,
+                        edge.gt_transform(domain2_gt))
+                    #import pdb
+                    #pdb.set_trace()
 
                 domain2_1hop_ens_list.append(
                     edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
@@ -759,10 +779,15 @@ class Edge:
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_expert += edge.training_losses[0](domain2_exp_gt,
-                                                     domain2_gt).item()
-                l1_ensemble1hop += edge.training_losses[0](
-                    domain2_1hop_ens, edge.gt_transform(domain2_gt)).item()
+                #l1_expert += edge.training_losses[0](domain2_exp_gt,
+                #                                     domain2_gt).item()
+                l1_expert += edge.test_gt(edge.testing_loss, domain2_exp_gt,
+                                          domain2_gt)
+
+                #l1_ensemble1hop += edge.training_losses[0](
+                #    domain2_1hop_ens, edge.gt_transform(domain2_gt)).item()
+                l1_ensemble1hop += edge.test_gt(edge.testing_loss,
+                                                domain2_1hop_ens, domain2_gt)
 
         multiply = 1.
         if edges_1hop[0].expert2.get_task_type(
@@ -815,7 +840,7 @@ class Edge:
                             '%s/input_%s' % (wtag, edge.expert1.identifier),
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
-                    l1_edge[idx_edge] += edge.training_losses[0](
+                    l1_edge[idx_edge] += edge.testing_loss(
                         one_hop_pred,
                         edge.gt_transform(domain2_exp_gt)).item()
 
@@ -828,7 +853,7 @@ class Edge:
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_ensemble1hop += edge.training_losses[0](
+                l1_ensemble1hop += edge.testing_loss(
                     domain2_1hop_ens,
                     edge.gt_transform(domain2_exp_gt)).item()
 
@@ -845,6 +870,8 @@ class Edge:
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
         if len(edges_1hop) == 0:
             return
+        #import pdb
+        #pdb.set_trace()
 
         # === VALID ====
         wtag_valid = "to_%s_valid_set" % (edges_1hop[0].expert2.identifier)

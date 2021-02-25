@@ -22,3 +22,6 @@ class BasicExpert():
 
     def no_maps_as_ens_input(self):
         return self.n_maps
+
+    def test_gt(self, loss_fct, pred, target):
+        return loss_fct(pred, target).item()
