@@ -21,15 +21,7 @@ from tqdm import tqdm
 from utils import utils
 from utils.utils import EnsembleFilter_TwdExpert, img_for_plot
 
-
-def labels_to_multichan(inp_1chan_cls, n_classes):
-    bs, h, w = inp_1chan_cls.shape
-
-    outp_multichan = torch.zeros(
-        (bs, n_classes, h, w)).to(inp_1chan_cls.device).float()
-    for chan in range(n_classes):
-        outp_multichan[:, chan][inp_1chan_cls == chan] = 1.
-    return outp_multichan
+empty_fcn = (lambda x: x)
 
 
 class Edge:
@@ -44,7 +36,7 @@ class Edge:
         self.ensemble_filter = EnsembleFilter_TwdExpert(
             n_channels=expert2.no_maps_as_ens_input(),
             similarity_fct=similarity_fct,
-            normalize_output_fcn=expert2.postprocess_eval_ens,
+            postprocess_eval=expert2.postprocess_eval,
             threshold=0.5,
             dst_domain_name=expert2.domain_name)
         #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
@@ -108,16 +100,14 @@ class Edge:
             self.training_losses = [
                 nn.CrossEntropyLoss(weight=self.expert2.classification_weights)
             ]
-            self.gt_eval_transform = (lambda x: x.squeeze(1).long())
-            self.to_ens_eval_transform = labels_to_multichan
+            self.eval_losses = self.training_losses
         else:
             self.training_losses = [nn.SmoothL1Loss(beta=2)]
             self.eval_losses = [nn.L1Loss()]
-            self.gt_eval_transform = (lambda x: x)
-            self.to_ens_eval_transform = (lambda x, y: x)
 
-            # if self.expert2.domain_name == "normals" and self.expert2.no_maps_as_nn_output() == 2:
         self.gt_train_transform = self.expert2.gt_train_transform
+        self.gt_eval_transform = self.expert2.gt_eval_transform
+        self.gt_to_inp_transform = self.expert2.gt_to_inp_transform
 
         self.l2_detailed_eval = nn.MSELoss(reduction='none')
         self.l1_detailed_eval = nn.L1Loss(reduction='none')
@@ -314,8 +304,7 @@ class Edge:
 
             domain2_gt = domain2_gt.to(device=device)
 
-            domain2_pred = self.net(
-                [domain1, self.net.module.to_exp.postprocess_train])
+            domain2_pred = self.net([domain1, empty_fcn])
 
             backward_losses = 0
             for idx_loss, loss in enumerate(self.training_losses):
@@ -617,7 +606,7 @@ class Edge:
     def val_test_stats(config, writer, edges_1hop, l1_ens_valid, l1_ens_test,
                        l1_per_edge_valid, l1_per_edge_test, l1_expert_test,
                        wtag_valid, wtag_test):
-        tag = "to_%s" % (edges_1hop[0].expert2.identifier)
+        tag = "to_%21s" % (edges_1hop[0].expert2.identifier)
 
         print("Epochs", colored(config.get('Edge Models', 'start_epoch'),
                                 'red'))
@@ -625,9 +614,11 @@ class Edge:
               colored(config.get('Edge Models', 'load_path'), 'red'))
         print("Ensemble: ",
               colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+
         print(
-            "%24s  L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
-            % (tag))
+            colored(tag, "green"),
+            "L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
+        )
 
         print("Loss %19s: %30.2f   " % ("Ensemble1Hop", l1_ens_valid),
               colored("%30.2f " % l1_ens_test, 'green'),
@@ -723,17 +714,19 @@ class Edge:
                         one_hop_pred,
                         edge.gt_eval_transform(domain2_gt)).item()
 
+                # with expert
                 domain2_1hop_ens_list.append(
-                    edge.to_ens_eval_transform(
-                        edge.gt_eval_transform(domain2_exp_gt),
-                        edge.expert2.no_maps_as_ens_input()))
+                    edge.gt_to_inp_transform(
+                        domain2_exp_gt, edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
-                l1_expert += edge.eval_losses[0](domain2_exp_gt,
-                                                 domain2_gt).item()
+                l1_expert += edge.eval_losses[0](
+                    edge.gt_to_inp_transform(
+                        domain2_exp_gt, edge.expert2.no_maps_as_ens_input()),
+                    edge.gt_eval_transform(domain2_gt)).item()
                 l1_ensemble1hop += edge.eval_losses[0](
                     domain2_1hop_ens,
                     edge.gt_eval_transform(domain2_gt)).item()
@@ -795,9 +788,8 @@ class Edge:
 
                 # with_expert
                 domain2_1hop_ens_list.append(
-                    edge.to_ens_eval_transform(
-                        edge.gt_eval_transform(domain2_exp_gt),
-                        edge.expert2.no_maps_as_ens_input()))
+                    edge.gt_to_inp_transform(
+                        domain2_exp_gt, edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(

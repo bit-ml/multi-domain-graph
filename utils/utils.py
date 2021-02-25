@@ -302,7 +302,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def __init__(self,
                  n_channels,
                  dst_domain_name,
-                 normalize_output_fcn,
+                 postprocess_eval,
                  similarity_fct='ssim',
                  threshold=0.5):
         super(EnsembleFilter_TwdExpert, self).__init__()
@@ -310,7 +310,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         self.similarity_fct = similarity_fct
         self.n_channels = n_channels
         self.dst_domain_name = dst_domain_name
-        self.normalize_output_fcn = normalize_output_fcn
+        self.postprocess_eval = postprocess_eval
 
         if dst_domain_name == 'edges':
             self.ens_aggregation_fcn = self.forward_mean
@@ -377,7 +377,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
     def forward(self, data):
         # 1. clamp before using it in ensemble
-        # data = self.normalize_output_fcn(data)
         similarity_maps = self.twd_expert_distances(data)
         bs, n_chs, h, w, n_tasks = data.shape
 
@@ -408,5 +407,5 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
 
         # 2. clamp the ensemble
-        ensemble_result = self.normalize_output_fcn(ensemble_result)
+        ensemble_result = self.postprocess_eval(ensemble_result)
         return ensemble_result

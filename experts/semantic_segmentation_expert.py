@@ -241,10 +241,25 @@ class SSegHRNet(BasicExpert):
 
     def no_maps_as_nn_output(self):
         return len(self.to_keep_list)
-    
+
     def no_maps_as_ens_input(self):
         return len(self.to_keep_list)
 
+    def gt_train_transform(self, gt_maps):
+        return gt_maps.squeeze(1).long()
+
+    def gt_eval_transform(self, gt_maps):
+        return gt_maps.squeeze(1).long()
+
+    def gt_to_inp_transform(self, inp_1chan_cls, n_classes):
+        inp_1chan_cls = inp_1chan_cls.squeeze(1).long()
+        bs, h, w = inp_1chan_cls.shape
+
+        outp_multichan = torch.zeros(
+            (bs, n_classes, h, w)).to(inp_1chan_cls.device).float()
+        for chan in range(n_classes):
+            outp_multichan[:, chan][inp_1chan_cls == chan] = 1.
+        return outp_multichan
 
 
 class SSegResNeSt(BasicExpert):

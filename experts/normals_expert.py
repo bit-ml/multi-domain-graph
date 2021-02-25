@@ -77,28 +77,15 @@ class SurfaceNormalsXTC(BasicExpert):
     def no_maps_as_ens_input(self):
         return self.n_final_maps
 
-    def postprocess_train(self, nn_outp):
-        return nn_outp
-
     def postprocess_eval(self, nn_outp):
-        # add the 3rd dimension
-        nn_outp = torch.cat(
-            (nn_outp, self.chan_gen_fcn(nn_outp[:, 1][:, None]) / 2), dim=1)
+        bs, nch, h, w = nn_outp.shape
 
-        # 1. CLAMP
-        torch.clamp_(nn_outp[:, :2], min=0, max=1)
+        if nch < self.n_final_maps:
+            # add the 3rd dimension
+            nn_outp = torch.cat(
+                (nn_outp, self.chan_gen_fcn(nn_outp[:, 1][:, None]) / 2),
+                dim=1)
 
-        # 4. NORMALIZE it
-        nn_outp = nn_outp * 2 - 1
-        nn_outp[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
-        norm_normals_maps = torch.norm(nn_outp, dim=1, keepdim=True)
-        norm_normals_maps[norm_normals_maps == 0] = 1
-        nn_outp = nn_outp / norm_normals_maps
-        nn_outp = (nn_outp + 1) / 2
-
-        return nn_outp
-
-    def postprocess_eval_ens(self, nn_outp):
         # 1. CLAMP
         torch.clamp_(nn_outp[:, :2], min=0, max=1)
 
