@@ -5,6 +5,7 @@ import os
 import pathlib
 import sys
 import time
+import re
 from datetime import datetime
 
 import numpy as np
@@ -12,13 +13,15 @@ import torch
 import torchvision
 from experts.basic_expert import BasicExpert
 from graph.edges.dataset2d import ImageLevelDataset
-from graph.edges.unet.unet_model import UNetGood
+from graph.edges.unet.unet_model import UNetGood, UNetMedium
 from torch import nn, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 from utils.utils import EnsembleFilter_TwdExpert, img_for_plot
+
+from utils.utils import SSIMLoss
 
 
 def labels_to_multichan(inp_1chan_cls, n_classes):
@@ -48,7 +51,8 @@ class Edge:
             dst_domain_name=expert2.domain_name)
         #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
-        self.init_edge(expert1, expert2, device)
+        model_type = config.getint('Edge Models', 'model_type')
+        self.init_edge(expert1, expert2, device, model_type)
 
         test1 = config.get('General', 'Steps_Iter1_test')
         test2 = config.get('General', 'Steps_Iter2_test')
@@ -104,13 +108,42 @@ class Edge:
                                            min_lr=reduce_lr_min_lr)
 
         if self.expert2.get_task_type() == BasicExpert.TASK_CLASSIFICATION:
-            self.training_losses = [
-                nn.CrossEntropyLoss(weight=self.expert2.classification_weights)
-            ]
+            classif_losses = re.sub(
+                '\s+', '', config.get('Edge Models',
+                                      'classif_losses')).split(',')
+            classif_losses_weights = np.float32(
+                config.get('Edge Models', 'classif_losses_weights').split(','))
+
+            self.training_losses = []
+            for classif_loss in classif_losses:
+                if classif_loss == 'cross_entropy':
+                    self.training_losses.append(
+                        nn.CrossEntropyLoss(
+                            weight=self.expert2.classification_weights))
+            self.training_losses_weights = classif_losses_weights
+
             self.gt_transform = (lambda x: x.squeeze(1).long())
             self.to_ens_transform = labels_to_multichan
         else:
-            self.training_losses = [nn.SmoothL1Loss(beta=2.)]
+            regression_losses = re.sub(
+                '\s+', '', config.get('Edge Models',
+                                      'regression_losses')).split(',')
+            regression_losses_weights = np.float32(
+                config.get('Edge Models',
+                           'regression_losses_weights').split(','))
+            self.training_losses = []
+            for reg_loss in regression_losses:
+                if reg_loss == 'smoothl1':
+                    beta = np.float32(
+                        config.get('Edge Models', 'smoothl1_beta'))
+                    self.training_losses.append(nn.SmoothL1Loss(beta=beta))
+                if reg_loss == 'ssim':
+                    kernel = np.int32(
+                        config.get('Edge Models', 'ssim_loss_kernel'))
+                    self.training_losses.append(
+                        SSIMLoss(self.expert2.no_maps_as_nn_output(), kernel))
+            self.training_losses_weights = regression_losses_weights
+
             self.gt_transform = (lambda x: x)
             self.to_ens_transform = (lambda x, y: x)
 
@@ -140,21 +173,29 @@ class Edge:
             self.save_epochs_distance = config.getint('Edge Models',
                                                       'save_epochs_distance')
 
-    def init_edge(self, expert1, expert2, device):
+    def init_edge(self, expert1, expert2, device, model_type):
         self.expert1 = expert1
         self.expert2 = expert2
         self.name = "%s -> %s" % (expert1.identifier, expert2.identifier)
 
-        net = UNetGood(n_channels=expert1.no_maps_as_nn_input(),
-                       n_classes=expert2.no_maps_as_nn_output(),
-                       from_exp=expert1,
-                       to_exp=expert2).to(device)
+        assert (model_type == 0 or model_type == 1)
+        if model_type == 0:
+            net = UNetGood(n_channels=expert1.no_maps_as_nn_input(),
+                           n_classes=expert2.no_maps_as_nn_output(),
+                           from_exp=expert1,
+                           to_exp=expert2).to(device)
+        else:
+            net = UNetMedium(n_channels=expert1.no_maps_as_nn_input(),
+                             n_classes=expert2.no_maps_as_nn_output(),
+                             from_exp=expert1,
+                             to_exp=expert2).to(device)
+
         self.net = nn.DataParallel(net)
 
-        # total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        # trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        # print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
-        #       (total_params, trainable_params))
+        total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
+              (total_params, trainable_params))
 
     def copy_model(self, device):
         prev_net = UNetGood(n_channels=self.expert1.no_maps_as_nn_input(),
@@ -301,12 +342,11 @@ class Edge:
         self.net.train()
 
         train_losses = torch.zeros(len(self.training_losses))
-
         for batch in self.train_loader:
             self.optimizer.zero_grad()
 
             domain1, domain2_gt = batch
-
+            domain2_gt = torch.clamp(domain2_gt, 0, 1)
             domain2_gt = domain2_gt.to(device=device)
 
             domain2_pred = self.net(
@@ -315,7 +355,8 @@ class Edge:
             backward_losses = 0
             for idx_loss, loss in enumerate(self.training_losses):
                 crt_loss = loss(domain2_pred, self.gt_transform(domain2_gt))
-                backward_losses += crt_loss
+                backward_losses += crt_loss * self.training_losses_weights[
+                    idx_loss]
                 # TODO: is it faster to do backward on the sum vs individually?
                 train_losses[idx_loss] += crt_loss.item()
             backward_losses.backward()
@@ -336,6 +377,9 @@ class Edge:
         eval_losses = torch.zeros(len(self.training_losses))
 
         for batch in loader:
+            #if split_tag == "Test":
+            #    domain1, _, domain2_gt = batch
+            #else:
             domain1, domain2_gt = batch
             domain2_gt = domain2_gt.to(device=device)
 
@@ -423,9 +467,8 @@ class Edge:
                                                dtype=torch.float32)
 
                     with torch.no_grad():
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific
-                        ])
+                        one_hop_pred = edge.net(
+                            [domain1, edge.net.module.to_exp.edge_specific])
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -463,9 +506,8 @@ class Edge:
                                                        dtype=torch.float32)
 
                     with torch.no_grad():
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific
-                        ])
+                        one_hop_pred = edge.net(
+                            [domain1, edge.net.module.to_exp.edge_specific])
 
                     if idx_batch == len(loader) - 1:
                         if save_idxes is None:
@@ -874,9 +916,8 @@ class Edge:
 
                     with torch.no_grad():
                         # Ensemble1Hop: 1hop preds
-                        one_hop_pred = edge.net([
-                            domain1, edge.net.module.to_exp.edge_specific
-                        ])
+                        one_hop_pred = edge.net(
+                            [domain1, edge.net.module.to_exp.edge_specific])
                         domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                 # with_expert

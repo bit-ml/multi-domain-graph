@@ -85,7 +85,7 @@ def img_for_plot(img, dst_id):
     img_view = img.view(n, -1)
     min_img = img_view.min(axis=1)[0][:, None, None, None]
     max_img = img_view.max(axis=1)[0][:, None, None, None]
-    return (img - min_img) / (max_img - min_img)
+    return img  #(img - min_img) / (max_img - min_img)
 
 
 def get_gaussian_filter(n_channels, win_size, sigma):
@@ -100,6 +100,60 @@ def get_gaussian_filter(n_channels, win_size, sigma):
     g_filter = g_filter.repeat(n_channels, 1, 1, 1)
     g_filter = g_filter / torch.sum(g_filter)
     return g_filter
+
+
+class SSIMLoss(torch.nn.Module):
+    def __init__(self, n_channels, win_size, reduction='mean'):
+        super(SSIMLoss, self).__init__()
+        self.n_channels = n_channels
+        self.win_size = win_size
+        self.sigma = self.win_size / 7
+        self.reduction = reduction
+        self.g_filter = get_gaussian_filter(self.n_channels, self.win_size,
+                                            self.sigma).to(device)
+
+    def forward(self, batch1, batch2):
+
+        mu1 = torch.nn.functional.conv2d(batch1,
+                                         self.g_filter,
+                                         padding=self.win_size // 2,
+                                         groups=self.n_channels)
+        mu2 = torch.nn.functional.conv2d(batch2,
+                                         self.g_filter,
+                                         padding=self.win_size // 2,
+                                         groups=self.n_channels)
+        mu1_sq = mu1.pow(2)
+        mu2_sq = mu2.pow(2)
+        mu1_mu2 = mu1 * mu2
+
+        sigma1_sq = torch.nn.functional.conv2d(batch1 * batch1,
+                                               self.g_filter,
+                                               padding=self.win_size // 2,
+                                               groups=self.n_channels) - mu1_sq
+        sigma1_sq = torch.abs(sigma1_sq)
+
+        sigma2_sq = torch.nn.functional.conv2d(batch2 * batch2,
+                                               self.g_filter,
+                                               padding=self.win_size // 2,
+                                               groups=self.n_channels) - mu2_sq
+        sigma2_sq = torch.abs(sigma2_sq)
+
+        sigma12 = torch.nn.functional.conv2d(batch1 * batch2,
+                                             self.g_filter,
+                                             padding=self.win_size // 2,
+                                             groups=self.n_channels) - mu1_mu2
+
+        C1 = 0.01**2
+        C2 = 0.03**2
+
+        ssim_map = ((2 * mu1_mu2 + C1) *
+                    (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) *
+                                           (sigma1_sq + sigma2_sq + C2))
+        if self.reduction == 'mean':
+            res = ssim_map.view((ssim_map.shape[0], ssim_map.shape[1],
+                                 -1)).mean(2).mean(1).mean()
+        res = 2 - (res + 1)
+        return res
 
 
 class DummySummaryWriter:

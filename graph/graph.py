@@ -1,5 +1,5 @@
 import torch
-
+import numpy as np
 from graph.edges.graph_edges import Edge
 
 
@@ -45,8 +45,14 @@ class MultiDomainGraph:
                                      == restricted_graph_exp_identifier)):
                             continue
 
-                    bs_test = 50
-                    bs_train = 90
+                    model_type = np.int32(
+                        config.get('Edge Models', 'model_type'))
+                    if model_type == 0:
+                        bs_test = 50
+                        bs_train = 90
+                    else:
+                        bs_test = 25  #50
+                        bs_train = 45  #90
                     # if expert_j.identifier in ["sem_seg_hrnet"]:
                     #     bs_train = 90
 
