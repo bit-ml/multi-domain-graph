@@ -46,12 +46,12 @@ class SurfaceNormalsXTC(BasicExpert):
             self.expert_specific = lambda x: x
             self.n_maps = 3
         else:
-            self.chan_replace = 1
-            # self.chan_gen_fcn = torch.ones_like
-            # self.n_maps = 2
+            self.chan_replace = 0
+            self.chan_gen_fcn = torch.ones_like
+            self.n_maps = 2
             # self.edge_specific = lambda x: x
             # self.expert_specific = lambda x: x
-            self.n_maps = 3
+            # self.n_maps = 3
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -71,6 +71,7 @@ class SurfaceNormalsXTC(BasicExpert):
         out_maps = out_maps * 2 - 1
         out_maps[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
         norm_normals_maps = torch.norm(out_maps, dim=1, keepdim=True)
+        norm_normals_maps[norm_normals_maps == 0] = 1
         out_maps = out_maps / norm_normals_maps
         out_maps = (out_maps + 1) / 2
 
@@ -91,15 +92,38 @@ class SurfaceNormalsXTC(BasicExpert):
         return nn_outp
 
     def postprocess_eval(self, nn_outp):
+        # add the 3rd dimension
+        nn_outp = torch.cat(
+            (nn_outp, self.chan_gen_fcn(nn_outp[:, 1][:, None]) / 2), dim=1)
+
         # 1. CLAMP
         torch.clamp_(nn_outp[:, :2], min=0, max=1)
-        torch.clamp_(nn_outp[:, 2], min=0., max=0.5)
 
         # 4. NORMALIZE it
         nn_outp = nn_outp * 2 - 1
         nn_outp[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
         norm_normals_maps = torch.norm(nn_outp, dim=1, keepdim=True)
+        norm_normals_maps[norm_normals_maps == 0] = 1
         nn_outp = nn_outp / norm_normals_maps
         nn_outp = (nn_outp + 1) / 2
 
         return nn_outp
+
+    def postprocess_eval_ens(self, nn_outp):
+        # 1. CLAMP
+        torch.clamp_(nn_outp[:, :2], min=0, max=1)
+
+        # 4. NORMALIZE it
+        nn_outp = nn_outp * 2 - 1
+        nn_outp[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
+        norm_normals_maps = torch.norm(nn_outp, dim=1, keepdim=True)
+        norm_normals_maps[norm_normals_maps == 0] = 1
+        nn_outp = nn_outp / norm_normals_maps
+        nn_outp = (nn_outp + 1) / 2
+
+        return nn_outp
+
+    def gt_train_transform(edge, gt_inp):
+        return gt_inp[:, :2]
+
+    # to_ens_transform = (lambda x, y: x)

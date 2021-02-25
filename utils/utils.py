@@ -285,7 +285,9 @@ class SimScore_LPIPS():
     def __init__(self, n_channels):
         super(SimScore_LPIPS, self).__init__()
         self.n_channels = n_channels
-        self.lpips_net = lpips.LPIPS(net='squeeze', spatial=True).to(device)
+        self.lpips_net = lpips.LPIPS(net='squeeze',
+                                     spatial=True,
+                                     verbose=False).to(device)
         # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True).to(device)
         # LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
         #                                           spatial=True).to(device)
@@ -375,9 +377,17 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
     def forward(self, data):
         # 1. clamp before using it in ensemble
-        data = self.normalize_output_fcn(data)
+        # data = self.normalize_output_fcn(data)
         similarity_maps = self.twd_expert_distances(data)
         bs, n_chs, h, w, n_tasks = data.shape
+
+        # from PIL import Image
+        # for i in range(similarity_maps.shape[-1]):
+        #     a = similarity_maps[0, 0, :, :, i]
+        #     Image.fromarray(
+        #         (a * 255).byte().data.cpu().numpy()).save("sim_%d.png" % i)
+        #     print(i, "min, max", a.min().item(), a.max().item())
+
         for chan in range(n_chs):
             chan_mask = similarity_maps[:, chan] < self.threshold
             data[:, chan][chan_mask] = 0
@@ -386,6 +396,14 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         sum_ = torch.sum(similarity_maps, dim=-1, keepdim=True)
         sum_[sum_ == 0] = 1
         similarity_maps = similarity_maps / sum_
+
+        # print("after)")
+        # for i in range(similarity_maps.shape[-1]):
+        #     a = similarity_maps[0, 0, :, :, i]
+        #     Image.fromarray(
+        #         (a * 255 / a.max()).byte().data.cpu().numpy()).save(
+        #             "sim_after_%d.png" % i)
+        #     print(i, "min, max", a.min().item(), a.max().item())
 
         ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
 

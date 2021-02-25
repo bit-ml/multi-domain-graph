@@ -14,6 +14,7 @@ class MultiDomainGraph:
         super(MultiDomainGraph, self).__init__()
         self.experts = experts
         self.init_nets(experts, device, silent, config, valid_shuffle, iter_no)
+        print("==================")
 
     def init_nets(self, all_experts, device, silent, config, valid_shuffle,
                   iter_no):
@@ -56,6 +57,9 @@ class MultiDomainGraph:
                     bs_test = int(bs_test / no_out_ch_reduction)
                     bs_train = int(bs_train / no_out_ch_reduction)
 
+                    print("Add edge [%15s To: %15s]" %
+                          (expert_i.identifier, expert_j.identifier),
+                          end=' ')
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,
@@ -67,4 +71,3 @@ class MultiDomainGraph:
                                     bs_train=bs_train,
                                     bs_test=bs_test)
                     self.edges.append(new_edge)
-                    print("Add edge", str(new_edge))

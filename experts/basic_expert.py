@@ -2,6 +2,8 @@ class BasicExpert():
     TASK_CLASSIFICATION = 0
     TASK_REGRESSION = 1
 
+    gt_train_transform = (lambda x: x)
+
     def get_task_type(self):
         return BasicExpert.TASK_REGRESSION
 

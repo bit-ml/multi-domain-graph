@@ -293,6 +293,7 @@ def process_surface_normals(main_db_path, out_path):
             gt_maps[:,
                     2] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
             norm_normals_maps = torch.norm(gt_maps, dim=1, keepdim=True)
+            norm_normals_maps[norm_normals_maps == 0] = 1
             gt_maps = gt_maps / norm_normals_maps
             gt_maps = (gt_maps + 1) / 2
 

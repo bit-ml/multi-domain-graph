@@ -29,3 +29,4 @@ csv_results/*.csv
 z_my_configs
 preprocess_dbs/logs/*
 logs/*
+replica_gen_configs/*.ini

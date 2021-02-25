@@ -13,6 +13,7 @@ import torchvision
 from experts.basic_expert import BasicExpert
 from graph.edges.dataset2d import ImageLevelDataset
 from graph.edges.unet.unet_model import UNetGood
+from termcolor import colored
 from torch import nn, optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -43,7 +44,7 @@ class Edge:
         self.ensemble_filter = EnsembleFilter_TwdExpert(
             n_channels=expert2.no_maps_as_ens_input(),
             similarity_fct=similarity_fct,
-            normalize_output_fcn=expert2.postprocess_eval,
+            normalize_output_fcn=expert2.postprocess_eval_ens,
             threshold=0.5,
             dst_domain_name=expert2.domain_name)
         #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
@@ -107,13 +108,16 @@ class Edge:
             self.training_losses = [
                 nn.CrossEntropyLoss(weight=self.expert2.classification_weights)
             ]
-            self.gt_transform = (lambda x: x.squeeze(1).long())
-            self.to_ens_transform = labels_to_multichan
+            self.gt_eval_transform = (lambda x: x.squeeze(1).long())
+            self.to_ens_eval_transform = labels_to_multichan
         else:
-            self.training_losses = [nn.SmoothL1Loss(beta=0.8)]
+            self.training_losses = [nn.SmoothL1Loss(beta=2)]
             self.eval_losses = [nn.L1Loss()]
-            self.gt_transform = (lambda x: x)
-            self.to_ens_transform = (lambda x, y: x)
+            self.gt_eval_transform = (lambda x: x)
+            self.to_ens_eval_transform = (lambda x, y: x)
+
+            # if self.expert2.domain_name == "normals" and self.expert2.no_maps_as_nn_output() == 2:
+        self.gt_train_transform = self.expert2.gt_train_transform
 
         self.l2_detailed_eval = nn.MSELoss(reduction='none')
         self.l1_detailed_eval = nn.L1Loss(reduction='none')
@@ -152,10 +156,10 @@ class Edge:
                        to_exp=expert2).to(device)
         self.net = nn.DataParallel(net)
 
-        total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
-        print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
-              (total_params, trainable_params))
+        # total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        # trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
+        # print("\tNumber of parameters %.2fM (Trainable %.2fM)" %
+        #       (total_params, trainable_params))
 
     def copy_model(self, device):
         prev_net = UNetGood(n_channels=self.expert1.no_maps_as_nn_input(),
@@ -170,7 +174,7 @@ class Edge:
         # Load train dataset
         train_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
                                      iter_no, 'TRAIN')
-        print("\tTrain ds", len(train_ds), "==========")
+        print("\tTrain ds", len(train_ds), end=" ")
         self.train_loader = DataLoader(train_ds,
                                        batch_size=bs,
                                        shuffle=True,
@@ -179,7 +183,7 @@ class Edge:
         # Load valid dataset
         valid_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
                                      iter_no, 'VALID')
-        print("\tValid ds", len(valid_ds), "==========")
+        print("\tValid ds", len(valid_ds), end=" ")
         self.valid_loader = DataLoader(valid_ds,
                                        batch_size=bs_test,
                                        shuffle=valid_shuffle,
@@ -187,7 +191,7 @@ class Edge:
         # Load test dataset
         test_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
                                     iter_no, 'TEST')
-        print("\tTest ds", len(test_ds), "==========")
+        print("\tTest ds", len(test_ds))
         if len(test_ds) > 0:
             self.test_loader = DataLoader(test_ds,
                                           batch_size=bs_test,
@@ -255,7 +259,7 @@ class Edge:
                     for_next_iter=True,
                     for_next_iter_idx_subset=i)
                 print("\tNext iter test ds - subset %d" % i,
-                      len(next_iter_test_ds), "==========")
+                      len(next_iter_test_ds))
                 self.next_iter_test_loaders.append(
                     DataLoader(next_iter_test_ds,
                                batch_size=bs_test,
@@ -272,8 +276,8 @@ class Edge:
             print("Model saved at %s" % path)
 
     def __str__(self):
-        return '[%s To: %s]' % (self.expert1.domain_name,
-                                self.expert2.domain_name)
+        return '[%15s To: %15s]' % (self.expert1.domain_name,
+                                    self.expert2.domain_name)
 
     def log_to_tb(self, writer, split_tag, wtag, losses, input, output, gt):
         writer.add_images('%s_%s/Input' % (split_tag, wtag),
@@ -315,7 +319,8 @@ class Edge:
 
             backward_losses = 0
             for idx_loss, loss in enumerate(self.training_losses):
-                crt_loss = loss(domain2_pred, self.gt_transform(domain2_gt))
+                crt_loss = loss(domain2_pred,
+                                self.gt_train_transform(domain2_gt))
                 backward_losses += crt_loss
                 # TODO: is it faster to do backward on the sum vs individually?
                 train_losses[idx_loss] += crt_loss.item()
@@ -326,8 +331,10 @@ class Edge:
 
         train_losses /= len(self.train_loader)
 
-        self.log_to_tb(writer, "Train", wtag, train_losses, domain1[:3],
-                       domain2_pred[:3], domain2_gt[:3])
+        self.log_to_tb(
+            writer, "Train", wtag, train_losses, domain1[:3],
+            self.net.module.to_exp.postprocess_eval(domain2_pred[:3]),
+            domain2_gt[:3])
 
         return train_losses
 
@@ -345,7 +352,8 @@ class Edge:
                     [domain1, self.net.module.to_exp.postprocess_eval])
 
             for idx_loss, loss in enumerate(self.training_losses):
-                crt_loss = loss(domain2_pred, self.gt_transform(domain2_gt))
+                crt_loss = loss(domain2_pred,
+                                self.gt_eval_transform(domain2_gt))
                 eval_losses[idx_loss] += crt_loss.item()
 
         eval_losses /= len(loader)
@@ -439,9 +447,10 @@ class Edge:
                                          edge.expert2.identifier), 0)
 
                     l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
-                        one_hop_pred, edge.gt_transform(domain2_gt)).item()
+                        one_hop_pred,
+                        edge.gt_eval_transform(domain2_gt)).item()
                 l1_expert += 100 * edge.training_losses[0](
-                    domain2_exp_gt, edge.gt_transform(domain2_gt)).item()
+                    domain2_exp_gt, edge.gt_eval_transform(domain2_gt)).item()
             l1_per_edge = np.array(l1_per_edge) / num_batches
             l1_expert = np.array(l1_expert) / num_batches
             return l1_per_edge, l1_expert, save_idxes, domain2_exp_gt, domain2_gt
@@ -479,7 +488,7 @@ class Edge:
 
                     l1_per_edge[idx_edge] += 100 * edge.training_losses[0](
                         one_hop_pred,
-                        edge.gt_transform(domain2_exp_gt)).item()
+                        edge.gt_eval_transform(domain2_exp_gt)).item()
             l1_per_edge = np.array(l1_per_edge) / num_batches
             return l1_per_edge, save_idxes, domain2_exp_gt
 
@@ -555,14 +564,14 @@ class Edge:
 
         idx_test_edge = 0
         for idx_edge, edge in enumerate(edges_1hop):
-            writer.add_scalar(
-                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
-                l1_per_edge[idx_edge], 0)
+            # writer.add_scalar(
+            #     '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
+            #     l1_per_edge[idx_edge], 0)
             if edge.test_loader != None:
-                writer.add_scalar(
-                    '1hop_%s/L1_Loss_%s' %
-                    (wtag_test, edge.expert1.identifier),
-                    l1_per_edge_test[idx_test_edge], 0)
+                # writer.add_scalar(
+                #     '1hop_%s/L1_Loss_%s' %
+                #     (wtag_test, edge.expert1.identifier),
+                #     l1_per_edge_test[idx_test_edge], 0)
                 print("Loss %19s: %30.2f   %30.2f" %
                       (edge.expert1.identifier, l1_per_edge[idx_edge],
                        l1_per_edge_test[idx_test_edge]))
@@ -610,14 +619,19 @@ class Edge:
                        wtag_valid, wtag_test):
         tag = "to_%s" % (edges_1hop[0].expert2.identifier)
 
-        print("load_path", config.get('Edge Models', 'load_path'))
-        print("Ensemble - sim fct: ", config.get('Ensemble', 'similarity_fct'))
+        print("Epochs", colored(config.get('Edge Models', 'start_epoch'),
+                                'red'))
+        print("Load Path",
+              colored(config.get('Edge Models', 'load_path'), 'red'))
+        print("Ensemble: ",
+              colored(config.get('Ensemble', 'similarity_fct'), 'red'))
         print(
             "%24s  L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
             % (tag))
 
-        print("Loss %19s: %30.2f   %30.2f %20.2f" %
-              ("Ensemble1Hop", l1_ens_valid, l1_ens_test, l1_expert_test))
+        print("Loss %19s: %30.2f   " % ("Ensemble1Hop", l1_ens_valid),
+              colored("%30.2f " % l1_ens_test, 'green'),
+              colored("%20.2f" % l1_expert_test, "blue"))
         print(
             "%25s-------------------------------------------------------------------------------------"
             % (" "))
@@ -630,14 +644,14 @@ class Edge:
 
         idx_test_edge = 0
         for idx_edge, edge in enumerate(edges_1hop):
-            writer.add_scalar(
-                '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
-                l1_per_edge_valid[idx_edge], 0)
+            # writer.add_scalar(
+            #     '1hop_%s/L1_Loss_%s' % (wtag_valid, edge.expert1.identifier),
+            #     l1_per_edge_valid[idx_edge], 0)
             if edge.test_loader != None:
-                writer.add_scalar(
-                    '1hop_%s/L1_Loss_%s' %
-                    (wtag_test, edge.expert1.identifier),
-                    l1_per_edge_test[idx_test_edge], 0)
+                # writer.add_scalar(
+                #     '1hop_%s/L1_Loss_%s' %
+                #     (wtag_test, edge.expert1.identifier),
+                #     l1_per_edge_test[idx_test_edge], 0)
                 print("Loss %19s: %30.2f   %30.2f" %
                       (edge.expert1.identifier, l1_per_edge_valid[idx_edge],
                        l1_per_edge_test[idx_test_edge]))
@@ -706,11 +720,13 @@ class Edge:
                                          edge.expert1.identifier), 0)
 
                     l1_edge[idx_edge] += edge.eval_losses[0](
-                        one_hop_pred, edge.gt_transform(domain2_gt)).item()
+                        one_hop_pred,
+                        edge.gt_eval_transform(domain2_gt)).item()
 
                 domain2_1hop_ens_list.append(
-                    edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
-                                          edge.expert2.no_maps_as_ens_input()))
+                    edge.to_ens_eval_transform(
+                        edge.gt_eval_transform(domain2_exp_gt),
+                        edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
@@ -719,7 +735,8 @@ class Edge:
                 l1_expert += edge.eval_losses[0](domain2_exp_gt,
                                                  domain2_gt).item()
                 l1_ensemble1hop += edge.eval_losses[0](
-                    domain2_1hop_ens, edge.gt_transform(domain2_gt)).item()
+                    domain2_1hop_ens,
+                    edge.gt_eval_transform(domain2_gt)).item()
 
         multiply = 1.
         if edges_1hop[0].expert2.get_task_type(
@@ -774,12 +791,13 @@ class Edge:
                                          edge.expert1.identifier), 0)
                     l1_edge[idx_edge] += edge.eval_losses[0](
                         one_hop_pred,
-                        edge.gt_transform(domain2_exp_gt)).item()
+                        edge.gt_eval_transform(domain2_exp_gt)).item()
 
                 # with_expert
                 domain2_1hop_ens_list.append(
-                    edge.to_ens_transform(edge.gt_transform(domain2_exp_gt),
-                                          edge.expert2.no_maps_as_ens_input()))
+                    edge.to_ens_eval_transform(
+                        edge.gt_eval_transform(domain2_exp_gt),
+                        edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens = edge.ensemble_filter(
@@ -787,7 +805,7 @@ class Edge:
 
                 l1_ensemble1hop += edge.eval_losses[0](
                     domain2_1hop_ens,
-                    edge.gt_transform(domain2_exp_gt)).item()
+                    edge.gt_eval_transform(domain2_exp_gt)).item()
 
         multiply = 1.
         if edges_1hop[0].expert2.get_task_type(
