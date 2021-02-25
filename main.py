@@ -49,58 +49,6 @@ def evaluate_all_edges(ending_edges):
     return np.array(metrics)
 
 
-def eval_1hop(space_graph, silent, config, epoch_idx, iter_idx):
-    csv_results_path = config.get('Logs', 'csv_results')
-    if not os.path.exists(csv_results_path):
-        os.mkdir(csv_results_path)
-
-    valid_dataset = config.get('PathsIter%d' % iter_idx,
-                               'ITER%d_VALID_SRC_PATH' % iter_idx)
-    valid_set_str = pathlib.Path(valid_dataset).parts[-1]
-
-    test_dataset = config.get('PathsIter%d' % iter_idx,
-                              'ITER%d_TEST_SRC_PATH' % iter_idx)
-    test_set_str = pathlib.Path(test_dataset).parts[-1]
-
-    if silent:
-        writer = DummySummaryWriter()
-    else:
-        tb_dir = config.get('Logs', 'tensorboard_dir')
-        tb_prefix = config.get('Logs', 'tensorboard_prefix')
-        datetime = config.get('Run id', 'datetime')
-        writer = SummaryWriter(
-            log_dir=f'%s/%s_1hop_edges_e%d_valid_%s_test_%s_%s' %
-            (tb_dir, tb_prefix, epoch_idx, valid_set_str, test_set_str,
-             datetime),
-            flush_secs=30)
-    save_idxes = None
-    save_idxes_test = None
-
-    for expert in space_graph.experts.methods:
-        end_id = expert.identifier
-
-        edges_1hop = []
-
-        # 1. Select edges that ends in end_id
-        for edge_xk in space_graph.edges:
-            if edge_xk.ill_posed:
-                continue
-            if not edge_xk.trained:
-                continue
-            if edge_xk.expert2.identifier == end_id:
-                edges_1hop.append(edge_xk)
-
-        # 2. Eval all edges towards end_id
-        if len(edges_1hop) > 0:
-            save_idxes, save_idxes_test = Edge.eval_1hop(
-                edges_1hop, save_idxes, save_idxes_test, device, writer,
-                valid_set_str, test_set_str, csv_results_path, epoch_idx)
-        else:
-            print('--------dst: %s === NOT TESTED' % end_id)
-
-    writer.close()
-
-
 ############################## drop connections ###############################
 def drop_connections(space_graph, drop_version):
     if drop_version > 0:
@@ -473,9 +421,6 @@ def main(argv):
         iter_saveNextIter_flag = config.getboolean(
             'General', 'Steps_Iter%d_saveNextIter' % iteration_idx)
 
-        iter_testEpochs = config.getboolean(
-            'General', 'Steps_Iter%d_testEpochs' % iteration_idx)
-
         # Build graph
         silent = config.getboolean('Logs', 'silent')
         graph = build_space_graph(config,
@@ -514,19 +459,6 @@ def main(argv):
                                   all_experts=all_experts)
 
             save_1hop_ensembles(graph, config=config, iter_no=iteration_idx)
-
-        # Test various epochs of the based models
-        if iter_testEpochs:
-            min_epoch = config.getint('Testing', 'test_min_epoch')
-            max_epoch = config.getint('Testing', 'test_max_epoch')
-            epoch_step = max(1, config.getint('Testing', 'test_epoch_step'))
-            for t_epoch in np.arange(min_epoch, max_epoch + 1, epoch_step):
-                load_2Dtasks(graph, epoch=t_epoch)
-                eval_1hop(graph,
-                          silent=silent,
-                          config=config,
-                          epoch_idx=t_epoch,
-                          iter_idx=1)
 
         return
 
