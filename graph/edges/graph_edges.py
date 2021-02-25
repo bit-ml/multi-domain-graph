@@ -157,9 +157,6 @@ class Edge:
         self.l1_detailed_eval = nn.L1Loss(reduction='none')
 
         self.global_step = 0
-        self.ill_posed = False
-        self.in_edge_weights = []
-        self.in_edge_src_identifiers = []
 
         self.trained = False
 

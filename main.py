@@ -40,174 +40,28 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     return md_graph
 
 
-def evaluate_all_edges(ending_edges):
-    metrics = []
-    for edge in ending_edges:
-        edge_l2_loss, edge_l1_loss = edge.eval_detailed(device)
-        metrics.append(np.array(edge_l1_loss))
-
-    return np.array(metrics)
-
-
-############################## drop connections ###############################
-def drop_connections(space_graph, drop_version):
-    if drop_version > 0:
-        if drop_version < 10:
-            drop_connections_simple(space_graph, drop_version)
-        else:
-            drop_connections_correlations(space_graph, drop_version)
-
-
-def drop_connections_correlations(space_graph, drop_version):
-    for expert_idx, expert in enumerate(space_graph.experts.methods):
-        # get edges ending in current expert
-        ending_edges = []
-        ending_edges_src_identifiers = []
-        for edge in space_graph.edges:
-            if edge.expert2.identifier == expert.identifier:
-                ending_edges.append(edge)
-                ending_edges_src_identifiers.append(edge.expert1.identifier)
-        ending_edges_src_identifiers.append(expert.identifier)
-
-        expert_correlations = Edge.drop_1hop_connections(
-            ending_edges, device, drop_version).cpu().numpy()
-
-        if drop_version == 21 or drop_version == 23:
-            min_v = np.min(expert_correlations)
-            max_v = np.max(expert_correlations)
-            expert_correlations = (expert_correlations - min_v) / (max_v -
-                                                                   min_v)
-            expert_correlations = 1 - expert_correlations
-        if drop_version == 10 or drop_version == 11 or drop_version == 14 or drop_version == 15 or drop_version == 20 or drop_version == 21:
-            import numpy.linalg as linalg
-            eigenValues, eigenVectors = linalg.eig(expert_correlations)
-            '''
-            s_indexes = np.flip(np.argsort(eigenValues))
-            eigenVectors = eigenVectors[s_indexes, :]
-            min_v = np.min(eigenVectors, 0)[None, :]
-            max_v = np.max(eigenVectors, 0)[None, :]
-            diff = max_v - min_v
-            diff[diff < 0.0000001] = 1
-            eigenVectors = (eigenVectors - min_v) / (max_v - min_v)
-            cl_pos = np.argwhere(eigenVectors[-1, :] >= 0.5)
-            if len(cl_pos) > 0:
-                task_weights = eigenVectors[:, cl_pos[0]]
-            else:
-                task_weights = np.ones((eigenVectors.shape[0], ))
-            '''
-            pos = np.argmax(eigenValues)
-            task_weights = eigenVectors[:, pos]
-        elif drop_version == 12 or drop_version == 13 or drop_version == 16 or drop_version == 17 or drop_version == 22 or drop_version == 23:
-            task_weights = expert_correlations[-1, :]
-
-        min_val = np.min(task_weights)
-        max_val = np.max(task_weights)
-
-        task_weights = (task_weights - min_val) / (max_val - min_val)
-
-        if drop_version == 12 or drop_version == 13 or drop_version == 22 or drop_version == 23:
-            indexes = np.argsort(task_weights)
-            indexes = indexes[0:len(task_weights) - 4]
-            task_weights[indexes] = 0
-            #task_weights[task_weights <= 0] = 0
-        elif drop_version == 10 or drop_version == 11 or drop_version == 20 or drop_version == 21:  # or drop_version == 14 or drop_version == 15:
-            # if current task is not part of the main cluster => abort
-            #if task_weights[-1] >= 0.5:
-            task_weights[task_weights < 0.5] = 0
-            #else:
-            #    task_weights[task_weights == 0] = 0.0001
-        elif drop_version == 14 or drop_version == 15 or drop_version == 16 or drop_version == 17:
-            task_weights[task_weights == 0] = 0.01
-
-        remove_indexes = np.argwhere(task_weights == 0)[:, 0]
-        keep_indexes = np.argwhere(task_weights > 0)[:, 0]
-
-        remove_indexes = remove_indexes[remove_indexes < len(ending_edges)]
-        keep_indexes = keep_indexes[keep_indexes < len(ending_edges)]
-
-        if drop_version == 10 or drop_version == 11 or drop_version == 12 or drop_version == 13 or drop_version == 20 or drop_version == 21 or drop_version == 22 or drop_version == 23:
-            for idx in remove_indexes:
-                #print("remove edge from: %s"%(ending_edges[idx].expert1.str_id))
-                ending_edges[idx].ill_posed = True
-        for ending_edge in ending_edges:
-            ending_edge.in_edge_weights = task_weights
-            ending_edge.in_edge_src_identifiers = ending_edges_src_identifiers
-
-        print('EXPERT: %20s' % expert.identifier)
-        for i in range(len(ending_edges_src_identifiers)):
-            if i < len(ending_edges) and ending_edges[i].ill_posed:
-                drop_str = 'drop'
-            else:
-                drop_str = ''
-            print('--%20s %20.10f - %s' %
-                  (ending_edges_src_identifiers[i], task_weights[i], drop_str))
-
-
-def drop_connections_simple(space_graph, drop_version):
-    # for each node domain (= expert in our case)
-    for expert_idx, expert in enumerate(space_graph.experts.methods):
-        ending_edges = []
-        # 1. List all edges reaching this node
-        for edge in space_graph.edges:
-            if edge.expert2.str_id == expert.str_id:
-                ending_edges.append(edge)
-
-        l1_per_edge_per_sample = torch.from_numpy(
-            evaluate_all_edges(ending_edges))
-
-        # 2. Check ensembles value vs single edge
-        ensemble_l1_per_sample = utils.combine_maps(l1_per_edge_per_sample,
-                                                    fct="median")
-        mean_l1_per_edge = l1_per_edge_per_sample.mean(dim=1)
-
-        print("\n==== End node [%19s] =====" % expert.str_id)
-        for edge_idx, edge in enumerate(ending_edges):
-            is_outlier = utils.check_illposed_edge(
-                ensemble_l1_per_sample, l1_per_edge_per_sample[edge_idx],
-                mean_l1_per_edge, edge, edge_idx, drop_version)
-            edge.ill_posed = is_outlier
-        print("============================")
-
-
 ############################## 1HOP ###############################
-def eval_1hop_ensembles(space_graph, drop_version, silent, config):
+def eval_1hop_ensembles(space_graph, silent, config):
     if silent:
         writer = DummySummaryWriter()
     else:
         tb_dir = config.get('Logs', 'tensorboard_dir')
         tb_prefix = config.get('Logs', 'tensorboard_prefix')
         datetime = config.get('Run id', 'datetime')
-        writer = SummaryWriter(log_dir=f'%s/%s_1hop_ens_dropV%d_%s' %
-                               (tb_dir, tb_prefix, drop_version, datetime),
+        writer = SummaryWriter(log_dir=f'%s/%s_1hop_ens_%s' %
+                               (tb_dir, tb_prefix, datetime),
                                flush_secs=30)
     for expert in space_graph.experts.methods:
         end_id = expert.identifier
         tag = "Valid_1Hop_%s" % end_id
         edges_1hop = []
-        edges_1hop_weights = []
-        edges_1hop_test_weights = []
 
         # 1. Select edges that ends in end_id
         for edge_xk in space_graph.edges:
-            if edge_xk.ill_posed:
-                continue
             if not edge_xk.trained:
                 continue
             if edge_xk.expert2.identifier == end_id:
                 edges_1hop.append(edge_xk)
-                edge_weights = edge_xk.in_edge_weights
-                edge_src_identifiers = edge_xk.in_edge_src_identifiers
-                if drop_version in [14, 15, 16, 17, 22, 23]:
-                    index = edge_src_identifiers.index(
-                        edge_xk.expert1.identifier)
-                    edges_1hop_weights.append(edge_weights[index])
-                    if edge_xk.test_loader != None:
-                        edges_1hop_test_weights.append(edge_weights[index])
-
-        if drop_version in [14, 15, 16, 17, 22, 23]:
-            # add weight of the expert pseudo gt
-            edges_1hop_weights.append(edge_weights[-1])
-            edges_1hop_test_weights.append(edge_weights[-1])
 
         # 2. Eval each ensemble
         Edge.eval_all_1hop_ensembles(edges_1hop, device, writer, config)
@@ -444,10 +298,7 @@ def main(argv):
 
         # Test models - fixed epoch
         if iter_test_flag:
-            eval_1hop_ensembles(graph,
-                                drop_version=-1,
-                                silent=silent,
-                                config=config)
+            eval_1hop_ensembles(graph, silent=silent, config=config)
 
         # Save data for next iter
         if iter_saveNextIter_flag:
