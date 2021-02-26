@@ -48,7 +48,7 @@ class Edge:
             similarity_fct=similarity_fct,
             normalize_output_fcn=expert2.normalize_output_fcn,
             threshold=0.5,
-            dst_domain_name=expert2.domain_name)
+            dst_domain_name=expert2.domain_name).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         model_type = config.getint('Edge Models', 'model_type')
@@ -192,7 +192,6 @@ class Edge:
                              n_classes=expert2.no_maps_as_nn_output(),
                              from_exp=expert1,
                              to_exp=expert2).to(device)
-
         self.net = nn.DataParallel(net)
 
         total_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
