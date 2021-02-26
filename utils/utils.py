@@ -166,7 +166,7 @@ class SimScore_SSIM(nn.Module):
                                  -1)).mean(2).mean(1).sum()
         else:
             res = ssim_map
-        res = torch.clamp(res, min=0)
+        res = (res + 1) / 2
         return res
 
 

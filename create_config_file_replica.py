@@ -16,7 +16,7 @@ all12 = str(sorted_by_score)[1:-1]
 top3 = str(sorted_by_score[:4])[1:-1]
 top7 = str(sorted_by_score[:8])[1:-1]
 # replica: 300, 260, 200, 160
-for start_epoch in [200, 160, 100]:
+for start_epoch in [200]:
     # all12, top10, top7, top5, top3
     for selector_map in [all12]:
         #"lpips", "mssim", "ssim", "equal"
@@ -33,7 +33,7 @@ for start_epoch in [200, 160, 100]:
             config.set("Edge Models", "start_epoch", "%d" % start_epoch)
             config.set(
                 "Edge Models", "load_path",
-                '/data/multi-domain-graph/models/replica_iter1_300epochs_2chan_unetsmall'
+                '/data/multi-domain-graph/models/replica_iter1_300epochs_2chan_unetmedium'
             )
 
             # SET metric

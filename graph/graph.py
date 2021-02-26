@@ -46,7 +46,7 @@ class MultiDomainGraph:
                                      == restricted_graph_exp_identifier)):
                             continue
 
-                    bs_test = 35
+                    bs_test = 70
                     bs_train = 45
                     # if expert_j.identifier in ["sem_seg_hrnet"]:
                     #     bs_train = 90
