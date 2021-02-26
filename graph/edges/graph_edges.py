@@ -38,8 +38,8 @@ class Edge:
             similarity_fct=similarity_fct,
             postprocess_eval=expert2.postprocess_eval,
             threshold=0.5,
-            dst_domain_name=expert2.domain_name)
-        #self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
+            dst_domain_name=expert2.domain_name).to(device)
+        self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         self.init_edge(expert1, expert2, device)
 

@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from scipy.stats import pearsonr
 from skimage import color
 from skimage.metrics import structural_similarity as ssim
+from torch import nn
 from tqdm import tqdm
 
 sys.path.insert(0,
@@ -113,17 +114,18 @@ class DummySummaryWriter:
         return self
 
 
-class SimScore_SSIM():
+class SimScore_SSIM(nn.Module):
     def __init__(self, n_channels, win_size, reduction=False):
         super(SimScore_SSIM, self).__init__()
         self.n_channels = n_channels
         self.win_size = win_size
         self.sigma = self.win_size / 7
         self.reduction = reduction
-        self.g_filter = get_gaussian_filter(self.n_channels, self.win_size,
-                                            self.sigma).to(device)
+        self.g_filter = nn.Parameter(get_gaussian_filter(
+            self.n_channels, self.win_size, self.sigma),
+                                     requires_grad=False)
 
-    def get_similarity_score(self, batch1, batch2):
+    def forward(self, batch1, batch2):
         mu1 = torch.nn.functional.conv2d(batch1,
                                          self.g_filter,
                                          padding=self.win_size // 2,
@@ -168,7 +170,7 @@ class SimScore_SSIM():
         return res
 
 
-class SimScore_MSSIM():
+class SimScore_MSSIM(torch.nn.Module):
     def __init__(self, n_channels, win_sizes, reduction=False):
         super(SimScore_MSSIM, self).__init__()
         self.n_channels = n_channels
@@ -176,11 +178,10 @@ class SimScore_MSSIM():
         self.sigmas = self.win_sizes / 7
         self.reduction = reduction
 
-        self.g_filters = []
         for i in range(len(self.win_sizes)):
-            self.g_filters.append(
-                get_gaussian_filter(self.n_channels, self.win_sizes[i],
-                                    self.sigmas[i]).to(device))
+            g_filter_ = get_gaussian_filter(self.n_channels, self.win_sizes[i],
+                                            self.sigmas[i])
+            self.register_buffer('g_filter_' + str(i), g_filter_)
 
     def get_similarity_score_aux(self, batch1, batch2, g_filter, win_size):
         mu1 = torch.nn.functional.conv2d(batch1,
@@ -223,20 +224,20 @@ class SimScore_MSSIM():
                                  -1)).mean(2).mean(1).sum()
         else:
             res = ssim_map
-        res = torch.clamp(res, min=0)
+        res = (res + 1) / 2
         return res
 
-    def get_similarity_score(self, batch1, batch2):
-        res = self.get_similarity_score_aux(batch1, batch2, self.g_filters[0],
-                                            self.win_sizes[0])
-        for i in range(len(self.g_filters)):
+    def forward(self, batch1, batch2):
+        res = torch.zeros(batch1.shape).cuda()
+        for i in range(len(self.win_sizes)):
             res = res + self.get_similarity_score_aux(
-                batch1, batch2, self.g_filters[i], self.win_sizes[i])
-        res = res / len(self.g_filters)
+                batch1, batch2, self.__getattr__('g_filter_' + str(i)),
+                self.win_sizes[i])
+        res = res / len(self.win_sizes)
         return res
 
 
-class SimScore_L1():
+class SimScore_L1(nn.Module):
     def __init__(self, reduction=False):
         super(SimScore_L1, self).__init__()
         if not reduction:
@@ -244,27 +245,27 @@ class SimScore_L1():
         else:
             self.reduction = 'mean'
 
-    def get_similarity_score(self, batch1, batch2):
+    def forward(self, batch1, batch2):
         res = torch.nn.functional.l1_loss(batch1,
                                           batch2,
                                           reduction=self.reduction)
         return res
 
 
-class SimScore_Equal():
+class SimScore_Equal(nn.Module):
     def __init__(self, reduction=False):
         super(SimScore_Equal, self).__init__()
         self.reduction = reduction
 
-    def get_similarity_score(self, batch1, batch2):
+    def forward(self, batch1, batch2):
         bs, n_chs, h, w = batch1.shape
         if self.reduction:
-            return torch.ones((n_chs, h, w)).cuda()
+            return torch.ones((n_chs, h, w))
         else:
-            return torch.ones((bs, n_chs, h, w)).cuda()
+            return torch.ones((bs, n_chs, h, w))
 
 
-class SimScore_PSNR():
+class SimScore_PSNR(nn.Module):
     def __init__(self, reduction=False):
         super(SimScore_PSNR, self).__init__()
         if reduction:
@@ -272,7 +273,7 @@ class SimScore_PSNR():
         else:
             self.reduction = 'none'
 
-    def get_similarity_score(self, batch1, batch2):
+    def forward(self, batch1, batch2):
         mse = torch.nn.functional.mse_loss(batch1,
                                            batch2,
                                            reduction=self.reduction)
@@ -281,17 +282,19 @@ class SimScore_PSNR():
         return res
 
 
-class SimScore_LPIPS():
+class SimScore_LPIPS(nn.Module):
     def __init__(self, n_channels):
         super(SimScore_LPIPS, self).__init__()
         self.n_channels = n_channels
         self.lpips_net = lpips.LPIPS(net='squeeze',
                                      spatial=True,
-                                     verbose=False).to(device)
-        # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True).to(device)
+                                     verbose=False)
+        self.lpips_net.eval()
+        self.lpips_net.requires_grad_(False)
+        # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True)
         # LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
-        #                                           spatial=True).to(device)
-    def get_similarity_score(self, batch1, batch2):
+        #                                           spatial=True)
+    def forward(self, batch1, batch2):
         distance = self.lpips_net.forward(batch1, batch2)
         distance = distance.repeat(1, self.n_channels, 1, 1)
         distance = 1 - distance
@@ -366,8 +369,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
         similarity_maps = []
         for i in range(n_tasks):
-            similarity_map = self.similarity_model.get_similarity_score(
-                data[..., -1], data[..., i])
+            similarity_map = self.similarity_model(data[..., -1], data[..., i])
             similarity_maps.append(similarity_map)
 
         similarity_maps = torch.stack(similarity_maps,
