@@ -2,15 +2,6 @@ class BasicExpert():
     TASK_CLASSIFICATION = 0
     TASK_REGRESSION = 1
 
-    def post_process_ops(self, logits, specific_fcn):
-        return specific_fcn(logits)
-
-    def edge_specific(self, inp):
-        return inp
-
-    def normalize_output_fcn(self, outp):
-        return outp.clamp(min=0, max=1)
-
     def get_task_type(self):
         return BasicExpert.TASK_REGRESSION
 
@@ -23,5 +14,26 @@ class BasicExpert():
     def no_maps_as_ens_input(self):
         return self.n_maps
 
-    def test_gt(self, loss_fct, pred, target):
-        return loss_fct(pred, target).item()
+    def postprocess_eval(self, nn_outp):
+        '''
+        POST PROCESSING eval - posprocess operations for evaluation (e.g. scale/normalize)
+        '''
+        return nn_outp
+
+    def gt_train_transform(self, x):
+        '''
+        GT train - added for normals expert only
+        '''
+        return x
+
+    def gt_eval_transform(self, x):
+        '''
+        GT eval - added for sem segm expert only
+        '''
+        return x
+
+    def gt_to_inp_transform(self, x, n_classes):
+        '''
+        GT ensemble eval - added for sem segm expert only
+        '''
+        return x

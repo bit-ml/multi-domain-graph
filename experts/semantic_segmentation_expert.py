@@ -188,9 +188,9 @@ class SSegHRNet(BasicExpert):
                 0.51646098, 1.14297737, 0.96902266, 1.31444027, 1.76809316,
                 1.89247963, 1.1967561
             ]
-            self.classification_weights = torch.tensor(weights).to(self.device)
+            self.classes_weights = torch.tensor(weights).to(self.device)
         else:
-            self.classification_weights = None
+            self.classes_weights = None
 
         self.combine_list = [(19, 30, 75, 31), (14, 58), (15, 64),
                              (38, 96, 59, 53), (10, 35, 44)]
@@ -241,10 +241,25 @@ class SSegHRNet(BasicExpert):
 
     def no_maps_as_nn_output(self):
         return len(self.to_keep_list)
-    
+
     def no_maps_as_ens_input(self):
         return len(self.to_keep_list)
 
+    def gt_train_transform(self, gt_maps):
+        return gt_maps.squeeze(1).long()
+
+    def gt_eval_transform(self, gt_maps):
+        return gt_maps.squeeze(1).long()
+
+    def gt_to_inp_transform(self, inp_1chan_cls, n_classes):
+        inp_1chan_cls = inp_1chan_cls.squeeze(1).long()
+        bs, h, w = inp_1chan_cls.shape
+
+        outp_multichan = torch.zeros(
+            (bs, n_classes, h, w)).to(inp_1chan_cls.device).float()
+        for chan in range(n_classes):
+            outp_multichan[:, chan][inp_1chan_cls == chan] = 1.
+        return outp_multichan
 
 
 class SSegResNeSt(BasicExpert):

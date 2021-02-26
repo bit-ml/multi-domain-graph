@@ -1,10 +1,10 @@
 import os
-import pathlib
 import sys
 from datetime import datetime
 
 import numpy as np
 import torch
+from termcolor import colored
 from torch.utils.tensorboard import SummaryWriter
 
 from experts.experts import Experts
@@ -183,7 +183,7 @@ def check_models_exists(config, epoch):
 
 
 def load_2Dtasks(graph, epoch):
-    print("Load nets from checkpoints. From epoch: %2d" % epoch)
+    print("Load nets from checkpoints.", colored("Epoch: %2d" % epoch, "red"))
 
     for net_idx, edge in enumerate(graph.edges):
         path = os.path.join(edge.load_model_dir, 'epoch_%05d.pth' % (epoch))
@@ -309,6 +309,7 @@ def main(argv):
     preprocess_config_file(config)
 
     print(config.get('Run id', 'datetime'))
+    print(colored("Config file: %s" % argv[1], "red"))
     print("load_path", config.get('Edge Models', 'load_path'))
 
     n_iters = config.getint('General', 'n_iters')
@@ -333,6 +334,7 @@ def main(argv):
         start_epoch = config.getint('Edge Models', 'start_epoch')
         if start_epoch > 0:
             load_2Dtasks(graph, epoch=start_epoch)
+            print("==================")
 
         # Train models
         if iter_train_flag:
