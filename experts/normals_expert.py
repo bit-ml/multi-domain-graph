@@ -19,12 +19,14 @@ normals_model_path = os.path.join(current_dir_name, 'models/normals_xtc.pth')
 
 
 class SurfaceNormalsXTC(BasicExpert):
+    SOME_THRESHOLD = 0.
+
     def __init__(self, dataset_name, full_expert=True):
         '''
             dataset_name: "taskonomy" or "replica"
         '''
         if full_expert:
-            model_path = normals_model_path  #"experts/models/rgb2normal_consistency.pth"
+            model_path = normals_model_path
             self.model = UNet()
             model_state_dict = torch.load(model_path)
             self.model.load_state_dict(model_state_dict)
@@ -37,51 +39,34 @@ class SurfaceNormalsXTC(BasicExpert):
         self.domain_name = "normals"
         self.n_final_maps = 3
 
-        if dataset_name == "taskonomy":
-            # self.chan_replace = 0
-            # self.chan_gen_fcn = torch.zeros_like
-            self.edge_specific = lambda x: x
-            self.expert_specific = lambda x: x
-            self.n_maps = 3
-        else:
-            self.chan_replace = 1
-            self.chan_gen_fcn = torch.ones_like
-            self.n_maps = 2
+        self.chan_gen_fcn = torch.ones_like
+        self.n_maps = 2
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
 
     def apply_expert_batch(self, batch_rgb_frames):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
-        normals_maps = self.model(batch_rgb_frames.to(self.device))
+        out_maps = self.model(batch_rgb_frames.to(self.device))
 
-        normals_maps = self.post_process_ops(normals_maps,
-                                             self.expert_specific)
+        # 1. CLAMP
+        torch.clamp_(out_maps[:, :2], min=0, max=1)
+        torch.clamp_(out_maps[:, 2], min=0., max=0.5)
 
-        normals_maps = normals_maps.data.cpu().numpy().astype('float32')
-        return normals_maps
+        # 2. ALIGN ranges
+        out_maps[:, 2] += 0.5
 
-    def post_process_ops(self, pred_logits, specific_fcn):
-        pred_logits = torch.clamp(pred_logits, 0, 1)
-        pred_logits = pred_logits * 2 - 1
+        # 4. NORMALIZE it
+        out_maps = out_maps * 2 - 1
+        out_maps[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
+        norm_normals_maps = torch.norm(out_maps, dim=1, keepdim=True)
+        norm_normals_maps[norm_normals_maps == 0] = 1
+        out_maps = out_maps / norm_normals_maps
+        out_maps = (out_maps + 1) / 2
 
-        pred_logits = specific_fcn(pred_logits)
+        out_maps = out_maps.data.cpu().numpy().astype('float32')
 
-        # normalize normals in [-1, 1]
-        norm_pred_logits = torch.norm(pred_logits, dim=1, keepdim=True)
-
-        pred_logits = pred_logits / norm_pred_logits
-        pred_logits = (pred_logits + 1) / 2
-
-        return pred_logits
-
-    def expert_specific(self, inp):
-        inp[:, 2, :, :] = self.chan_replace
-        return inp
-
-    def edge_specific(self, inp):
-        inp = torch.cat((inp, self.chan_gen_fcn(inp[:, 1][:, None])), dim=1)
-        return inp
+        return out_maps
 
     def no_maps_as_nn_input(self):
         return self.n_final_maps
@@ -92,5 +77,27 @@ class SurfaceNormalsXTC(BasicExpert):
     def no_maps_as_ens_input(self):
         return self.n_final_maps
 
-    def normalize_output_fcn(self, outp):
-        return self.post_process_ops(outp, self.expert_specific)
+    def postprocess_eval(self, nn_outp):
+        bs, nch, h, w = nn_outp.shape
+
+        if nch < self.n_final_maps:
+            # add the 3rd dimension
+            nn_outp = torch.cat(
+                (nn_outp, self.chan_gen_fcn(nn_outp[:, 1][:, None]) / 2),
+                dim=1)
+
+        # 1. CLAMP
+        torch.clamp_(nn_outp[:, :2], min=0, max=1)
+
+        # 4. NORMALIZE it
+        nn_outp = nn_outp * 2 - 1
+        nn_outp[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
+        norm_normals_maps = torch.norm(nn_outp, dim=1, keepdim=True)
+        norm_normals_maps[norm_normals_maps == 0] = 1
+        nn_outp = nn_outp / norm_normals_maps
+        nn_outp = (nn_outp + 1) / 2
+
+        return nn_outp
+
+    def gt_train_transform(edge, gt_inp):
+        return gt_inp[:, :2]

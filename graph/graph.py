@@ -1,5 +1,6 @@
-import torch
 import numpy as np
+import torch
+
 from graph.edges.graph_edges import Edge
 
 
@@ -14,6 +15,7 @@ class MultiDomainGraph:
         super(MultiDomainGraph, self).__init__()
         self.experts = experts
         self.init_nets(experts, device, silent, config, valid_shuffle, iter_no)
+        print("==================")
 
     def init_nets(self, all_experts, device, silent, config, valid_shuffle,
                   iter_no):
@@ -23,7 +25,6 @@ class MultiDomainGraph:
         restricted_graph_exp_identifier = config.get(
             'GraphStructure', 'restricted_graph_exp_identifier')
 
-        rnd_sampler = torch.Generator()
         self.edges = []
         for i_idx, expert_i in enumerate(all_experts.methods):
             for expert_j in all_experts.methods:
@@ -48,29 +49,24 @@ class MultiDomainGraph:
                     model_type = np.int32(
                         config.get('Edge Models', 'model_type'))
                     if model_type == 0:
-                        bs_test = 50
-                        bs_train = 90
+                        bs_test = 95
+                        bs_train = 70
                     else:
-                        bs_test = 25  #50
-                        bs_train = 45  #90
+                        bs_test = 60
+                        bs_train = 40
                     # if expert_j.identifier in ["sem_seg_hrnet"]:
                     #     bs_train = 90
 
-                    # no_experts = len(all_experts.methods)
-                    no_out_ch_reduction = max(
-                        expert_j.no_maps_as_nn_output() * 0.5, 1)
-                    bs_test = int(bs_test / no_out_ch_reduction)
-                    bs_train = int(bs_train / no_out_ch_reduction)
-
+                    print("Add edge [%15s To: %15s]" %
+                          (expert_i.identifier, expert_j.identifier),
+                          end=' ')
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,
                                     device,
-                                    rnd_sampler,
                                     silent,
                                     valid_shuffle,
                                     iter_no=iter_no,
                                     bs_train=bs_train,
                                     bs_test=bs_test)
                     self.edges.append(new_edge)
-                    print("Add edge", str(new_edge))

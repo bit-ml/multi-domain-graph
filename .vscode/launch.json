@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "justMyCode": false,
     "configurations": [
+
         {
             "name": "Run file (without args)",
             "type": "python",
@@ -61,7 +62,7 @@
                 // split: test val train
                 "0",
                 "test",
-                "hsv"
+                "normals"
             ]
         },
         {

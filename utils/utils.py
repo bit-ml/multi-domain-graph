@@ -1,22 +1,17 @@
 import os
 import sys
-import time
 from math import exp
 
 import lpips
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
-from scipy.stats import pearsonr
 from skimage import color
-from skimage.metrics import structural_similarity as ssim
-from tqdm import tqdm
+from torch import nn
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import multiprocessing
 
 EPSILON = 0.00001
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -113,7 +108,7 @@ class SSIMLoss(torch.nn.Module):
                                             self.sigma).to(device)
 
     def forward(self, batch1, batch2):
-
+    
         mu1 = torch.nn.functional.conv2d(batch1,
                                          self.g_filter,
                                          padding=self.win_size // 2,
@@ -167,16 +162,16 @@ class DummySummaryWriter:
         return self
 
 
-class SimScore_SSIM(torch.nn.Module):
+class SimScore_SSIM(nn.Module):
     def __init__(self, n_channels, win_size, reduction=False):
         super(SimScore_SSIM, self).__init__()
         self.n_channels = n_channels
         self.win_size = win_size
         self.sigma = self.win_size / 7
         self.reduction = reduction
-        g_filter = get_gaussian_filter(self.n_channels, self.win_size,
-                                       self.sigma)
-        self.register_buffer('g_filter', g_filter)
+        self.g_filter = nn.Parameter(get_gaussian_filter(
+            self.n_channels, self.win_size, self.sigma),
+                                     requires_grad=False)
 
     def forward(self, batch1, batch2):
         mu1 = torch.nn.functional.conv2d(batch1,
@@ -282,22 +277,6 @@ class SimScore_MSSIM(torch.nn.Module):
 
     def forward(self, batch1, batch2):
         res = torch.zeros(batch1.shape).cuda()
-        '''
-        import pdb
-        pdb.set_trace()
-        res1 = self.get_similarity_score_aux(
-            batch1, batch2, self.__getattr__('g_filter_' + str(0)),
-            self.win_sizes[0])
-        res2 = self.get_similarity_score_aux(
-            batch1, batch2, self.__getattr__('g_filter_' + str(1)),
-            self.win_sizes[1])
-        res3 = self.get_similarity_score_aux(
-            batch1, batch2, self.__getattr__('g_filter_' + str(2)),
-            self.win_sizes[2])
-        '''
-        #res = self.get_similarity_score_aux(
-        #    batch1, batch2, self.__getattr__('g_filter_' + str(0)),
-        #    self.win_sizes[0])
         for i in range(len(self.win_sizes)):
             res = res + self.get_similarity_score_aux(
                 batch1, batch2, self.__getattr__('g_filter_' + str(i)),
@@ -306,7 +285,7 @@ class SimScore_MSSIM(torch.nn.Module):
         return res
 
 
-class SimScore_L1(torch.nn.Module):
+class SimScore_L1(nn.Module):
     def __init__(self, reduction=False):
         super(SimScore_L1, self).__init__()
         if not reduction:
@@ -321,7 +300,7 @@ class SimScore_L1(torch.nn.Module):
         return res
 
 
-class SimScore_Equal(torch.nn.Module):
+class SimScore_Equal(nn.Module):
     def __init__(self, reduction=False):
         super(SimScore_Equal, self).__init__()
         self.reduction = reduction
@@ -329,12 +308,12 @@ class SimScore_Equal(torch.nn.Module):
     def forward(self, batch1, batch2):
         bs, n_chs, h, w = batch1.shape
         if self.reduction:
-            return torch.ones((n_chs, h, w)).cuda()
+            return torch.ones((n_chs, h, w))
         else:
-            return torch.ones((bs, n_chs, h, w)).cuda()
+            return torch.ones((bs, n_chs, h, w))
 
 
-class SimScore_PSNR(torch.nn.Module):
+class SimScore_PSNR(nn.Module):
     def __init__(self, reduction=False):
         super(SimScore_PSNR, self).__init__()
         if reduction:
@@ -351,14 +330,18 @@ class SimScore_PSNR(torch.nn.Module):
         return res
 
 
-class SimScore_LPIPS(torch.nn.Module):
+class SimScore_LPIPS(nn.Module):
     def __init__(self, n_channels):
         super(SimScore_LPIPS, self).__init__()
         self.n_channels = n_channels
-        self.lpips_net = lpips.LPIPS(net='squeeze', spatial=True)  #.to(device)
-        # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True).to(device)
+        self.lpips_net = lpips.LPIPS(net='squeeze',
+                                     spatial=True,
+                                     verbose=False)
+        self.lpips_net.eval()
+        self.lpips_net.requires_grad_(False)
+        # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True)
         # LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
-        #                                           spatial=True).to(device)
+        #                                           spatial=True)
     def forward(self, batch1, batch2):
         distance = self.lpips_net.forward(batch1, batch2)
         distance = distance.repeat(1, self.n_channels, 1, 1)
@@ -370,12 +353,15 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def __init__(self,
                  n_channels,
                  dst_domain_name,
-                 normalize_output_fcn,
+                 postprocess_eval,
                  similarity_fct='ssim',
                  threshold=0.5):
         super(EnsembleFilter_TwdExpert, self).__init__()
         self.threshold = threshold
-        self.normalize_output_fcn = normalize_output_fcn
+        self.similarity_fct = similarity_fct
+        self.n_channels = n_channels
+        self.dst_domain_name = dst_domain_name
+        self.postprocess_eval = postprocess_eval
 
         if dst_domain_name == 'edges':
             self.ens_aggregation_fcn = self.forward_mean
@@ -434,8 +420,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         similarity_maps = []
         for i in range(n_tasks):
             similarity_map = self.similarity_model(data[..., -1], data[..., i])
-            #.get_similarity_score(
-            #data[..., -1], data[..., i])
             similarity_maps.append(similarity_map)
 
         similarity_maps = torch.stack(similarity_maps,
@@ -445,9 +429,16 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
     def forward(self, data):
         # 1. clamp before using it in ensemble
-        data = self.normalize_output_fcn(data)
         similarity_maps = self.twd_expert_distances(data)
         bs, n_chs, h, w, n_tasks = data.shape
+
+        # from PIL import Image
+        # for i in range(similarity_maps.shape[-1]):
+        #     a = similarity_maps[0, 0, :, :, i]
+        #     Image.fromarray(
+        #         (a * 255).byte().data.cpu().numpy()).save("sim_%d.png" % i)
+        #     print(i, "min, max", a.min().item(), a.max().item())
+
         for chan in range(n_chs):
             chan_mask = similarity_maps[:, chan] < self.threshold
             data[:, chan][chan_mask] = 0
@@ -457,8 +448,16 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         sum_[sum_ == 0] = 1
         similarity_maps = similarity_maps / sum_
 
+        # print("after)")
+        # for i in range(similarity_maps.shape[-1]):
+        #     a = similarity_maps[0, 0, :, :, i]
+        #     Image.fromarray(
+        #         (a * 255 / a.max()).byte().data.cpu().numpy()).save(
+        #             "sim_after_%d.png" % i)
+        #     print(i, "min, max", a.min().item(), a.max().item())
+
         ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
 
         # 2. clamp the ensemble
-        ensemble_result = self.normalize_output_fcn(ensemble_result)
+        ensemble_result = self.postprocess_eval(ensemble_result)
         return ensemble_result

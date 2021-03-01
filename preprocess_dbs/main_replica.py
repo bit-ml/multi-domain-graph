@@ -243,8 +243,9 @@ def depth_to_surface_normals(depth, surfnorm_scalar=256):
                                    surfnorm_scalar * SURFNORM_KERNEL,
                                    padding=1)
         surface_normals[:, 2, ...] = 1
-        surface_normals = surface_normals / surface_normals.norm(dim=1,
-                                                                 keepdim=True)
+        norm = surface_normals.norm(dim=1, keepdim=True)
+        surface_normals = surface_normals / norm
+
     return surface_normals
 
 
@@ -388,24 +389,33 @@ def process_surface_normals(main_db_path, out_path):
     with torch.no_grad():
         for batch_idx, (depth_frames, indexes) in enumerate(tqdm(dataloader)):
             # adjust depth
-            depth_frames = 1 - depth_frames / 14.
+            depth_frames = 1 - depth_frames
             depth_frames = depth_frames.to(device)
 
-            normals_frames = depth_to_surface_normals(depth_frames[:, None])
-            normals_frames = 0.5 * normals_frames + 0.5
+            gt_maps = depth_to_surface_normals(depth_frames)
+            gt_maps = (gt_maps + 1.) / 2.
 
             # permute it to match the normals expert
             permutation = [1, 0, 2]
-            normals_imgs = normals_frames.data.cpu().numpy()[:, permutation]
+            gt_maps = gt_maps[:, permutation]
+
+            # 4. NORMALIZE it
+            gt_maps = gt_maps * 2 - 1
+            gt_maps[:,
+                    2] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
+            norm_normals_maps = torch.norm(gt_maps, dim=1, keepdim=True)
+            norm_normals_maps[norm_normals_maps == 0] = 1
+            gt_maps = gt_maps / norm_normals_maps
+            gt_maps = (gt_maps + 1) / 2
 
             # SAVE Normals npy
-            for sample in zip(normals_imgs, indexes):
+            for sample in zip(gt_maps, indexes):
                 normals_img, sample_idx = sample
 
                 normals_img_path = os.path.join(out_path,
                                                 '%08d.npy' % sample_idx)
                 # TODO: save all batch, in smtg with workers like get_item
-                np.save(normals_img_path, normals_img)
+                np.save(normals_img_path, normals_img.data.cpu().numpy())
 
 
 def get_gt_domains():
@@ -421,7 +431,7 @@ def get_gt_domains():
         elif orig_dom_name == 'depth':
             process_depth(in_path, out_path)
         elif orig_dom_name == 'normals':
-            process_surface_normals(MAIN_DB_PATH, out_path)
+            process_surface_normals(MAIN_GT_OUT_PATH, out_path)
         elif orig_dom_name in ['grayscale', 'halftone_gray', 'hsv']:
             process_gt_from_expert(orig_dom_name)
 

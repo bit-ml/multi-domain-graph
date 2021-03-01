@@ -416,8 +416,12 @@ def process_surface_normals(in_path, out_path):
         data = torch.nn.functional.interpolate(data[None],
                                                (WORKING_H, WORKING_W))[0]
         data = data / 255.
+
+        # 4. NORMALIZE it
         data = data * 2 - 1
+        data[2] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
         data_norm = torch.norm(data, dim=0, keepdim=True)
+        data_norm[data_norm == 0] = 1
         data = data / data_norm
         data = (data + 1) / 2
         data = data.numpy()
