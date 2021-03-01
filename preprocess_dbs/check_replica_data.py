@@ -53,5 +53,6 @@ for idx in indexes:
         if not os.path.exists(path):
             path = os.path.join(gt_path, gt, '%05d.npy' % idx)
         v = torch.from_numpy(np.load(path))
+        v[v > 1] = 1
         img_grid = torchvision.utils.make_grid(v[None], 1)
         writer.add_image('gts/%s' % (gt), img_grid, idx)

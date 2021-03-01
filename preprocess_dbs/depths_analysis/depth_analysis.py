@@ -5,6 +5,7 @@ import cv2
 import torch
 import glob
 import h5py
+import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
@@ -158,6 +159,8 @@ class Replica_RGB_and_Depth_DB(Dataset):
                 glob.glob(glob_pattern))
             glob_pattern = '%s/%s/rgb/*.npy' % (rgb_path, split_name)
             self.rgb_paths = self.rgb_paths + sorted(glob.glob(glob_pattern))
+        # self.depth_paths = self.depth_paths[0:100]
+        # self.rgb_paths = self.rgb_paths[0:100]
 
         assert (len(self.depth_paths) == len(self.rgb_paths))
 
@@ -215,6 +218,28 @@ class Taskonomy_RGB_and_Depth_DB(Dataset):
         return len(self.depth_paths)
 
 
+class TransFct_ScaleMinMax():
+    def __init__(self, min_v, max_v):
+        self.min_v = min_v
+        self.max_v = max_v
+
+    def apply(self, data):
+        data = (data - self.min_v) / (self.max_v - self.min_v)
+        return data
+
+
+class TransFct_Gamma():
+    def __init__(self, gamma_factor):
+        self.gamma_factor = gamma_factor
+
+    def apply(self, data):
+        if torch.is_tensor(data):
+            data = torch.pow(data, self.gamma_factor)
+        else:
+            data = np.power(data, self.gamma_factor)
+        return data
+
+
 class TransFct_Scale():
     def __init__(self, scale_factor):
         self.scale_factor = scale_factor
@@ -261,6 +286,60 @@ class TransFct_Id():
 
     def apply(self, data):
         return data
+
+
+class TransFct_HistoSpecification():
+    def __init__(self, dataloader, bm_fct, gt_transformations,
+                 exp_transformations, n_bins):
+        exp_histo = np.zeros(n_bins + 1)
+        gt_histo = np.zeros(n_bins + 1)
+        for batch in tqdm(dataloader):
+            rgb, depth = batch
+            bm = bm_fct(depth)
+            for gt_trans in gt_transformations:
+                depth = gt_trans.apply(depth)
+
+            depth_exp = depth_expert.apply_expert_batch(rgb)
+            for exp_trans in exp_transformations:
+                depth_exp = exp_trans.apply(depth_exp)
+
+            depth = depth.numpy()
+
+            exp_histo_, _ = np.histogram(depth_exp,
+                                         bins=n_bins + 1,
+                                         range=(0, 1))
+            exp_histo = exp_histo + exp_histo_
+
+            gt_histo_, _ = np.histogram(depth[bm],
+                                        bins=n_bins + 1,
+                                        range=(0, 1))
+            gt_histo = gt_histo + gt_histo_
+
+        gt_histo = gt_histo / np.sum(gt_histo)
+        cum_gt_histo = np.cumsum(gt_histo)
+        exp_histo = exp_histo / np.sum(exp_histo)
+        cum_exp_histo = np.cumsum(exp_histo)
+
+        self.n_bins = n_bins
+        cum_gt_histo = (cum_gt_histo * n_bins).round().astype('int32')
+        cum_exp_histo = (cum_exp_histo * n_bins).round().astype('int32')
+
+        inv_cum_gt_histo = np.zeros(n_bins + 1)
+
+        for i in range(n_bins + 1):
+            pos = np.argwhere(cum_gt_histo >= i)
+            inv_cum_gt_histo[i] = pos[0]
+
+        self.cum_exp_histo = cum_exp_histo.round().astype('int32')
+        self.inv_cum_gt_histo = inv_cum_gt_histo.round().astype('int32')
+
+    def apply(self, data):
+        data_ = data * self.n_bins
+        data_ = data_.astype('int32')
+        data_ = self.inv_cum_gt_histo[self.cum_exp_histo[data_]]
+        data_ = data_.astype('float32')
+        data_ = data_ / self.n_bins
+        return data_
 
 
 def get_limits(dataloader, bm_fct, gt_transformations, exp_transformations):
@@ -337,21 +416,43 @@ def write_histo_data(out_path, suffix, n_bins, gt_bins, exp_bins, common_bins,
     csv_file.close()
 
 
+def write_histo_data_v2(out_path, suffix, n_bins, bins, gt_histo, cum_gt_histo,
+                        exp_histo, cum_exp_histo):
+    csv_file = open(out_path, 'w')
+    csv_file.write(
+        'bin_min_val, bin_max_val, histo_gt_%s, cum_histo_gt_%s, histo_exp_%s, cum_histo_exp_%s\n'
+        % (suffix, suffix, suffix, suffix))
+    for i in range(n_bins):
+        csv_file.write('%8.4f, %8.4f,' % (bins[i], bins[i + 1]))
+        csv_file.write('%8.4f, %8.4f,' % (gt_histo[i], cum_gt_histo[i]))
+        csv_file.write('%8.4f, %8.4f,' % (exp_histo[i], cum_exp_histo[i]))
+        csv_file.write('\n')
+    csv_file.close()
+
+
 def save_example(dataloader, bm_fct, save_path, gt_transformations,
                  exp_transformations):
 
     for batch in tqdm(dataloader):
         rgb, depth = batch
-        init_depth = depth[3, 0, :, :]
+
         bm = bm_fct(depth)
+        idx = 0
         for gt_trans in gt_transformations:
             depth = gt_trans.apply(depth)
+            if idx == 0:
+                init_depth = depth[3, 0, :, :]
+            idx += 1
         after_depth = depth[3, 0, :, :]
 
         depth_exp = depth_expert.apply_expert_batch(rgb)
-        init_depth_exp = depth_exp[3, 0, :, :]
+
+        idx = 0
         for exp_trans in exp_transformations:
             depth_exp = exp_trans.apply(depth_exp)
+            if idx == 0:
+                init_depth_exp = depth_exp[3, 0, :, :]
+            idx += 1
         after_depth_exp = depth_exp[3, 0, :, :]
 
         depth = depth.numpy()
@@ -362,10 +463,9 @@ def save_example(dataloader, bm_fct, save_path, gt_transformations,
         break
 
 
-def get_histo(dataloader, bm_fct, gt_min, gt_max, exp_min, exp_max, out_path,
-              suffix, quantiles, gt_transformations, exp_transformations):
-
-    n_bins = 10000
+def get_histo(dataloader, bm_fct, n_bins, gt_min, gt_max, exp_min, exp_max,
+              out_path, suffix, quantiles, gt_transformations,
+              exp_transformations):
     exp_histo = np.zeros(n_bins)
     gt_histo = np.zeros(n_bins)
     common_exp_histo = np.zeros(n_bins)
@@ -427,6 +527,93 @@ def get_histo(dataloader, bm_fct, gt_min, gt_max, exp_min, exp_max, out_path,
                      gt_histo, cum_gt_histo, exp_histo, cum_exp_histo,
                      common_gt_histo, cum_common_gt_histo, common_exp_histo,
                      cum_common_exp_histo)
+
+    return gt_quantiles, exp_quantiles
+
+
+def get_histogram(dataloader, bm_fct, n_bins, out_path, suffix,
+                  gt_transformations, exp_transformations):
+    exp_histo = np.zeros(n_bins)
+    gt_histo = np.zeros(n_bins)
+    for batch in tqdm(dataloader):
+        rgb, depth = batch
+        bm = bm_fct(depth)
+        for gt_trans in gt_transformations:
+            depth = gt_trans.apply(depth)
+
+        depth_exp = depth_expert.apply_expert_batch(rgb)
+        for exp_trans in exp_transformations:
+            depth_exp = exp_trans.apply(depth_exp)
+
+        depth = depth.numpy()
+
+        exp_histo_, histo_bins = np.histogram(depth_exp,
+                                              bins=n_bins,
+                                              range=(-0.5, 1.5))
+        exp_histo = exp_histo + exp_histo_
+
+        gt_histo_, histo_bins = np.histogram(depth[bm],
+                                             bins=n_bins,
+                                             range=(-0.5, 1.5))
+        gt_histo = gt_histo + gt_histo_
+
+    gt_histo = gt_histo / np.sum(gt_histo)
+    cum_gt_histo = np.cumsum(gt_histo)
+    exp_histo = exp_histo / np.sum(exp_histo)
+    cum_exp_histo = np.cumsum(exp_histo)
+
+    write_histo_data_v2(out_path, suffix, n_bins, histo_bins, gt_histo,
+                        cum_gt_histo, exp_histo, cum_exp_histo)
+
+    return histo_bins, gt_histo, cum_gt_histo, exp_histo, cum_exp_histo
+
+
+def get_histo_v2(dataloader, bm_fct, n_bins, gt_min, gt_max, exp_min, exp_max,
+                 out_path, suffix, quantiles, gt_transformations,
+                 exp_transformations):
+    exp_histo = np.zeros(n_bins)
+    gt_histo = np.zeros(n_bins)
+    for batch in tqdm(dataloader):
+        rgb, depth = batch
+        bm = bm_fct(depth)
+        for gt_trans in gt_transformations:
+            depth = gt_trans.apply(depth)
+
+        depth_exp = depth_expert.apply_expert_batch(rgb)
+        for exp_trans in exp_transformations:
+            depth_exp = exp_trans.apply(depth_exp)
+
+        depth = depth.numpy()
+
+        depth = (depth - gt_min) / (gt_max - gt_min)
+        depth_exp = (depth_exp - exp_min) / (exp_max - exp_min)
+
+        exp_histo_, histo_bins = np.histogram(depth_exp,
+                                              bins=n_bins,
+                                              range=(-1, 2))
+        exp_histo = exp_histo + exp_histo_
+
+        gt_histo_, histo_bins = np.histogram(depth[bm],
+                                             bins=n_bins,
+                                             range=(-1, 2))
+        gt_histo = gt_histo + gt_histo_
+
+    gt_histo = gt_histo / np.sum(gt_histo)
+    cum_gt_histo = np.cumsum(gt_histo)
+    exp_histo = exp_histo / np.sum(exp_histo)
+    cum_exp_histo = np.cumsum(exp_histo)
+
+    gt_quantiles = []
+    exp_quantiles = []
+    for quant in quantiles:
+        pos = np.argwhere(cum_gt_histo >= quant)[0]
+        gt_quantiles.append(histo_bins[pos])
+
+        pos = np.argwhere(cum_exp_histo >= quant)[0]
+        exp_quantiles.append(histo_bins[pos])
+
+    write_histo_data_v2(out_path, suffix, n_bins, histo_bins, gt_histo,
+                        cum_gt_histo, exp_histo, cum_exp_histo)
 
     return gt_quantiles, exp_quantiles
 
@@ -665,6 +852,8 @@ if __name__ == "__main__":
         max_gt_val = 770
 
     if argv[3] == 'all':
+        n_bins_gen_histo = 1000
+        n_bins_histospecification = 100000
         print('%s' % (dataset))
         db = db_type(gt_path, rgb_path, splits)
         dataloader = DataLoader(db,
@@ -678,79 +867,93 @@ if __name__ == "__main__":
         print('EXP min: %8.4f  --  max: %8.4f' % (exp_min, exp_max))
         print('L1 : %8.4f' % (l1))
         print('L2 : %8.4f' % (l2))
+        # Step 1 - scale all in range [0,1]
+        gt_scale = TransFct_ScaleMinMax(gt_min, gt_max)
+        exp_scale = TransFct_ScaleMinMax(exp_min, exp_max)
+        np.save('%s_gt_min.npy' % dataset, gt_min)
+        np.save('%s_gt_max.npy' % dataset, gt_max)
+        np.save('%s_exp_min.npy' % dataset, exp_min)
+        np.save('%s_exp_max.npy' % dataset, exp_max)
 
-        # Step 1 - get medians for gt and expert results & save histograms
-        csv_path = '%s_initial_histo_run_%d.csv' % (dataset, run_type)
+        gt_min, gt_max, exp_min, exp_max, l1, l2 = get_limits(
+            dataloader, bm_fct, [gt_scale], [exp_scale])
+        print('GT  min: %8.4f  --  max: %8.4f' % (gt_min, gt_max))
+        print('EXP min: %8.4f  --  max: %8.4f' % (exp_min, exp_max))
+        print('L1 : %8.4f' % (l1))
+        print('L2 : %8.4f' % (l2))
+        # Step 2 - compute histograms of scaled values
+        csv_path = './logs_%s/%s_initial_histo.csv' % (dataset, dataset)
         suffix = '%s_all' % (dataset)
-        gt_quants, exp_quants = get_histo(dataloader, bm_fct, gt_min, gt_max,
-                                          exp_min, exp_max, csv_path, suffix,
-                                          np.array([0.5]), [], [])
-        gt_th_50 = gt_quants[0]
-        exp_th_50 = exp_quants[0]
-        print('GT  th_50: %8.4f' % (gt_th_50))
-        print('EXP th_50: %8.4f' % (exp_th_50))
-        scale_factor_for_exp = gt_th_50 / exp_th_50
-        print('Scale factor for EXP : %8.4f' % (scale_factor_for_exp))
+        histo_bins, gt_histo, cum_gt_histo, exp_histo, cum_exp_histo = get_histogram(
+            dataloader, bm_fct, n_bins_gen_histo, csv_path, suffix, [gt_scale],
+            [exp_scale])
+        # save plot
+        plt.plot(histo_bins[1:], gt_histo, label='gt')
+        plt.plot(histo_bins[1:], exp_histo, label='exp')
+        plt.legend()
+        plt.savefig('./logs_%s/%s_initial_histo.png' % (dataset, dataset))
+        plt.close()
 
-        # Step 2 - get range for scaled exp & errors
-        exp_scale_trans = TransFct_Scale(scale_factor_for_exp)
+        # get th for 95% of gt histogram
+        pos = np.argwhere(cum_gt_histo >= 0.95)[0]
+        gt_th_95 = histo_bins[pos]
+        np.save('%s_gt_th_95.npy' % dataset, gt_th_95)
+        gt_halfclamp_trans = TransFct_HistoHalfClamp(gt_th_95)
+        # Step 3 - get limits & eval for scaled and clamped gt (95%)
+        gt_min, gt_max, exp_min, exp_max, l1, l2 = get_limits(
+            dataloader, bm_fct, [gt_scale, gt_halfclamp_trans], [exp_scale])
+        print('GT  min: %8.4f  --  max: %8.4f' % (gt_min, gt_max))
+        print('EXP min: %8.4f  --  max: %8.4f' % (exp_min, exp_max))
+        print('L1 : %8.4f' % (l1))
+        print('L2 : %8.4f' % (l2))
 
-        s_gt_min, s_gt_max, s_exp_min, s_exp_max, s_l1, s_l2 = get_limits(
-            dataloader, bm_fct, [], [exp_scale_trans])
-        print('after scale: GT  min: %8.4f  --  max: %8.4f' %
-              (s_gt_min, s_gt_max))
-        print('after scale: EXP min: %8.4f  --  max: %8.4f' %
-              (s_exp_min, s_exp_max))
-        print('after scale L1 : %8.4f' % (s_l1))
-        print('after scale L2 : %8.4f' % (s_l2))
-
-        # Step 3 - get histo of scaled exp
-        csv_path = '%s_scale_exp_histo_run_%d.csv' % (dataset, run_type)
+        csv_path = './logs_%s/%s_afterScale_and_GTClamp_histo.csv' % (dataset,
+                                                                      dataset)
         suffix = '%s_all' % (dataset)
-        gt_quants, exp_quants = get_histo(dataloader, bm_fct, s_gt_min,
-                                          s_gt_max, s_exp_min, s_exp_max,
-                                          csv_path, suffix,
-                                          np.array([0.05, 0.95]), [],
-                                          [exp_scale_trans])
-        gt_th_5 = gt_quants[0]
-        gt_th_95 = gt_quants[1]
-        exp_th_5 = exp_quants[0]
-        exp_th_95 = exp_quants[1]
-        print('GT  th_5: %8.4f -- th_95: %8.4f' % (gt_th_5, gt_th_95))
-        print('EXP th_5: %8.4f -- th_95: %8.4f' % (exp_th_5, exp_th_95))
+        histo_bins, gt_histo, cum_gt_histo, exp_histo, cum_exp_histo = get_histogram(
+            dataloader, bm_fct, n_bins_gen_histo, csv_path, suffix,
+            [gt_scale, gt_halfclamp_trans], [exp_scale])
+        # save plot
+        plt.plot(histo_bins[1:], gt_histo, label='gt')
+        plt.plot(histo_bins[1:], exp_histo, label='exp')
+        plt.legend()
+        plt.savefig('./logs_%s/%s_GTkeep95p_histo.png' % (dataset, dataset))
+        plt.close()
 
-        # Step 4 - get range for scaled exp & norm both & errors
-        if run_type == 0 or run_type == 1:
-            exp_norm_trans = TransFct_HistoClamp(exp_th_5, exp_th_95)
-            gt_norm_trans = TransFct_HistoClamp(gt_th_5, gt_th_95)
-        else:
-            exp_norm_trans = TransFct_HistoHalfClamp(exp_th_95)
-            gt_norm_trans = TransFct_HistoHalfClamp(gt_th_95)
-
-        if run_type == 1 or run_type == 3:
-            exp_clamp = TransFct_Clamp(0, 1)
-        else:
-            exp_clamp = TransFct_Id()
-
-        sn_gt_min, sn_gt_max, sn_exp_min, sn_exp_max, sn_l1, sn_l2 = get_limits(
-            dataloader, bm_fct, [gt_norm_trans],
-            [exp_scale_trans, exp_norm_trans, exp_clamp])
-        print('after scale & norm: GT  min: %8.4f  --  max: %8.4f' %
-              (sn_gt_min, sn_gt_max))
-        print('after scale & norm: EXP min: %8.4f  --  max: %8.4f' %
-              (sn_exp_min, sn_exp_max))
-        print('after scale & norm L1 : %8.4f' % (sn_l1))
-        print('after scale & norm L2 : %8.4f' % (sn_l2))
-
-        # Step 5 - get histo of scaled exp & norm both + eval
-        csv_path = '%s_scale_exp_norm_all_histo_run_%d.csv' % (dataset,
-                                                               run_type)
+        exp_histo_specification = TransFct_HistoSpecification(
+            dataloader, bm_fct, [gt_scale, gt_halfclamp_trans], [exp_scale],
+            n_bins_histospecification)
+        np.save('%s_n_bins.npy' % dataset, exp_histo_specification.n_bins)
+        np.save('%s_cum_exp_histo.npy' % dataset,
+                exp_histo_specification.cum_exp_histo)
+        np.save('%s_inv_cum_gt_histo.npy' % dataset,
+                exp_histo_specification.inv_cum_gt_histo)
+        gt_min, gt_max, exp_min, exp_max, l1, l2 = get_limits(
+            dataloader, bm_fct, [gt_scale, gt_halfclamp_trans],
+            [exp_scale, exp_histo_specification])
+        print('GT  min: %8.4f  --  max: %8.4f' % (gt_min, gt_max))
+        print('EXP min: %8.4f  --  max: %8.4f' % (exp_min, exp_max))
+        print('L1 : %8.4f' % (l1))
+        print('L2 : %8.4f' % (l2))
+        csv_path = './logs_%s/%s_final_histo.csv' % (dataset, dataset)
         suffix = '%s_all' % (dataset)
-        _ = get_histo(dataloader, bm_fct, sn_gt_min, sn_gt_max, sn_exp_min,
-                      sn_exp_max, csv_path, suffix, [], [gt_norm_trans],
-                      [exp_scale_trans, exp_norm_trans, exp_clamp])
-
-        # Save example
-        save_path = '%s_example_run_%d.png' % (dataset, run_type)
-        save_example(dataloader, bm_fct, save_path, [gt_norm_trans],
-                     [exp_scale_trans, exp_norm_trans, exp_clamp])
+        histo_bins, gt_histo, cum_gt_histo, exp_histo, cum_exp_histo = get_histogram(
+            dataloader, bm_fct, n_bins_gen_histo, csv_path, suffix,
+            [gt_scale, gt_halfclamp_trans],
+            [exp_scale, exp_histo_specification])
+        # save plot
+        plt.plot(histo_bins[1:], gt_histo, label='gt')
+        plt.plot(histo_bins[1:], exp_histo, label='exp')
+        plt.savefig('./logs_%s/%s_final_histo.png' % (dataset, dataset))
+        gt_min, gt_max, exp_min, exp_max, l1, l2 = get_limits(
+            dataloader, bm_fct, [gt_scale, gt_halfclamp_trans],
+            [exp_scale, exp_histo_specification])
+        print('GT  min: %8.4f  --  max: %8.4f' % (gt_min, gt_max))
+        print('EXP min: %8.4f  --  max: %8.4f' % (exp_min, exp_max))
+        print('L1 : %8.4f' % (l1))
+        print('L2 : %8.4f' % (l2))
+        # save example
+        save_path = '%s_example.png' % (dataset)
+        save_example(dataloader, bm_fct, save_path,
+                     [gt_scale, gt_halfclamp_trans],
+                     [exp_scale, exp_histo_specification])

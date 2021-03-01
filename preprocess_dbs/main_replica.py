@@ -91,6 +91,15 @@ SURFNORM_KERNEL = torch.from_numpy(
         [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
     ]))[:, np.newaxis, ...].to(dtype=torch.float32, device=device)
 
+replica_gt_min_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_gt_min.npy'
+replica_gt_max_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_gt_max.npy'
+replica_gt_th_95_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_gt_th_95.npy'
+replica_exp_min_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_exp_min.npy'
+replica_exp_max_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_exp_max.npy'
+replica_n_bins_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_n_bins.npy'
+replica_cum_exp_histo = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_cum_exp_histo.npy'
+replica_inv_cum_gt_histo = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_inv_cum_gt_histo.npy'
+
 
 def check_arguments_without_delete(argv):
     global RUN_TYPE
@@ -261,6 +270,60 @@ def process_rgb(in_path, out_path):
     os.system("ln -s %s %s" % (out_path, MAIN_EXP_OUT_PATH))
 
 
+class TransFct_ScaleMinMax():
+    def __init__(self, min_npy_path, max_npy_path):
+        self.min_v = np.load(min_npy_path)
+        self.max_v = np.load(max_npy_path)
+
+    def apply(self, data):
+        data = (data - self.min_v) / (self.max_v - self.min_v)
+        return data
+
+
+class TransFct_HistoHalfClamp():
+    def __init__(self, th_path):
+        self.th_95 = np.load(th_path)
+
+    def apply(self, data):
+        data = data / self.th_95
+        return data
+
+
+class TransFct_HistoSpecification():
+    def __init__(self, n_bins_path, cum_exp_histo_path, inv_cum_gt_histo_path):
+        self.n_bins = np.load(n_bins_path)
+        self.cum_exp_histo = np.load(cum_exp_histo_path)
+        self.inv_cum_gt_histo = np.load(inv_cum_gt_histo_path)
+
+    def apply(self, data):
+        data_ = data * self.n_bins
+        data_ = data_.astype('int32')
+        data_ = self.inv_cum_gt_histo[self.cum_exp_histo[data_]]
+        data_ = data_.astype('float32')
+        data_ = data_ / self.n_bins
+        return data_
+
+
+class TransFct_DepthExp():
+    def __init__(self, min_path, max_path, n_bins_path, cum_exp_histo_path,
+                 inv_cum_gt_histo_path):
+        self.min_v = np.load(min_path)
+        self.max_v = np.load(max_path)
+        self.n_bins = np.load(n_bins_path)
+        self.cum_exp_histo = np.load(cum_exp_histo_path)
+        self.inv_cum_gt_histo = np.load(inv_cum_gt_histo_path)
+
+    def apply(self, data):
+        data = (data - self.min_v) / (self.max_v - self.min_v)
+        data_ = data * self.n_bins
+        data_ = data_.astype('int32')
+        data_ = self.inv_cum_gt_histo[self.cum_exp_histo[data_]]
+        data_ = data_.astype('float32')
+        data_ = data_ / self.n_bins
+        data_ = data_.astype('float32')
+        return data_
+
+
 class GT_DepthDataset(Dataset):
     def __init__(self, depth_path, split_name):
         super(GT_DepthDataset, self).__init__()
@@ -271,11 +334,17 @@ class GT_DepthDataset(Dataset):
         glob_pattern = '%s/*.npy' % (depth_path)
         self.depth_paths = sorted(glob.glob(glob_pattern))
 
+        self.scale_min_max_fct = TransFct_ScaleMinMax(replica_gt_min_path,
+                                                      replica_gt_max_path)
+        self.half_clamp_fct = TransFct_HistoHalfClamp(replica_gt_th_95_path)
+
     def __getitem__(self, index):
         depth = np.load(self.depth_paths[index])
         depth[depth == 0] = float("nan")
-        depth = depth - self.th_5
-        depth = depth / (self.th_95 - self.th_5)
+        depth = self.scale_min_max_fct.apply(depth)
+        depth = self.half_clamp_fct.apply(depth)
+        #depth = depth - self.th_5
+        #depth = depth / (self.th_95 - self.th_5)
         # depth = depth / 15.625 - old version
         depth = depth[None]
         return depth
@@ -415,6 +484,13 @@ def post_process_depth_xtc_fct(data):
 
 
 def get_exp_results(main_exp_out_path, experts_name):
+
+    depth_exp_trans_fct = TransFct_DepthExp(replica_exp_min_path,
+                                            replica_exp_max_path,
+                                            replica_n_bins_path,
+                                            replica_cum_exp_histo,
+                                            replica_inv_cum_gt_histo)
+
     with torch.no_grad():
         rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')
         batch_size = 150
@@ -437,7 +513,8 @@ def get_exp_results(main_exp_out_path, experts_name):
             expert = get_expert(exp_name)
 
             if exp_name == 'depth_n_xtc':
-                post_process_fct = post_process_depth_xtc_fct
+                #post_process_fct = post_process_depth_xtc_fct
+                post_process_fct = depth_exp_trans_fct.apply
             else:
                 post_process_fct = lambda x: x
             exp_out_path = os.path.join(main_exp_out_path, exp_name)
@@ -451,6 +528,7 @@ def get_exp_results(main_exp_out_path, experts_name):
                 frames = frames.permute(0, 2, 3, 1) * 255.
                 results = expert.apply_expert_batch(frames)
                 results = post_process_fct(results)
+
                 for sample in zip(results, indexes):
                     expert_res, sample_idx = sample
 
