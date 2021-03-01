@@ -213,8 +213,8 @@ class Generator:
 
         # Save to npy
         save_path_npy = os.path.join(
-            out_folder, self.filename_from_frame_number(frame_number)).replace(
-                ".png", "").replace("/images/", "/rgb/")
+            out_folder,
+            self.filename_from_frame_number(frame_number)).replace(".png", "")
 
         color_observation = (color_observation / 255.).astype(np.float32)
         color_observation = color_observation[:, :, :3].transpose(2, 0, 1)
@@ -257,7 +257,7 @@ class Generator:
                           split_name, scene_dict):
         self.save_color_observation(
             observation, frame_number,
-            os.path.join(out_folder, split_name, 'images'))
+            os.path.join(out_folder, split_name, 'rgb'))
         # self.save_semantic_observation(
         #     observation, frame_number,
         #     os.path.join(out_folder, 'annotations', f"panoptic_{split_name}"),
@@ -421,17 +421,20 @@ def main():
     """Main function of the program.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataset_folder",
-                        type=str,
-                        help="Folder containing Replica dataset",
-                        default="../replica_dataset_orig")
-    parser.add_argument("--output",
-                        type=str,
-                        help="Output folder",
-                        default="test_output_folder")
+    parser.add_argument(
+        "--dataset_folder",
+        type=str,
+        help="Folder containing Replica dataset",
+        default="/data/multi-domain-graph-6/datasets/replica_dataset_orig")
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Output folder",
+        default="/data/multi-domain-graph-2/datasets/replica_raw_2")
     args = parser.parse_args()
 
     generator = Generator(path=args.dataset_folder)
+    # 48 rooms
     generator.generate(out_folder=args.output,
                        split_name='train',
                        frames_per_room=200)

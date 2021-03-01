@@ -108,7 +108,7 @@ class SSIMLoss(torch.nn.Module):
                                             self.sigma).to(device)
 
     def forward(self, batch1, batch2):
-    
+
         mu1 = torch.nn.functional.conv2d(batch1,
                                          self.g_filter,
                                          padding=self.win_size // 2,
@@ -355,9 +355,9 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                  dst_domain_name,
                  postprocess_eval,
                  similarity_fct='ssim',
-                 threshold=0.5):
+                 thresholds=[0.5]):
         super(EnsembleFilter_TwdExpert, self).__init__()
-        self.threshold = threshold
+        self.thresholds = thresholds
         self.similarity_fct = similarity_fct
         self.n_channels = n_channels
         self.dst_domain_name = dst_domain_name
@@ -428,36 +428,38 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return similarity_maps
 
     def forward(self, data):
-        # 1. clamp before using it in ensemble
-        similarity_maps = self.twd_expert_distances(data)
-        bs, n_chs, h, w, n_tasks = data.shape
+        for meanshift_iter in range(len(self.thresholds)):
+            similarity_maps = self.twd_expert_distances(data)
+            bs, n_chs, h, w, n_tasks = data.shape
 
-        # from PIL import Image
-        # for i in range(similarity_maps.shape[-1]):
-        #     a = similarity_maps[0, 0, :, :, i]
-        #     Image.fromarray(
-        #         (a * 255).byte().data.cpu().numpy()).save("sim_%d.png" % i)
-        #     print(i, "min, max", a.min().item(), a.max().item())
+            # from PIL import Image
+            # for i in range(similarity_maps.shape[-1]):
+            #     a = similarity_maps[0, 0, :, :, i]
+            #     Image.fromarray(
+            #         (a * 255).byte().data.cpu().numpy()).save("sim_%d.png" % i)
+            #     print(i, "min, max", a.min().item(), a.max().item())
 
-        for chan in range(n_chs):
-            chan_mask = similarity_maps[:, chan] < self.threshold
-            data[:, chan][chan_mask] = 0
-            similarity_maps[:, chan][chan_mask] = 0
+            for chan in range(n_chs):
+                chan_mask = similarity_maps[:, chan] < self.thresholds[
+                    meanshift_iter]
+                data[:, chan][chan_mask] = 0
+                similarity_maps[:, chan][chan_mask] = 0
 
-        sum_ = torch.sum(similarity_maps, dim=-1, keepdim=True)
-        sum_[sum_ == 0] = 1
-        similarity_maps = similarity_maps / sum_
+            sum_ = torch.sum(similarity_maps, dim=-1, keepdim=True)
+            sum_[sum_ == 0] = 1
+            similarity_maps = similarity_maps / sum_
 
-        # print("after)")
-        # for i in range(similarity_maps.shape[-1]):
-        #     a = similarity_maps[0, 0, :, :, i]
-        #     Image.fromarray(
-        #         (a * 255 / a.max()).byte().data.cpu().numpy()).save(
-        #             "sim_after_%d.png" % i)
-        #     print(i, "min, max", a.min().item(), a.max().item())
+            # print("after)")
+            # for i in range(similarity_maps.shape[-1]):
+            #     a = similarity_maps[0, 0, :, :, i]
+            #     Image.fromarray(
+            #         (a * 255 / a.max()).byte().data.cpu().numpy()).save(
+            #             "sim_after_%d.png" % i)
+            #     print(i, "min, max", a.min().item(), a.max().item())
 
-        ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
+            ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
 
-        # 2. clamp the ensemble
-        ensemble_result = self.postprocess_eval(ensemble_result)
+            # 2. clamp the ensemble
+            ensemble_result = self.postprocess_eval(ensemble_result)
+            data[..., -1] = ensemble_result
         return ensemble_result

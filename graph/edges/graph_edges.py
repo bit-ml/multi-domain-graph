@@ -31,7 +31,7 @@ class Edge:
             n_channels=expert2.no_maps_as_ens_input(),
             similarity_fct=similarity_fct,
             postprocess_eval=expert2.postprocess_eval,
-            threshold=0.5,
+            thresholds=[0.5],
             dst_domain_name=expert2.domain_name).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
@@ -269,7 +269,11 @@ class Edge:
             print("Model saved at %s" % path)
 
     def loss_from_str(self, loss_str, params):
-        if loss_str == 'smoothl1':
+        if loss_str == 'l1':
+            loss = nn.L1Loss()
+        elif loss_str == 'l2':
+            loss = nn.MSELoss()
+        elif loss_str == 'smoothl1':
             smoothl1_beta = params["smoothl1_beta"]
             loss = nn.SmoothL1Loss(beta=smoothl1_beta)
         elif loss_str == 'ssim':
@@ -325,7 +329,8 @@ class Edge:
             for idx_loss, loss in enumerate(self.training_losses):
                 crt_loss = loss(domain2_pred,
                                 self.gt_train_transform(domain2_gt))
-                backward_losses += crt_loss
+                backward_losses += crt_loss * self.training_losses_weights[
+                    idx_loss]
                 # TODO: is it faster to do backward on the sum vs individually?
                 train_losses[idx_loss] += crt_loss.item()
             backward_losses.backward()
@@ -348,9 +353,6 @@ class Edge:
         eval_losses = torch.zeros(len(self.training_losses))
 
         for batch in loader:
-            #if split_tag == "Test":
-            #    domain1, _, domain2_gt = batch
-            #else:
             domain1, domain2_gt = batch
             domain2_gt = domain2_gt.to(device=device)
 
@@ -393,12 +395,12 @@ class Edge:
             self.scheduler.step(valid_losses.sum())
 
             # verbose
-            print("[%d epoch] VAL [" % epoch, end="")
+            print("[%d epoch] VAL: " % epoch, end="")
             for idx in range(len(valid_losses)):
-                print("Loss %.2f" % valid_losses[idx], end=" ")
-            print("]  TRAIN [", end="")
+                print("Loss %.2f" % valid_losses[idx], end="  ")
+            print("   TRAIN: ", end="")
             for idx in range(len(train_losses)):
-                print("Loss %.2f" % valid_losses[idx], end=" ")
+                print("Loss %.2f" % valid_losses[idx], end="  ")
 
             crt_lr = self.optimizer.param_groups[0]['lr']
             print("[LR %f]" % crt_lr)
