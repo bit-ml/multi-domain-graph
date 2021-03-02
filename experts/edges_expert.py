@@ -2,7 +2,6 @@
 import os
 
 import numpy as np
-import tensorflow as tf
 import torch
 import torch.nn.functional as F
 
@@ -37,7 +36,8 @@ class EdgesModel(BasicExpert):
         edge_maps = []
         batch_rgb_frames = batch_rgb_frames.numpy().astype(np.float32)
         preds = self.model(batch_rgb_frames, training=False)
-        edge_maps = tf.sigmoid(preds).numpy()[:, :, :, 0]
+        edge_maps = torch.sigmoid(torch.from_numpy(
+            preds.numpy())).numpy()[:, :, :, 0]
         edge_maps = edge_maps[:, None, :, :]
         edge_maps = edge_maps.astype('float32')
         return edge_maps

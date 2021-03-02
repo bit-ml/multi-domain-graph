@@ -50,7 +50,7 @@ class MultiDomainGraph:
                         config.get('Edge Models', 'model_type'))
                     if model_type == 0:
                         bs_test = 80
-                        bs_train = 70
+                        bs_train = 52
                     else:
                         bs_test = 60
                         bs_train = 40

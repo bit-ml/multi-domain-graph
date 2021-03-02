@@ -1,6 +1,5 @@
 import os
 
-import encoding
 import numpy as np
 import torch
 import torchvision
@@ -216,25 +215,18 @@ class SSegHRNet(BasicExpert):
                                               return_feature_maps=True),
                                  segSize=256)
 
-        sseg_maps = self.post_process_ops(sseg_maps, self.expert_specific)
-
-        sseg_maps = np.array(sseg_maps.data.cpu().numpy()).astype('long')
-        return sseg_maps
-
-    def expert_specific(self, inp):
-        '''
-            for classification
-        '''
         # combine outputs
         for tuple in self.combine_list:
             first_elem = tuple[0]
             for elem in tuple[1:]:
-                inp[:, first_elem] += inp[:, elem]
-                inp[:, elem] = 0
+                sseg_maps[:, first_elem] += sseg_maps[:, elem]
+                sseg_maps[:, elem] = 0
 
-        class_labels = inp[:, self.to_keep_list].argmax(dim=1)[:, None]
+        class_labels = sseg_maps[:, self.to_keep_list].argmax(dim=1)[:, None]
 
+        class_labels = np.array(class_labels.data.cpu().numpy()).astype('long')
         return class_labels
+
 
     def no_maps_as_nn_input(self):
         return 1
@@ -265,6 +257,7 @@ class SSegHRNet(BasicExpert):
 class SSegResNeSt(BasicExpert):
     def __init__(self, full_expert=True):
         if full_expert:
+            import encoding
             model_name = "EncNet_ResNet50s_ADE"
             self.model = encoding.models.get_model(model_name, pretrained=True)
             self.model.eval()

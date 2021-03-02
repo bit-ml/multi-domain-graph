@@ -1,20 +1,18 @@
+import glob
 import os
 import sys
-import traceback
-import glob
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-#import experts.cartoon_expert
 import experts.depth_expert
-import experts.edges_expert
 import experts.grayscale_expert
 import experts.halftone_expert
 import experts.hsv_expert
@@ -23,9 +21,7 @@ import experts.normals_expert
 import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
-#import experts.semantic_segmentation_expert
-import experts.sobel_expert
-import experts.superpixel_expert
+import experts.semantic_segmentation_expert
 import experts.vmos_stm_expert
 
 depth_gt_th_50 = 1.5025
@@ -57,15 +53,15 @@ VALID_GT_DOMAINS = [\
 VALID_EXPERTS_NAME = [\
     'depth_n_xtc',
     'depth_sgdepth',
-    'edges_dexined',
     'normals_xtc',
     'sem_seg_hrnet',
-    'cartoon_wb',
     'superpixel_fcn',
     'sobel_small',
     'sobel_medium',
-    'sobel_large'\
-]
+    'sobel_large',
+    'cartoon_wb',
+    'edges_dexined',
+                      ]
 VALID_SPLITS_NAME = ["val", "test", "train"]
 
 RUN_TYPE = []
@@ -84,21 +80,18 @@ usage_str = 'usage: python main_taskonomy.py type split-name exp1 exp2 ...'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-SURFNORM_KERNEL = torch.from_numpy(
-    np.array([
-        [[1, 2, 1], [0, 0, 0], [-1, -2, -1]],
-        [[1, 0, -1], [2, 0, -2], [1, 0, -1]],
-        [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
-    ]))[:, np.newaxis, ...].to(dtype=torch.float32, device=device)
+REPLICA_PROC_NAME = "replica_2"
+REPLICA_RAW_NAME = "replica_raw_2"
 
-replica_gt_min_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_gt_min.npy'
-replica_gt_max_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_gt_max.npy'
-replica_gt_th_95_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_gt_th_95.npy'
-replica_exp_min_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_exp_min.npy'
-replica_exp_max_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_exp_max.npy'
-replica_n_bins_path = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_n_bins.npy'
-replica_cum_exp_histo = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_cum_exp_histo.npy'
-replica_inv_cum_gt_histo = r'/data/multi-domain-graph-6/datasets/replica_raw/depth_align_data/replica_inv_cum_gt_histo.npy'
+DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-2/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
+replica_gt_min_path = r'%s/gt_min.npy' % DEPTH_ALIGNED_PATH
+replica_gt_max_path = r'%s/gt_max.npy' % DEPTH_ALIGNED_PATH
+replica_gt_th_95_path = r'%s/gt_th_95.npy' % DEPTH_ALIGNED_PATH
+replica_exp_min_path = r'%s/exp_min.npy' % DEPTH_ALIGNED_PATH
+replica_exp_max_path = r'%s/exp_max.npy' % DEPTH_ALIGNED_PATH
+replica_n_bins_path = r'%s/n_bins.npy' % DEPTH_ALIGNED_PATH
+replica_cum_exp_histo = r'%s/cum_exp_histo.npy' % DEPTH_ALIGNED_PATH
+replica_inv_cum_gt_histo = r'%s/inv_cum_gt_histo.npy' % DEPTH_ALIGNED_PATH
 
 
 def check_arguments_without_delete(argv):
@@ -126,9 +119,15 @@ def check_arguments_without_delete(argv):
         return status, status_code
     SPLIT_NAME = split_name
 
-    MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/replica_raw/%s' % split_name
-    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/%s' % split_name
-    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica/%s' % split_name
+    MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/%s/%s' % (
+        REPLICA_RAW_NAME, split_name)
+    MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/%s/%s' % (
+        REPLICA_PROC_NAME, split_name)
+    MAIN_EXP_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/%s/%s' % (
+        REPLICA_PROC_NAME, split_name)
+
+    os.system("mkdir -p %s" % MAIN_GT_OUT_PATH)
+    os.system("mkdir -p %s" % MAIN_EXP_OUT_PATH)
 
     if RUN_TYPE == 0:
         if argv[3] == 'all':
@@ -210,8 +209,17 @@ def get_expert(exp_name):
     elif exp_name == 'depth_xtc' or exp_name == 'depth_n_xtc':
         return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'edges_dexined':
+        import experts.edges_expert
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'normals_xtc':
+        global SURFNORM_KERNEL
+        SURFNORM_KERNEL = torch.from_numpy(
+            np.array([
+                [[1, 2, 1], [0, 0, 0], [-1, -2, -1]],
+                [[1, 0, -1], [2, 0, -2], [1, 0, -1]],
+                [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+            ]))[:, np.newaxis, ...].to(dtype=torch.float32, device=device)
+
         return experts.normals_expert.SurfaceNormalsXTC(dataset_name="replica",
                                                         full_expert=True)
     elif exp_name == 'saliency_seg_egnet':
@@ -226,14 +234,19 @@ def get_expert(exp_name):
     elif exp_name == 'hsv':
         return experts.hsv_expert.HSVExpert(full_expert=True)
     elif exp_name == 'cartoon_wb':
+        import experts.cartoon_expert
         return experts.cartoon_expert.CartoonWB(full_expert=True)
     elif exp_name == 'sobel_small':
+        import experts.sobel_expert
         return experts.sobel_expert.SobelEdgesExpertSigmaSmall()
     elif exp_name == 'sobel_medium':
+        import experts.sobel_expert
         return experts.sobel_expert.SobelEdgesExpertSigmaMedium()
     elif exp_name == 'sobel_large':
+        import experts.sobel_expert
         return experts.sobel_expert.SobelEdgesExpertSigmaLarge()
     elif exp_name == 'superpixel_fcn':
+        import experts.superpixel_expert
         return experts.superpixel_expert.SuperPixel()
 
 
@@ -358,7 +371,7 @@ def process_depth(in_path, out_path):
 
     depth_dataset = GT_DepthDataset(in_path, SPLIT_NAME)
     dataloader = DataLoader(depth_dataset,
-                            batch_size=100,
+                            batch_size=150,
                             shuffle=False,
                             num_workers=20,
                             drop_last=False)
@@ -377,7 +390,7 @@ def process_depth(in_path, out_path):
 
 def process_surface_normals(main_db_path, out_path):
     os.makedirs(out_path, exist_ok=True)
-    depth_full_path = os.path.join(main_db_path, "depth")
+    depth_full_path = os.path.join(main_db_path, "depth_n")
 
     batch_size = 500
     dataset = DatasetDepth(depth_full_path)
@@ -493,7 +506,7 @@ def get_exp_results(main_exp_out_path, experts_name):
 
     with torch.no_grad():
         rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')
-        batch_size = 150
+        batch_size = 100
 
         dataset = Dataset_ImgLevel(rgbs_path)
         dataloader = torch.utils.data.DataLoader(dataset,
