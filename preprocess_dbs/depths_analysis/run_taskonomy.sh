@@ -1,7 +1,3 @@
-nohup python depth_analysis.py 0 taskonomy all > logs_taskonomy_0.out 
+nohup python depth_analysis.py xtc taskonomy 0 0 all > ./logs_replica/logs_taskonomy_xtc_all.out 
 wait
-nohup python depth_analysis.py 1 taskonomy all > logs_taskonomy_1.out 
-wait
-nohup python depth_analysis.py 2 taskonomy all > logs_taskonomy_2.out 
-wait
-nohup python depth_analysis.py 3 taskonomy all > logs_taskonomy_3.out 
+nohup python depth_analysis.py sgdepth taskonomy 0 0 all > ./logs_replica/logs_taskonomy_sgdepth_all.out 
