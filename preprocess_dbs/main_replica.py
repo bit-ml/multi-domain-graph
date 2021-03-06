@@ -23,7 +23,7 @@ import experts.rgb_expert
 import experts.saliency_seg_expert
 import experts.semantic_segmentation_expert
 import experts.vmos_stm_expert
-
+'''
 depth_gt_th_50 = 1.5025
 depth_exp_th_50 = 0.0999
 depth_scale_factor_exp = depth_gt_th_50 / depth_exp_th_50
@@ -31,7 +31,7 @@ depth_gt_th_5 = 0.6077
 depth_gt_th_95 = 3.6066
 depth_exp_th_5 = 0.6889
 depth_exp_th_95 = 3.6226
-
+'''
 WORKING_H = 256
 WORKING_W = 256
 
@@ -43,7 +43,7 @@ VALID_ORIG_GT_DOMAINS = [
 # our internal domain names
 VALID_GT_DOMAINS = [\
     'rgb',
-    'depth_n',
+    'depth_n_2',
     'normals',
     'halftone_gray',
     'grayscale',
@@ -51,8 +51,8 @@ VALID_GT_DOMAINS = [\
 ]
 
 VALID_EXPERTS_NAME = [\
-    'depth_n_xtc',
-    'depth_sgdepth',
+    'depth_n_2_xtc',
+    'depth_n_2_sgdepth',
     'normals_xtc',
     'sem_seg_hrnet',
     'superpixel_fcn',
@@ -80,18 +80,31 @@ usage_str = 'usage: python main_taskonomy.py type split-name exp1 exp2 ...'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-REPLICA_PROC_NAME = "replica_2"
-REPLICA_RAW_NAME = "replica_raw_2"
+REPLICA_PROC_NAME = "replica"
+REPLICA_RAW_NAME = "replica_raw_1"
 
-DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-2/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
-replica_gt_min_path = r'%s/gt_min.npy' % DEPTH_ALIGNED_PATH
-replica_gt_max_path = r'%s/gt_max.npy' % DEPTH_ALIGNED_PATH
-replica_gt_th_95_path = r'%s/gt_th_95.npy' % DEPTH_ALIGNED_PATH
-replica_exp_min_path = r'%s/exp_min.npy' % DEPTH_ALIGNED_PATH
-replica_exp_max_path = r'%s/exp_max.npy' % DEPTH_ALIGNED_PATH
-replica_n_bins_path = r'%s/n_bins.npy' % DEPTH_ALIGNED_PATH
-replica_cum_exp_histo = r'%s/cum_exp_histo.npy' % DEPTH_ALIGNED_PATH
-replica_inv_cum_gt_histo = r'%s/inv_cum_gt_histo.npy' % DEPTH_ALIGNED_PATH
+DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-6/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
+depth_align_prefix = 'v4_replica_all_xtc'
+replica_gt_min_path = r'%s/%s_gt_min.npy' % (DEPTH_ALIGNED_PATH,
+                                             depth_align_prefix)
+replica_gt_max_path = r'%s/%s_gt_max.npy' % (DEPTH_ALIGNED_PATH,
+                                             depth_align_prefix)
+replica_exp_min_path = r'%s/%s_exp_min.npy' % (DEPTH_ALIGNED_PATH,
+                                               depth_align_prefix)
+replica_exp_max_path = r'%s/%s_exp_max.npy' % (DEPTH_ALIGNED_PATH,
+                                               depth_align_prefix)
+replica_gt_n_bins_path = r'%s/%s_gt_n_bins.npy' % (DEPTH_ALIGNED_PATH,
+                                                   depth_align_prefix)
+replica_gt_cum_data_histo = r'%s/%s_gt_cum_data_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
+replica_gt_inv_cum_target_histo = r'%s/%s_gt_inv_cum_target_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
+replica_exp_n_bins_path = r'%s/%s_gt_n_bins.npy' % (DEPTH_ALIGNED_PATH,
+                                                    depth_align_prefix)
+replica_exp_cum_data_histo = r'%s/%s_exp_cum_data_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
+replica_exp_inv_cum_target_histo = r'%s/%s_exp_inv_cum_target_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
 
 
 def check_arguments_without_delete(argv):
@@ -119,7 +132,7 @@ def check_arguments_without_delete(argv):
         return status, status_code
     SPLIT_NAME = split_name
 
-    MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/%s/%s' % (
+    MAIN_DB_PATH = r'/data/multi-domain-graph-6/datasets/%s/%s' % (
         REPLICA_RAW_NAME, split_name)
     MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/%s/%s' % (
         REPLICA_PROC_NAME, split_name)
@@ -203,10 +216,11 @@ def get_expert(exp_name):
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=2)
     elif exp_name == 'halftone_rot_gray_basic':
         return experts.halftone_expert.HalftoneModel(full_expert=True, style=3)
-    elif exp_name == 'depth_sgdepth':
+    elif exp_name == 'depth_sgdepth' or exp_name == 'depth_n_sgdepth':
         sys.argv = ['']
         return experts.depth_expert.DepthModel(full_expert=True)
-    elif exp_name == 'depth_xtc' or exp_name == 'depth_n_xtc':
+    elif exp_name == 'depth_xtc' or exp_name == 'depth_n_xtc' or exp_name == 'depth_n_1_xtc' or exp_name == 'depth_n_2_xtc':
+        import experts.depth_expert
         return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'edges_dexined':
         import experts.edges_expert
@@ -303,45 +317,49 @@ class TransFct_HistoHalfClamp():
 
 
 class TransFct_HistoSpecification():
-    def __init__(self, n_bins_path, cum_exp_histo_path, inv_cum_gt_histo_path):
+    def __init__(self, n_bins_path, cum_data_histo_path,
+                 inv_cum_target_histo_path):
         self.n_bins = np.load(n_bins_path)
-        self.cum_exp_histo = np.load(cum_exp_histo_path)
-        self.inv_cum_gt_histo = np.load(inv_cum_gt_histo_path)
+        self.cum_data_histo = np.load(cum_data_histo_path)
+        self.inv_cum_target_histo = np.load(inv_cum_target_histo_path)
 
     def apply(self, data):
+
         data_ = data * self.n_bins
         data_ = data_.astype('int32')
-        data_ = self.inv_cum_gt_histo[self.cum_exp_histo[data_]]
+        data_ = self.inv_cum_target_histo[self.cum_data_histo[data_]]
         data_ = data_.astype('float32')
         data_ = data_ / self.n_bins
         return data_
 
 
 class TransFct_DepthExp():
-    def __init__(self, min_path, max_path, n_bins_path, cum_exp_histo_path,
-                 inv_cum_gt_histo_path):
+    def __init__(self, min_path, max_path, n_bins_path, cum_data_histo_path,
+                 inv_cum_target_histo_path):
         self.min_v = np.load(min_path)
         self.max_v = np.load(max_path)
         self.n_bins = np.load(n_bins_path)
-        self.cum_exp_histo = np.load(cum_exp_histo_path)
-        self.inv_cum_gt_histo = np.load(inv_cum_gt_histo_path)
+        self.cum_data_histo = np.load(cum_data_histo_path)
+        self.inv_cum_target_histo = np.load(inv_cum_target_histo_path)
 
     def apply(self, data):
         data = (data - self.min_v) / (self.max_v - self.min_v)
+        '''
+        # uncomment for depth_n_1 TODO
         data_ = data * self.n_bins
         data_ = data_.astype('int32')
-        data_ = self.inv_cum_gt_histo[self.cum_exp_histo[data_]]
+        data_ = self.inv_cum_target_histo[self.cum_data_histo[data_]]
         data_ = data_.astype('float32')
         data_ = data_ / self.n_bins
         data_ = data_.astype('float32')
-        return data_
+        data = data_
+        '''
+        return data
 
 
 class GT_DepthDataset(Dataset):
     def __init__(self, depth_path, split_name):
         super(GT_DepthDataset, self).__init__()
-        self.th_5 = depth_gt_th_5
-        self.th_95 = depth_gt_th_95
         if split_name == 'valid':
             split_name = 'val'
         glob_pattern = '%s/*.npy' % (depth_path)
@@ -349,13 +367,21 @@ class GT_DepthDataset(Dataset):
 
         self.scale_min_max_fct = TransFct_ScaleMinMax(replica_gt_min_path,
                                                       replica_gt_max_path)
-        self.half_clamp_fct = TransFct_HistoHalfClamp(replica_gt_th_95_path)
+        self.histo_specification = TransFct_HistoSpecification(
+            replica_gt_n_bins_path, replica_gt_cum_data_histo,
+            replica_gt_inv_cum_target_histo)
 
     def __getitem__(self, index):
         depth = np.load(self.depth_paths[index])
-        depth[depth == 0] = float("nan")
+        bm = depth == 0
+
         depth = self.scale_min_max_fct.apply(depth)
-        depth = self.half_clamp_fct.apply(depth)
+        # uncomment for depth_n_1 - TODO
+        #depth = self.histo_specification.apply(depth)
+        depth[bm] = float("nan")
+
+        #depth = self.scale_min_max_fct.apply(depth)
+        #depth = self.half_clamp_fct.apply(depth)
         #depth = depth - self.th_5
         #depth = depth / (self.th_95 - self.th_5)
         # depth = depth / 15.625 - old version
@@ -500,9 +526,9 @@ def get_exp_results(main_exp_out_path, experts_name):
 
     depth_exp_trans_fct = TransFct_DepthExp(replica_exp_min_path,
                                             replica_exp_max_path,
-                                            replica_n_bins_path,
-                                            replica_cum_exp_histo,
-                                            replica_inv_cum_gt_histo)
+                                            replica_exp_n_bins_path,
+                                            replica_exp_cum_data_histo,
+                                            replica_exp_inv_cum_target_histo)
 
     with torch.no_grad():
         rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')
@@ -525,7 +551,7 @@ def get_exp_results(main_exp_out_path, experts_name):
             print('EXPERT: %20s' % exp_name)
             expert = get_expert(exp_name)
 
-            if exp_name == 'depth_n_xtc':
+            if exp_name == 'depth_n_1_xtc':
                 #post_process_fct = post_process_depth_xtc_fct
                 post_process_fct = depth_exp_trans_fct.apply
             else:

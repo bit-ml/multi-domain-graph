@@ -1259,7 +1259,7 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
 
     n_bins_gen_histo = 1000
     n_bins_histospecification = 100000
-    prefix = 'v4_%s_%s_%s' % (dataset, split_name, exp_name)
+    prefix = 'v4_%s_%s_%s' % (dataset, split_name, exp_name),
 
     print('%s' % (prefix))
     db = db_type(gt_path, rgb_path, splits)
