@@ -58,6 +58,7 @@ def plot_variance_with_and_without_exp(variance_with_exp, variance_without_exp,
 
 def sns_plot_variance_vs_indiv_errors(variance, all_errors, src_names, title,
                                       fig_out_path):
+
     all_errors = np.stack(all_errors, 1)
     min_v = np.min(all_errors)
     max_v = np.max(all_errors)
@@ -74,13 +75,13 @@ def sns_plot_variance_vs_indiv_errors(variance, all_errors, src_names, title,
         df['variance'] = dig
         df['variance'] = df.variance.astype('category')
         str_ = 'error for src %s' % src_names[i]
-        df['error for src %s' % src_names[i]] = all_errors[indexes, i]
+        df[str_] = all_errors[indexes, i]
 
         plt.figure(figsize=(10, 5))
         sns.set()
         sns.set_style('white')
         sns.set_context('paper')
-        sns.violinplot(data=df, x='variance', y=str)
+        sns.violinplot(data=df, x='variance', y=str_)
         plt.title(title + src_names[i])
         plt.legend()
         plt.xticks(rotation=90)
@@ -149,12 +150,70 @@ def plot_variance_and_errors(variance, all_errors, fig_out_path):
     plt.close()
 
 
-os.makedirs(out_path, exist_ok=True)
+def process_split(channel, variance_path, errors_paths, split_name, gt_type,
+                  out_path):
+    """
+    variance_path - path of csv containing variances 
+    errors_paths - paths of edges errors 
+    split_name - name of the split set 
+    gt_type - which gt was considered - "twd_exp"/"twd_gt"
+
+    """
+    ##### valid data ######
+    df = pd.read_csv(variance_path)
+    df = df[df['channel'] == channel]
+    variance_with_exp = df['variance_with_exp'].values
+    variance_without_exp = df['variance_without_exp'].values
+    min_v = min(np.min(variance_with_exp), np.min(variance_without_exp))
+    max_v = max(np.max(variance_with_exp), np.max(variance_without_exp))
+    variance_with_exp = (variance_with_exp - min_v) / (max_v - min_v)
+    variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
+
+    set_str = '%s_set_%s_check' % (split_name, gt_type)
+
+    ### plot variance with exp vs variance without exp
+    sns_plot_variance_with_and_without_exp(
+        variance_with_exp, variance_without_exp,
+        os.path.join(out_path,
+                     '%s_variance_with_vs_without_exp.png' % (set_str)))
+
+    ### get errors
+    src_names = []
+    all_errors = []
+    prefix = 'errors_%s_%s_' % (split_name, gt_type[4:])
+    for path in errors_paths:
+        df_errors = pd.read_csv(path)
+        df_errors = df_errors[df_errors['channel'] == channel]
+        src_name = os.path.split(path)[-1][len(prefix):-4]
+        src_names.append(src_name)
+        all_errors.append(df_errors['errors'].values)
+
+    sns_plot_variance_vs_indiv_errors(
+        variance_without_exp, all_errors, src_names,
+        '%s - variance (without exp) vs. edge errors' % set_str,
+        os.path.join(out_path,
+                     '%s_variances_without_exp_vs_edge_errors.png' % set_str))
+
+    #plot_variance_and_errors(
+    #    variance_without_exp, all_errors,
+    #    os.path.join(
+    #        out_path, '%s_variances_without_exp_vs_avg_errors_prev.png' %(set_str)))
+
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        '%s - Variance (without exp) vs. avg edge errors' % set_str,
+        os.path.join(out_path,
+                     '%s_variances_without_exp_vs_avg_errors.png' % set_str))
+
 
 dst_tasks = os.listdir(logs_path)
 dst_tasks.sort()
 
 for dst_task in dst_tasks:
+    dst_task_out_path = os.path.join(out_path, dst_task)
+    # prepare output path - where we store images
+    os.makedirs(dst_task_out_path, exist_ok=True)
+
     variance_valid_path = '%s/%s/variance_valid.csv' % (logs_path, dst_task)
     variance_test_path = '%s/%s/variance_test.csv' % (logs_path, dst_task)
     errors_val_exp_paths = glob.glob('%s/%s/errors_valid_exp_*' %
@@ -163,126 +222,16 @@ for dst_task in dst_tasks:
                                       (logs_path, dst_task))
     errors_test_gt_paths = glob.glob('%s/%s/errors_test_gt_*' %
                                      (logs_path, dst_task))
-    ##### valid data ######
+
+    # get nr channels per dst domain
     df = pd.read_csv(variance_valid_path)
-    variance_with_exp = df['variance_with_exp'].values
-    variance_without_exp = df['variance_without_exp'].values
-    min_v = min(np.min(variance_with_exp), np.min(variance_without_exp))
-    max_v = max(np.max(variance_with_exp), np.max(variance_without_exp))
-    variance_with_exp = (variance_with_exp - min_v) / (max_v - min_v)
-    variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
+    n_channels = df['channel'].max() + 1
 
-    #sns_plot_variance_with_and_without_exp(
-    #    variance_with_exp, variance_without_exp,
-    #    os.path.join(out_path, 'variances_valid_with_and_without_exp.png'))
+    for channel in range(n_channels):
 
-    src_names = []
-    all_errors = []
-    prefix = 'errors_valid_exp_'
-    for path in errors_val_exp_paths:
-        df_errors = pd.read_csv(path)
-        src_name = os.path.split(path)[-1][len(prefix):-4]
-        src_names.append(src_name)
-        all_errors.append(df_errors['errors'].values)
-
-    sns_plot_variance_vs_indiv_errors(
-        variance_without_exp, all_errors, src_names,
-        'Variance (without exp) vs. edge errors (twd expert) - valid set - ',
-        os.path.join(out_path,
-                     'variances_valid_without_exp_vs_edge_errors_twd_exp.png'))
-    #sns_plot_variance_vs_indiv_errors(
-    #    variance_with_exp, all_errors, src_names,
-    #    'Variance (with exp) vs. edge errors (twd expert) - valid set - ',
-    #    os.path.join(out_path,
-    #                 'variances_valid_with_exp_vs_edge_errors_twd_exp.png'))
-
-    #plot_variance_and_errors(
-    #    variance_without_exp, all_errors,
-    #    os.path.join(
-    #        out_path,
-    #        'variances_valid_without_exp_vs_avg_errors_twd_exp_prev.png'))
-    #sns_plot_variance_vs_avg_errors(
-    #    variance_without_exp, all_errors, src_names,
-    #    'Variance (without exp) vs. avg edge errors (twd expert)- valid set',
-    #    os.path.join(out_path,
-    #                 'variances_valid_without_exp_vs_avg_errors_twd_exp.png'))
-    #sns_plot_variance_vs_avg_errors(
-    #    variance_with_exp, all_errors, src_names,
-    #    'Variance (with exp) vs. avg edge errors (twd expert) - valid set ',
-    #    os.path.join(out_path,
-    #                 'variances_valid_with_exp_vs_avg_errors_twd_exp.png'))
-
-    #### test data ####
-    df = pd.read_csv(variance_test_path)
-    variance_with_exp = df['variance_with_exp'].values
-    variance_without_exp = df['variance_without_exp'].values
-    min_v = min(np.min(variance_with_exp), np.min(variance_without_exp))
-    max_v = max(np.max(variance_with_exp), np.max(variance_without_exp))
-    variance_with_exp = (variance_with_exp - min_v) / (max_v - min_v)
-    variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
-
-    #sns_plot_variance_with_and_without_exp(
-    #    variance_with_exp, variance_without_exp,
-    #    os.path.join(out_path, 'variances_test_with_and_without_exp.png'))
-
-    src_names = []
-    all_errors = []
-    prefix = 'errors_test_exp_'
-    for path in errors_test_exp_paths:
-        df_errors = pd.read_csv(path)
-        src_name = os.path.split(path)[-1][len(prefix):-4]
-        src_names.append(src_name)
-        all_errors.append(df_errors['errors'].values)
-
-    sns_plot_variance_vs_indiv_errors(
-        variance_without_exp, all_errors, src_names,
-        'Variance (without exp) vs. edge errors (twd expert) - test set - ',
-        os.path.join(out_path,
-                     'variances_test_without_exp_vs_edge_errors_twd_exp.png'))
-    #sns_plot_variance_vs_indiv_errors(
-    #    variance_with_exp, all_errors, src_names,
-    #    'Variance (with exp) vs. edge errors (twd expert) - test set - ',
-    #    os.path.join(out_path,
-    #                 'variances_test_with_exp_vs_edge_errors_twd_exp.png'))
-
-    #sns_plot_variance_vs_avg_errors(
-    #    variance_without_exp, all_errors, src_names,
-    #    'Variance (without exp) vs. avg edge errors (twd expert) - test set',
-    #    os.path.join(out_path,
-    #                 'variances_test_without_exp_vs_avg_errors_twd_exp.png'))
-    #sns_plot_variance_vs_avg_errors(
-    #    variance_with_exp, all_errors, src_names,
-    #    'Variance (with exp) vs. avg edge errors (twd expert) - test set',
-    #    os.path.join(out_path,
-    #                 'variances_test_with_exp_vs_avg_errors_twd_exp.png'))
-
-    src_names = []
-    all_errors = []
-    prefix = 'errors_test_gt_'
-    for path in errors_test_gt_paths:
-        df_errors = pd.read_csv(path)
-        src_name = os.path.split(path)[-1][len(prefix):-4]
-        src_names.append(src_name)
-        all_errors.append(df_errors['errors'].values)
-
-    sns_plot_variance_vs_indiv_errors(
-        variance_without_exp, all_errors, src_names,
-        'Variance (without exp) vs. edge errors (twd gt) - test set - ',
-        os.path.join(out_path,
-                     'variances_test_without_exp_vs_edge_errors_twd_gt.png'))
-    #sns_plot_variance_vs_indiv_errors(
-    #    variance_with_exp, all_errors, src_names,
-    #    'Variance (with exp) vs. edge errors (twd gt) - test set - ',
-    #    os.path.join(out_path,
-    #                 'variances_test_with_exp_vs_edge_errors_twd_gt.png'))
-
-    #sns_plot_variance_vs_avg_errors(
-    #    variance_without_exp, all_errors, src_names,
-    #    'Variance (without exp) vs. avg edge errors (twd gt) - test set',
-    #    os.path.join(out_path,
-    #                 'variances_test_without_exp_vs_avg_errors_twd_gt.png'))
-    #sns_plot_variance_vs_avg_errors(
-    #    variance_with_exp, all_errors, src_names,
-    #    'Variance (with exp) vs. avg edge errors (twd gt) - test set',
-    #    os.path.join(out_path,
-    #                 'variances_test_with_exp_vs_avg_errors_twd_gt.png'))
+        process_split(channel, variance_valid_path, errors_val_exp_paths,
+                      'valid', 'twd_exp', dst_task_out_path)
+        process_split(channel, variance_test_path, errors_test_exp_paths,
+                      'test', 'twd_exp', dst_task_out_path)
+        process_split(channel, variance_test_path, errors_test_gt_paths,
+                      'test', 'twd_gt', dst_task_out_path)
