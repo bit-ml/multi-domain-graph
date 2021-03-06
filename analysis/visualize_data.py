@@ -7,8 +7,32 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import glob
 
-logs_path = '/root/logs_analysis/test_2021-03-06 10:36:05.195071'
+logs_path = '/root/logs_analysis/test_2021-03-06 12:01:23.021828'
+#logs_path = '/root/logs_analysis/test_2021-03-06 10:36:05.195071'
 out_path = '/root/logs_analysis_visualization'
+
+
+def sns_plot_variance_with_and_without_exp(variance_with_exp,
+                                           variance_without_exp, fig_out_path):
+    indexes = np.argsort(variance_without_exp)
+    variance_without_exp = variance_without_exp[indexes]
+    variance_with_exp = variance_with_exp[indexes]
+
+    df = pd.DataFrame()
+    df['variance considering only the edges'] = variance_without_exp
+    df['variance considering both edges and expert'] = variance_with_exp
+
+    plt.figure(figsize=(5, 5))
+    sns.set()
+    sns.set_style('white')
+    sns.set_context('paper')
+    sns.jointplot(data=df,
+                  x='variance considering only the edges',
+                  y='variance considering both edges and expert',
+                  kind='hist')
+    plt.legend()
+    plt.savefig(fig_out_path, bbox_inches='tight', dpi=300)
+    plt.close()
 
 
 def plot_variance_with_and_without_exp(variance_with_exp, variance_without_exp,
@@ -76,7 +100,7 @@ for dst_task in dst_tasks:
     variance_with_exp = (variance_with_exp - min_v) / (max_v - min_v)
     variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
 
-    plot_variance_with_and_without_exp(
+    sns_plot_variance_with_and_without_exp(
         variance_with_exp, variance_without_exp,
         os.path.join(out_path, 'variances_valid_with_and_without_exp.png'))
 
@@ -105,7 +129,7 @@ for dst_task in dst_tasks:
     variance_with_exp = (variance_with_exp - min_v) / (max_v - min_v)
     variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
 
-    plot_variance_with_and_without_exp(
+    sns_plot_variance_with_and_without_exp(
         variance_with_exp, variance_without_exp,
         os.path.join(out_path, 'variances_test_with_and_without_exp.png'))
 
