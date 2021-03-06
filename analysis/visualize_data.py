@@ -7,7 +7,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import glob
 
+# full db
 logs_path = '/root/logs_analysis/test_2021-03-06 12:01:23.021828'
+# 200 samples
+#logs_path = '/root/logs_analysis/test_2021-03-06 13:35:21.210468'
+# 10 samples
 #logs_path = '/root/logs_analysis/test_2021-03-06 10:36:05.195071'
 out_path = '/root/logs_analysis_visualization'
 
@@ -52,8 +56,44 @@ def plot_variance_with_and_without_exp(variance_with_exp, variance_without_exp,
     plt.close()
 
 
-def plot_variance_and_errors(variance, all_errors, fig_out_path):
+def sns_plot_variance_vs_avg_errors(variance, all_errors, src_names, title,
+                                    fig_out_path):
     all_errors = np.stack(all_errors, 1)
+    min_v = np.min(all_errors)
+    max_v = np.max(all_errors)
+    all_errors = (all_errors - min_v) / (max_v - min_v)
+    avg_errors = np.mean(all_errors, 1)
+
+    indexes = np.argsort(variance)
+    variance = variance[indexes]
+    _, hist_bins = np.histogram(variance, bins=100, range=(0, 1))
+    dig = np.digitize(variance, hist_bins) - 1
+    df = pd.DataFrame()
+    df['variance'] = dig
+    df['variance'] = df.variance.astype('category')
+    df['avg error'] = avg_errors[indexes]
+    #for i in range(len(src_names)):
+    #    df['error_src_%s' % src_names[i]] = all_errors[indexes, i]
+    plt.figure(figsize=(10, 5))
+    sns.set()
+    sns.set_style('white')
+    sns.set_context('paper')
+    sns.violinplot(data=df, x='variance', y='avg error')
+    #sns.relplot(data=df, x='variance', y='avg error', kind="line")
+    #sns.lineplot(data=df, x=df.index, y='avg error', hue='variance')
+    plt.title(title)
+    plt.legend()
+    plt.xticks(rotation=90)
+    plt.savefig(fig_out_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
+
+def plot_variance_and_errors(variance, all_errors, fig_out_path):
+
+    all_errors = np.stack(all_errors, 1)
+    min_v = np.min(all_errors)
+    max_v = np.max(all_errors)
+    all_errors = (all_errors - min_v) / (max_v - min_v)
     avg_errors = np.mean(all_errors, 1)
 
     indexes = np.argsort(variance)
@@ -113,12 +153,21 @@ for dst_task in dst_tasks:
         src_names.append(src_name)
         all_errors.append(df_errors['errors'].values)
 
-    plot_variance_and_errors(
-        variance_without_exp, all_errors,
-        os.path.join(out_path, 'variances_valid_without_exp_vs_errors.png'))
-    plot_variance_and_errors(
-        variance_with_exp, all_errors,
-        os.path.join(out_path, 'variances_valid_with_exp_vs_errors.png'))
+    #plot_variance_and_errors(
+    #    variance_without_exp, all_errors,
+    #    os.path.join(
+    #        out_path,
+    #        'variances_valid_without_exp_vs_avg_errors_twd_exp_prev.png'))
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        'Variance (without exp) vs. avg edge errors (twd expert)- valid set',
+        os.path.join(out_path,
+                     'variances_valid_without_exp_vs_avg_errors_twd_exp.png'))
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        'Variance (with exp) vs. avg edge errors (twd expert) - valid set ',
+        os.path.join(out_path,
+                     'variances_valid_with_exp_vs_avg_errors_twd_exp.png'))
 
     #### test data ####
     df = pd.read_csv(variance_test_path)
@@ -142,12 +191,16 @@ for dst_task in dst_tasks:
         src_names.append(src_name)
         all_errors.append(df_errors['errors'].values)
 
-    plot_variance_and_errors(
-        variance_without_exp, all_errors,
-        os.path.join(out_path, 'variances_test_without_exp_vs_errors_exp.png'))
-    plot_variance_and_errors(
-        variance_with_exp, all_errors,
-        os.path.join(out_path, 'variances_test_with_exp_vs_errors_exp.png'))
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        'Variance (without exp) vs. avg edge errors (twd expert) - test set',
+        os.path.join(out_path,
+                     'variances_test_without_exp_vs_avg_errors_twd_exp.png'))
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        'Variance (with exp) vs. avg edge errors (twd expert) - test set',
+        os.path.join(out_path,
+                     'variances_test_with_exp_vs_avg_errors_twd_exp.png'))
 
     src_names = []
     all_errors = []
@@ -158,9 +211,13 @@ for dst_task in dst_tasks:
         src_names.append(src_name)
         all_errors.append(df_errors['errors'].values)
 
-    plot_variance_and_errors(
-        variance_without_exp, all_errors,
-        os.path.join(out_path, 'variances_test_without_exp_vs_errors_gt.png'))
-    plot_variance_and_errors(
-        variance_with_exp, all_errors,
-        os.path.join(out_path, 'variances_test_with_exp_vs_errors_gt.png'))
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        'Variance (without exp) vs. avg edge errors (twd gt) - test set',
+        os.path.join(out_path,
+                     'variances_test_without_exp_vs_avg_errors_twd_gt.png'))
+    sns_plot_variance_vs_avg_errors(
+        variance_without_exp, all_errors, src_names,
+        'Variance (with exp) vs. avg edge errors (twd gt) - test set',
+        os.path.join(out_path,
+                     'variances_test_with_exp_vs_avg_errors_twd_gt.png'))
