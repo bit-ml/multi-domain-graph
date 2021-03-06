@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 from utils.utils import EnsembleFilter_TwdExpert, SSIMLoss, img_for_plot, VarianceScore
+from utils.utils import SimScore_L1, SimScore_L2, SimScore_SSIM, SimScore_LPIPS
 
 empty_fcn = (lambda x: x)
 
@@ -30,6 +31,7 @@ class Edge:
         if silent_analysis:
             self.log_variance_fct = lambda *args: True
             self.log_errors_fct = lambda *args: True
+            self.log_metrics_fct = lambda *args: True
             self.var_score = lambda x: x
             self.logs_path = ''
         else:
@@ -43,6 +45,17 @@ class Edge:
             self.var_score = VarianceScore()
             self.log_variance_fct = self.log_variance
             self.log_errors_fct = self.log_errors
+            self.log_metrics_fct = self.log_metrics
+            self.analysis_score_names = ['l1', 'l2', 'ssim', 'lpips']
+            self.analysis_score_fcts = [
+                SimScore_L1().to(device),
+                SimScore_L2().to(device),
+                SimScore_SSIM(expert2.no_maps_as_nn_output(), 11).to(device),
+                SimScore_LPIPS(expert2.no_maps_as_nn_output()).to(device)
+            ]
+            for idx in range(len(self.analysis_score_fcts)):
+                self.analysis_score_fcts[idx] = nn.DataParallel(
+                    self.analysis_score_fcts[idx])
 
         # Initialize ensemble model for destination task
 
@@ -443,8 +456,7 @@ class Edge:
         self.save_model(start_epoch + epoch + 1)
 
     ################ [Analysis logs] ###################
-    def log_variance(self, ens_data, var_score_fct, logs_path, split,
-                     batch_idx):
+    def log_variance(self, ens_data, var_score_fct, logs_path, split):
         '''
             ens_data - ensemble data - containing the exp data 
             var_score_fct - fct to compute variance 
@@ -458,28 +470,22 @@ class Edge:
             f = open(file_path, 'a')
         else:
             f = open(file_path, 'w')
-            f.write(
-                'sample_id,split,channel,variance_with_exp,variance_without_exp,\n'
-            )
+            f.write('channel,variance_with_exp,variance_without_exp,\n')
 
         var_with_exp = var_score_fct(ens_data)
         var_without_exp = var_score_fct(ens_data[0:-1, :, :, :, :])
 
         var_with_exp = var_with_exp.cpu().numpy()
         var_without_exp = var_without_exp.cpu().numpy()
-        start_idx = batch_idx * (bs * nchs * h * w)
         for ch in range(nchs):
             ch_var_with_exp = var_with_exp[:, ch, :, :].flatten()
             ch_var_without_exp = var_without_exp[:, ch, :, :].flatten()
             for i in range(ch_var_with_exp.size):
-                f.write('%d,%s, %d, %20.10f, %20.10f,\n' %
-                        (start_idx, split, ch, ch_var_with_exp[i],
-                         ch_var_without_exp[i]))
-                start_idx += 1
+                f.write('%d, %20.10f, %20.10f,\n' %
+                        (ch, ch_var_with_exp[i], ch_var_without_exp[i]))
         f.close()
 
-    def log_errors(self, losses, logs_path, split, gt_type, src_identifier,
-                   batch_idx):
+    def log_errors(self, losses, logs_path, split, gt_type, src_identifier):
         '''
             losses - computed errors
             logs_path - where we store data 
@@ -494,21 +500,43 @@ class Edge:
             f = open(file_path, 'a')
         else:
             f = open(file_path, 'w')
-            f.write(
-                'sample_id,split, gt_type,src_identifier,channel,errors,\n')
+            f.write('channel,errors,\n')
 
         err = losses.clone()
         err = err.cpu().numpy()
-        start_idx = batch_idx * (bs * nchs * h * w)
         for ch in range(nchs):
             ch_err = err[:, ch, :, :].flatten()
             for i in range(ch_err.size):
-                f.write(
-                    '%d, %s, %s, %s, %d, %20.10f,\n' %
-                    (start_idx, split, gt_type, src_identifier, ch, ch_err[i]))
-                start_idx += 1
+                f.write('%d, %20.10f,\n' % (ch, ch_err[i]))
 
         f.close()
+
+    def log_metrics(self, res, target, logs_path, split, gt_type,
+                    src_identifier):
+
+        for idx in range(len(self.analysis_score_fcts)):
+
+            score_name = self.analysis_score_names[idx]
+            score_fct = self.analysis_score_fcts[idx]
+            err = score_fct(res, target)
+
+            bs, nchs, h, w = err.shape
+            file_path = os.path.join(
+                logs_path, 'score_%s_%s_%s_%s.csv' %
+                (score_name, split, gt_type, src_identifier))
+
+            if os.path.exists(file_path):
+                f = open(file_path, 'a')
+            else:
+                f = open(file_path, 'w')
+                f.write('channel,errors,\n')
+
+            err = err.cpu().numpy()
+            for ch in range(nchs):
+                ch_err = err[:, ch, :, :].flatten()
+                for i in range(ch_err.size):
+                    f.write('%d, %20.10f,\n' % (ch, ch_err[i]))
+            f.close()
 
     ################ [1Hop Ensembles] ##################
     def val_test_stats(config, writer, edges_1hop, l1_ens_valid, l1_ens_test,
@@ -620,10 +648,18 @@ class Edge:
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
 
+                    edge.log_metrics_fct(one_hop_pred,
+                                         edge.gt_eval_transform(domain2_gt),
+                                         edge.logs_path, 'test', 'gt',
+                                         edge.expert1.identifier)
+                    edge.log_metrics_fct(
+                        one_hop_pred, edge.gt_eval_transform(domain2_exp_gt),
+                        edge.logs_path, 'test', 'exp', edge.expert1.identifier)
+
                     crt_loss = edge.test_gt(edge.eval_loss, one_hop_pred,
                                             edge.gt_eval_transform(domain2_gt))
                     edge.log_errors_fct(crt_loss, edge.logs_path, 'test', 'gt',
-                                        edge.expert1.identifier, idx_batch)
+                                        edge.expert1.identifier)
 
                     l1_edge[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
@@ -632,8 +668,7 @@ class Edge:
                     crt_loss = edge.eval_loss(
                         one_hop_pred, edge.gt_eval_transform(domain2_exp_gt))
                     edge.log_errors_fct(crt_loss, edge.logs_path, 'test',
-                                        'exp', edge.expert1.identifier,
-                                        idx_batch)
+                                        'exp', edge.expert1.identifier)
 
                     l1_edge_exp[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
@@ -649,7 +684,7 @@ class Edge:
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
                 edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
-                                      edge.logs_path, 'test', idx_batch)
+                                      edge.logs_path, 'test')
 
                 crt_loss = edge.test_gt(
                     edge.eval_loss,
@@ -719,11 +754,16 @@ class Edge:
                             img_for_plot(domain1[save_idxes],
                                          edge.expert1.identifier), 0)
 
+                    edge.log_metrics_fct(
+                        one_hop_pred, edge.gt_eval_transform(domain2_exp_gt),
+                        edge.logs_path, 'valid', 'exp',
+                        edge.expert1.identifier)
+
                     crt_loss = edge.eval_loss(
                         one_hop_pred, edge.gt_eval_transform(domain2_exp_gt))
                     edge.log_errors_fct(crt_loss, edge.logs_path, 'valid',
-                                        'exp', edge.expert1.identifier,
-                                        idx_batch)
+                                        'exp', edge.expert1.identifier)
+
                     per_pixel_losses_exp[idx_edge].append(crt_loss)
                     l1_edge[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
@@ -739,7 +779,7 @@ class Edge:
                     domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
 
                 edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
-                                      edge.logs_path, 'valid', idx_batch)
+                                      edge.logs_path, 'valid')
 
                 crt_loss = edge.eval_loss(
                     domain2_1hop_ens, edge.gt_eval_transform(domain2_exp_gt))

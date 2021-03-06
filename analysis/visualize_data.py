@@ -8,11 +8,13 @@ import matplotlib.pyplot as plt
 import glob
 
 # full db
-logs_path = '/root/logs_analysis/test_2021-03-06 12:01:23.021828'
+#logs_path = '/root/logs_analysis/test_2021-03-06 12:01:23.021828'
 # 200 samples
 #logs_path = '/root/logs_analysis/test_2021-03-06 13:35:21.210468'
 # 10 samples
 #logs_path = '/root/logs_analysis/test_2021-03-06 10:36:05.195071'
+# 10 samples with metrics logs
+logs_path = '/root/logs_analysis/test_2021-03-06 18:16:30.431321'
 out_path = '/root/logs_analysis_visualization'
 
 
@@ -150,8 +152,8 @@ def plot_variance_and_errors(variance, all_errors, fig_out_path):
     plt.close()
 
 
-def process_split(channel, variance_path, errors_paths, split_name, gt_type,
-                  out_path):
+def process_split(channel, variance_path, errors_paths, all_metrics_paths,
+                  metrics, split_name, gt_type, out_path):
     """
     variance_path - path of csv containing variances 
     errors_paths - paths of edges errors 
@@ -176,7 +178,6 @@ def process_split(channel, variance_path, errors_paths, split_name, gt_type,
         variance_with_exp, variance_without_exp,
         os.path.join(out_path,
                      '%s_variance_with_vs_without_exp.png' % (set_str)))
-
     ### get errors
     src_names = []
     all_errors = []
@@ -190,7 +191,7 @@ def process_split(channel, variance_path, errors_paths, split_name, gt_type,
 
     sns_plot_variance_vs_indiv_errors(
         variance_without_exp, all_errors, src_names,
-        '%s - variance (without exp) vs. edge errors' % set_str,
+        '%s - variance (without exp) vs. edge errors ' % set_str,
         os.path.join(out_path,
                      '%s_variances_without_exp_vs_edge_errors.png' % set_str))
 
@@ -201,14 +202,46 @@ def process_split(channel, variance_path, errors_paths, split_name, gt_type,
 
     sns_plot_variance_vs_avg_errors(
         variance_without_exp, all_errors, src_names,
-        '%s - Variance (without exp) vs. avg edge errors' % set_str,
+        '%s - Variance (without exp) vs. avg edge errors ' % set_str,
         os.path.join(out_path,
                      '%s_variances_without_exp_vs_avg_errors.png' % set_str))
+
+    ### get metrics
+    for idx in range(len(metrics)):
+        metric_name = metrics[idx]
+        metrics_paths = all_metrics_paths[idx]
+
+        src_names = []
+        all_errors = []
+        prefix = 'score_%s_%s_%s_' % (metric_name, split_name, gt_type[4:])
+        for path in metrics_paths:
+            df_errors = pd.read_csv(path)
+            df_errors = df_errors[df_errors['channel'] == channel]
+            src_name = os.path.split(path)[-1][len(prefix):-4]
+            src_names.append(src_name)
+            all_errors.append(df_errors['errors'].values)
+
+        sns_plot_variance_vs_indiv_errors(
+            variance_without_exp, all_errors, src_names,
+            '%s - variance (without exp) vs. edge %s metric ' %
+            (set_str, metric_name),
+            os.path.join(
+                out_path, '%s_variances_without_exp_vs_edge_%s_metric.png' %
+                (set_str, metric_name)))
+
+        sns_plot_variance_vs_avg_errors(
+            variance_without_exp, all_errors, src_names,
+            '%s - Variance (without exp) vs. avg edge %s metric ' %
+            (set_str, metric_name),
+            os.path.join(
+                out_path,
+                '%s_variances_without_exp_vs_avg_edge_%s_metric.png' %
+                (set_str, metric_name)))
 
 
 dst_tasks = os.listdir(logs_path)
 dst_tasks.sort()
-
+metrics = ['l1', 'l2', 'ssim', 'lpips']
 for dst_task in dst_tasks:
     dst_task_out_path = os.path.join(out_path, dst_task)
     # prepare output path - where we store images
@@ -222,6 +255,19 @@ for dst_task in dst_tasks:
                                       (logs_path, dst_task))
     errors_test_gt_paths = glob.glob('%s/%s/errors_test_gt_*' %
                                      (logs_path, dst_task))
+    all_metrics_val_exp_paths = []
+    all_metrics_test_exp_paths = []
+    all_metrics_test_gt_paths = []
+    for metric_name in metrics:
+        all_metrics_val_exp_paths.append(
+            glob.glob('%s/%s/score_%s_valid_exp_*' %
+                      (logs_path, dst_task, metric_name)))
+        all_metrics_test_exp_paths.append(
+            glob.glob('%s/%s/score_%s_test_exp_*' %
+                      (logs_path, dst_task, metric_name)))
+        all_metrics_test_gt_paths.append(
+            glob.glob('%s/%s/score_%s_test_gt_*' %
+                      (logs_path, dst_task, metric_name)))
 
     # get nr channels per dst domain
     df = pd.read_csv(variance_valid_path)
@@ -230,8 +276,11 @@ for dst_task in dst_tasks:
     for channel in range(n_channels):
 
         process_split(channel, variance_valid_path, errors_val_exp_paths,
-                      'valid', 'twd_exp', dst_task_out_path)
+                      all_metrics_val_exp_paths, metrics, 'valid', 'twd_exp',
+                      dst_task_out_path)
         process_split(channel, variance_test_path, errors_test_exp_paths,
-                      'test', 'twd_exp', dst_task_out_path)
+                      all_metrics_test_exp_paths, metrics, 'test', 'twd_exp',
+                      dst_task_out_path)
         process_split(channel, variance_test_path, errors_test_gt_paths,
-                      'test', 'twd_gt', dst_task_out_path)
+                      all_metrics_test_gt_paths, metrics, 'test', 'twd_gt',
+                      dst_task_out_path)
