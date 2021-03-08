@@ -15,6 +15,7 @@ class HalftoneModel(BasicExpert):
         # if full_expert:
         # self.model = Halftone()
         self.style = style
+        self.classes_weights = None
 
         if style == 0:
             self.n_maps = 1
@@ -52,30 +53,30 @@ class HalftoneModel(BasicExpert):
 
         return halftone_map
 
-    '''
-    def apply_expert(self, rgb_frames):
-        halftone_maps = []
-        for idx, rgb_frame in enumerate(rgb_frames):
-            from PIL import Image
-            rgb_frame = Image.fromarray(np.uint8(rgb_frame))
-            halftone_map = self.apply_expert_one_frame(rgb_frame)
-            # h.make(
-            #     angles=[15, 75, 0, 45],
-            #     antialias=True,
-            #     filename_addition='_new',
-            #     percentage=50,
-            #     sample=5,
-            #     scale=2,
-            #     style='color'
-            # )
-            # save_fname = "halftone_test.png"
-            # print("Save Halftone to %s" % save_fname)
-            # halftone_map.save(save_fname)
-            halftone_maps.append(np.array(halftone_map))
+    def get_task_type(self):
+        return BasicExpert.TASK_CLASSIFICATION
 
-        #halftone_maps = np.concatenate(halftone_maps, axis=0)
-        #return torch.from_numpy(halftone_maps)
-        return halftone_maps
+    def no_maps_as_nn_input(self):
+        return 1
 
+    def no_maps_as_nn_output(self):
+        return 2
 
-    '''
+    def no_maps_as_ens_input(self):
+        return 2
+
+    def gt_train_transform(self, gt_maps):
+        return gt_maps.squeeze(1).long()
+
+    def gt_eval_transform(self, gt_maps):
+        return gt_maps.squeeze(1).long()
+
+    def gt_to_inp_transform(self, inp_1chan_cls, n_classes):
+        inp_1chan_cls = inp_1chan_cls.squeeze(1).long()
+        bs, h, w = inp_1chan_cls.shape
+
+        outp_multichan = torch.zeros(
+            (bs, n_classes, h, w)).to(inp_1chan_cls.device).float()
+        for chan in range(n_classes):
+            outp_multichan[:, chan][inp_1chan_cls == chan] = 1.
+        return outp_multichan

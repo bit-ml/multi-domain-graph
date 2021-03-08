@@ -21,7 +21,6 @@ import experts.normals_expert
 import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
-import experts.semantic_segmentation_expert
 import experts.vmos_stm_expert
 
 depth_gt_th_50 = 1.5025
@@ -80,8 +79,8 @@ usage_str = 'usage: python main_taskonomy.py type split-name exp1 exp2 ...'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-REPLICA_PROC_NAME = "replica_2"
-REPLICA_RAW_NAME = "replica_raw_2"
+REPLICA_PROC_NAME = "replica"
+REPLICA_RAW_NAME = "replica_raw"
 
 DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-2/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
 replica_gt_min_path = r'%s/gt_min.npy' % DEPTH_ALIGNED_PATH
@@ -227,6 +226,7 @@ def get_expert(exp_name):
     elif exp_name == 'rgb':
         return experts.rgb_expert.RGBModel(full_expert=True)
     elif exp_name == 'sem_seg_hrnet':
+        import experts.semantic_segmentation_expert
         return experts.semantic_segmentation_expert.SSegHRNet(
             dataset_name="replica", full_expert=True)
     elif exp_name == 'grayscale':
@@ -497,12 +497,12 @@ def post_process_depth_xtc_fct(data):
 
 
 def get_exp_results(main_exp_out_path, experts_name):
-
-    depth_exp_trans_fct = TransFct_DepthExp(replica_exp_min_path,
-                                            replica_exp_max_path,
-                                            replica_n_bins_path,
-                                            replica_cum_exp_histo,
-                                            replica_inv_cum_gt_histo)
+    if 'depth_n_xtc' in experts_name:
+        depth_exp_trans_fct = TransFct_DepthExp(replica_exp_min_path,
+                                                replica_exp_max_path,
+                                                replica_n_bins_path,
+                                                replica_cum_exp_histo,
+                                                replica_inv_cum_gt_histo)
 
     with torch.no_grad():
         rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')
@@ -526,7 +526,6 @@ def get_exp_results(main_exp_out_path, experts_name):
             expert = get_expert(exp_name)
 
             if exp_name == 'depth_n_xtc':
-                #post_process_fct = post_process_depth_xtc_fct
                 post_process_fct = depth_exp_trans_fct.apply
             else:
                 post_process_fct = lambda x: x

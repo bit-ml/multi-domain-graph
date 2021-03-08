@@ -37,3 +37,9 @@ class BasicExpert():
         GT ensemble eval - added for sem segm expert only
         '''
         return x
+
+    def test_gt(self, loss_fct, pred, target):
+        '''
+        GT eval - added for depth GT only (mask wrong pixels in GT)
+        '''
+        return loss_fct(pred, target)

@@ -30,3 +30,8 @@ z_my_configs
 preprocess_dbs/logs/*
 logs/*
 generated_configs/*.ini
+t*_script.sh
+preprocess_dbs/depths_analysis/*.png
+preprocess_dbs/depths_analysis/logs_*
+preprocess_dbs/depths_analysis/*/*.png
+preprocess_dbs/depths_analysis/*/*.csv

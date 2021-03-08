@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 
 from experts.basic_expert import BasicExpert
-from experts.edges.model import DexiNed
 
 W, H = 256, 256
 
@@ -17,6 +16,7 @@ edges_model_path = os.path.join(current_dir_name, 'models/edges_dexined.h5')
 class EdgesModel(BasicExpert):
     def __init__(self, full_expert=True):
         if full_expert:
+            from experts.edges.model import DexiNed
             checkpoint_path = edges_model_path  #"experts/models/edges_dexined23.h5"
             device = "gpu" if torch.cuda.is_available() else "cpu"
             self.device = device

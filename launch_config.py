@@ -6,7 +6,8 @@ from datetime import datetime
 os.system("mkdir -p generated_configs/")
 
 domain_id = sys.argv[1]
-cfg_template = sys.argv[2]
+# cfg_template = sys.argv[2]
+cfg_template = "replica_template_iter1.ini"
 
 # intro
 cfg_out = "generated_configs/launch_%s_%s.ini" % (domain_id, str(
@@ -17,10 +18,14 @@ config.read(cfg_template)
 config.set("GraphStructure", "restricted_graph_exp_identifier", domain_id)
 
 # SET model type
-if domain_id in ["rgb", "normals_xtc", "sem_seg_hrnet", "cartoon_wb"]:
-    config.set("Edge Models", "model_type", "1")
-else:
-    config.set("Edge Models", "model_type", "0")
+if domain_id in [
+        "edges_dexined", "sobel_large", "sobel_small", "sobel_medium", "hsv"
+]:
+    config.set("Edge Models", "regression_losses", "l2")
+    config.set("Edge Models", "regression_losses_weights", "1")
+
+config.set("Edge Models", "model_type", "1")
+config.set("Logs", "tensorboard_prefix", "rep_it1_%s" % domain_id)
 
 with open(cfg_out, "w") as fd:
     config.write(fd)

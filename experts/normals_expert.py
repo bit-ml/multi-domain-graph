@@ -5,9 +5,7 @@ import cv2
 import numpy as np
 import PIL
 import torch
-from tensorflow.python.keras.utils.generic_utils import \
-    _SKIP_FAILED_SERIALIZATION
-from torchvision import transforms
+
 
 from experts.basic_expert import BasicExpert
 from experts.xtc.unet import UNet
@@ -26,6 +24,8 @@ class SurfaceNormalsXTC(BasicExpert):
             dataset_name: "taskonomy" or "replica"
         '''
         if full_expert:
+    #         from tensorflow.python.keras.utils.generic_utils import \
+    # _SKIP_FAILED_SERIALIZATION
             model_path = normals_model_path
             self.model = UNet()
             model_state_dict = torch.load(model_path)

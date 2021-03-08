@@ -97,3 +97,14 @@ class DepthModelXTC(BasicExpert):
         depth_maps = depth_maps.clamp(min=0, max=1).data.cpu().numpy()
         depth_maps = np.array(depth_maps).astype('float32')
         return depth_maps
+
+    def test_gt(self, loss_fct, pred, target):
+        is_nan = target != target
+        bm = ~is_nan
+
+        new_target = target.clone()
+        new_target[is_nan] = 0
+        new_target = new_target * bm
+
+        loss = loss_fct(pred * bm, new_target)
+        return loss

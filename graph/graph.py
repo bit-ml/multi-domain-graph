@@ -49,8 +49,8 @@ class MultiDomainGraph:
                     model_type = np.int32(
                         config.get('Edge Models', 'model_type'))
                     if model_type == 0:
-                        bs_test = 80
-                        bs_train = 52
+                        bs_test = 60
+                        bs_train = 60
                     else:
                         bs_test = 60
                         bs_train = 40
