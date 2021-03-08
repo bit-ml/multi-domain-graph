@@ -8,14 +8,8 @@ import matplotlib.pyplot as plt
 import glob
 
 # full db
-#logs_path = '/root/logs_analysis/test_2021-03-06 12:01:23.021828'
-# 200 samples
-#logs_path = '/root/logs_analysis/test_2021-03-06 13:35:21.210468'
-# 10 samples
-#logs_path = '/root/logs_analysis/test_2021-03-06 10:36:05.195071'
-# 10 samples with metrics logs
-logs_path = '/root/logs_analysis/test_2021-03-06 18:16:30.431321'
-out_path = '/root/logs_analysis_visualization'
+logs_path = '/root/logs_analysis/test_2021-03-06 20:30:23.730137'
+out_path = '/root/logs_analysis_visualization_v2'
 
 
 def sns_plot_variance_with_and_without_exp(variance_with_exp,
@@ -36,7 +30,6 @@ def sns_plot_variance_with_and_without_exp(variance_with_exp,
                   x='variance considering only the edges',
                   y='variance considering both edges and expert',
                   kind='hist')
-    plt.legend()
     plt.savefig(fig_out_path, bbox_inches='tight', dpi=300)
     plt.close()
 
@@ -85,7 +78,6 @@ def sns_plot_variance_vs_indiv_errors(variance, all_errors, src_names, title,
         sns.set_context('paper')
         sns.violinplot(data=df, x='variance', y=str_)
         plt.title(title + src_names[i])
-        plt.legend()
         plt.xticks(rotation=90)
         plt.savefig(fig_out_path.replace('.png', '_%s.png' % (src_names[i])),
                     bbox_inches='tight',
@@ -117,7 +109,6 @@ def sns_plot_variance_vs_avg_errors(variance, all_errors, src_names, title,
     sns.set_context('paper')
     sns.violinplot(data=df, x='variance', y='avg error')
     plt.title(title)
-    plt.legend()
     plt.xticks(rotation=90)
     plt.savefig(fig_out_path, bbox_inches='tight', dpi=300)
     plt.close()
@@ -146,7 +137,6 @@ def plot_variance_and_errors(variance, all_errors, fig_out_path):
     plt.plot(variance, label='variance')
     plt.plot(avg_errors, label='average errors')
     plt.ylim(0, 1)
-    #plt.legend()
     plt.xlabel('pixels')
     plt.savefig(fig_out_path)
     plt.close()
@@ -172,12 +162,14 @@ def process_split(channel, variance_path, errors_paths, all_metrics_paths,
     variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
 
     set_str = '%s_set_%s_check' % (split_name, gt_type)
-
+    print('process ' + set_str)
+    print('process variances')
     ### plot variance with exp vs variance without exp
     sns_plot_variance_with_and_without_exp(
         variance_with_exp, variance_without_exp,
         os.path.join(out_path,
                      '%s_variance_with_vs_without_exp.png' % (set_str)))
+    print('process errors')
     ### get errors
     src_names = []
     all_errors = []
@@ -210,7 +202,7 @@ def process_split(channel, variance_path, errors_paths, all_metrics_paths,
     for idx in range(len(metrics)):
         metric_name = metrics[idx]
         metrics_paths = all_metrics_paths[idx]
-
+        print('process metric ' + metric_name)
         src_names = []
         all_errors = []
         prefix = 'score_%s_%s_%s_' % (metric_name, split_name, gt_type[4:])
