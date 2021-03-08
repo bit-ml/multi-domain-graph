@@ -167,6 +167,31 @@ class DummySummaryWriter:
         return self
 
 
+class VarianceScore(nn.Module):
+    def __init__(self, reduction=False):
+        super(VarianceScore, self).__init__()
+
+    def forward(self, batch):
+        avg_b = torch.mean(batch, 0)[None]
+        avg_b = (batch - avg_b)**2
+        avg_b = torch.mean(avg_b, 0)
+        return avg_b
+
+
+class WeightedVarianceScore(nn.Module):
+    def __init__(self, reduction=False):
+        super(WeightedVarianceScore, self).__init__()
+
+    def forward(self, batch, weights):
+        # batch, weights - bs x n_chs x h x w x n_exps
+        avg = torch.mean(batch * weights, dim=4, keepdim=True)
+        variance = torch.sum(weights * (batch - avg)**2, dim=4, keepdim=True)
+        s = torch.sum(weights, dim=4, keepdim=True)
+        s[s == 0] = 1
+        variance = variance / s
+        return variance
+
+
 class SimScore_SSIM(nn.Module):
     def __init__(self, n_channels, win_size, reduction=False):
         super(SimScore_SSIM, self).__init__()
@@ -399,13 +424,26 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                  similarity_fcts=['ssim'],
                  kernel_fct='gauss',
                  comb_type='mean',
-                 thresholds=[0.5]):
+                 thresholds=[0.5],
+                 analysis_silent=True,
+                 analysis_logs_path=''):
         super(EnsembleFilter_TwdExpert, self).__init__()
         self.thresholds = thresholds
         self.similarity_fcts = similarity_fcts
         self.n_channels = n_channels
         self.dst_domain_name = dst_domain_name
         self.postprocess_eval = postprocess_eval
+
+        # used for analysis
+        self.working_split = 'none'
+        if analysis_silent:
+            self.w_variance_score = lambda x: x
+            self.log_w_variance_fct = lambda *args: True
+            self.logs_path = ''
+        else:
+            self.w_variance_score = WeightedVarianceScore()
+            self.log_w_variance_fct = self.log_w_variance
+            self.logs_path = analysis_logs_path
 
         self.fct_before_dist_metric = self.scale_maps_before_comparison
         #self.fct_before_dist_metric = lambda x: x
@@ -441,6 +479,27 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             sim_models.append(sim_model)
         self.similarity_models = torch.nn.ModuleList(sim_models)
 
+    def log_w_variance(self, data, weights, meanshift_iter_idx):
+        # data, weights - bs x n_chs x h x w x n_exps
+        bs, n_chs, h, w, n_exps = data.shape
+        w_variance = self.w_variance_score(data, weights)
+        file_path = os.path.join(
+            self.logs_path,
+            'w_variance_%s_%d.csv' % (self.working_split, meanshift_iter_idx))
+        if os.path.exists(file_path):
+            f = open(file_path, 'a')
+        else:
+            f = open(file_path, 'w')
+            f.write('channel,variance,\n')
+        w_variance = w_variance.cpu().numpy()
+
+        for ch in range(n_chs):
+            ch_w_variance = w_variance[:, ch, :, :, :].flatten()
+            for i in range(ch_w_variance.size):
+                f.write('%d, %20.10f,\n' % (ch, ch_w_variance[i]))
+
+        f.close()
+
     def scale_maps_before_comparison(self, batch1, batch2):
         b1_max = torch.amax(batch1, (1, 2, 3))
         b2_max = torch.amax(batch2, (1, 2, 3))
@@ -452,13 +511,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                             0)[0][:, None, None, None]
         return (batch1 - all_min) / (all_max - all_min), (batch2 - all_min) / (
             all_max - all_min)
-
-    def scale_similarity_maps(self, similarity_maps):
-        max_val = torch.amax(similarity_maps, (1, 2, 3, 4))[:, None, None,
-                                                            None, None]
-        min_val = torch.amin(similarity_maps, (1, 2, 3, 4))[:, None, None,
-                                                            None, None]
-        return (similarity_maps - min_val) / (max_val - min_val)
 
     def forward_mean(self, data, weights):
         data = data * weights.cuda()
@@ -500,8 +552,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def kernel_flat_weighted(self, chan_dist_maps, meanshift_iter):
         chan_mask = chan_dist_maps > self.thresholds[
             meanshift_iter]  # indicates what we want to remove
+        chan_dist_maps = 1 - chan_dist_maps
         chan_dist_maps[chan_mask] = 0
-        chan_dist_maps[~chan_mask] = 1 - chan_dist_maps[~chan_mask]
         return chan_dist_maps
 
     def kernel_gauss(self, chan_dist_maps, meanshift_iter):
@@ -528,27 +580,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
         return (distance_maps - min_val) / (max_val - min_val + EPSILON)
 
-    def kernel_flat(self, chan_sim_maps, meanshift_iter):
-        # indicates what we want to remove
-        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
-        chan_sim_maps[chan_mask] = 0
-        chan_sim_maps[~chan_mask] = 1
-        return chan_sim_maps
-
-    def kernel_flat_weighted(self, chan_sim_maps, meanshift_iter):
-        # indicates what we want to remove
-        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
-        chan_sim_maps = 1 - chan_sim_maps
-        chan_sim_maps[chan_mask] = 0
-        return chan_sim_maps
-
-    def kernel_gauss(self, chan_sim_maps, meanshift_iter):
-        chan_sim_maps = torch.exp(-((chan_sim_maps**2) /
-                                    (2 * self.thresholds[meanshift_iter]**2)))
-        return chan_sim_maps
-
     def forward(self, data):
-        batch_std = data.std(axis=-1).mean(axis=(1, 2, 3))
+        #batch_std = data.std(axis=-1).mean(axis=(1, 2, 3))
         for meanshift_iter in range(len(self.thresholds)):
             bs, n_chs, h, w, n_tasks = data.shape
             distance_maps = self.twd_expert_distances(
@@ -558,36 +591,26 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             for sim_idx in np.arange(1, len(self.similarity_models)):
                 sim_model = self.similarity_models[sim_idx]
                 sim_maps = self.twd_expert_distances(data, sim_model)
-                sim_maps = self.scale_similarity_maps(sim_maps)
+                sim_maps = self.scale_distance_maps(sim_maps)
                 distance_maps += sim_maps
-            distance_maps = self.scale_similarity_maps(distance_maps)
+            distance_maps = self.scale_distance_maps(distance_maps)
 
             # kernel: transform distances to similarities
             for chan in range(n_chs):
                 distance_maps[:, chan] = self.kernel(distance_maps[:, chan],
                                                      meanshift_iter)
-            similarities_maps = distance_maps
 
             # sum = 1
-            sum_ = torch.sum(similarities_maps, dim=-1, keepdim=True)
+            sum_ = torch.sum(distance_maps, dim=-1, keepdim=True)
             sum_[sum_ == 0] = 1
-            similarities_maps = similarities_maps / sum_
+            distance_maps = distance_maps / sum_
 
-            ensemble_result = self.ens_aggregation_fcn(data, similarities_maps)
+            self.log_w_variance_fct(data, distance_maps, meanshift_iter)
+
+            ensemble_result = self.ens_aggregation_fcn(data, distance_maps)
 
             # 2. clamp/other the ensemble
             # ensemble_result = self.postprocess_eval(ensemble_result)
 
             data[..., -1] = ensemble_result
         return ensemble_result
-
-
-class VarianceScore(nn.Module):
-    def __init__(self, reduction=False):
-        super(VarianceScore, self).__init__()
-
-    def forward(self, batch):
-        avg_b = torch.mean(batch, 0)[None]
-        avg_b = (batch - avg_b)**2
-        avg_b = torch.mean(avg_b, 0)
-        return avg_b
