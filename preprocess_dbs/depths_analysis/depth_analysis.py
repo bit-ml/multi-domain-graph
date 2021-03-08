@@ -1255,11 +1255,12 @@ def run_analysis_v3(dataset, split_name, exp_name, splits, db_type, gt_path,
 
 
 def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
-                    rgb_path, bm_fct):
+                    rgb_path, bm_fct, out_path):
+    os.makedirs(out_path, exist_ok=True)
 
     n_bins_gen_histo = 1000
     n_bins_histospecification = 100000
-    prefix = 'v4_%s_%s_%s' % (dataset, split_name, exp_name),
+    prefix = 'v4_%s_%s_%s' % (dataset, split_name, exp_name)
 
     print('%s' % (prefix))
     db = db_type(gt_path, rgb_path, splits)
@@ -1277,10 +1278,10 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
     # Step 1 - scale all in range [0,1]
     gt_scale = TransFct_ScaleMinMax(gt_min, gt_max)
     exp_scale = TransFct_ScaleMinMax(exp_min, exp_max)
-    np.save('%s_gt_min.npy' % (prefix), gt_min)
-    np.save('%s_gt_max.npy' % (prefix), gt_max)
-    np.save('%s_exp_min.npy' % (prefix), exp_min)
-    np.save('%s_exp_max.npy' % (prefix), exp_max)
+    np.save('%s/%s_gt_min.npy' % (out_path, prefix), gt_min)
+    np.save('%s/%s_gt_max.npy' % (out_path, prefix), gt_max)
+    np.save('%s/%s_exp_min.npy' % (out_path, prefix), exp_min)
+    np.save('%s/%s_exp_max.npy' % (out_path, prefix), exp_max)
 
     gt_min, gt_max, exp_min, exp_max, l1, l2, l1_01, l2_01 = get_limits(
         dataloader, bm_fct, [gt_scale], [exp_scale])
@@ -1292,7 +1293,7 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
     print('L2 [0,1] : %8.4f' % (l2_01))
 
     # Step 2 - compute histograms of scaled values
-    csv_path = './logs_%s/%s_initial_histo.csv' % (dataset, prefix)
+    csv_path = '%s/%s_initial_histo.csv' % (out_path, prefix)
     suffix = '%s_all' % (prefix)
     histo_bins, gt_histo, cum_gt_histo, exp_histo, cum_exp_histo = get_histogram(
         dataloader, bm_fct, n_bins_gen_histo, csv_path, suffix, [gt_scale],
@@ -1301,7 +1302,7 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
     plt.plot(histo_bins[1:], gt_histo, label='gt')
     plt.plot(histo_bins[1:], exp_histo, label='exp')
     plt.legend()
-    plt.savefig('./logs_%s/%s_initial_histo.png' % (dataset, prefix))
+    plt.savefig('%s/%s_initial_histo.png' % (out_path, prefix))
     plt.close()
 
     gt_histo_specification = TransFct_HistoSpecification_GT(
@@ -1309,16 +1310,18 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
     exp_histo_specification = TransFct_HistoSpecification_Exp_v2(
         dataloader, bm_fct, [gt_scale], [exp_scale], n_bins_histospecification)
 
-    np.save('%s_gt_n_bins.npy' % prefix, gt_histo_specification.n_bins)
-    np.save('%s_gt_cum_data_histo.npy' % prefix,
+    np.save('%s/%s_gt_n_bins.npy' % (out_path, prefix),
+            gt_histo_specification.n_bins)
+    np.save('%s/%s_gt_cum_data_histo.npy' % (out_path, prefix),
             gt_histo_specification.cum_data_histo)
-    np.save('%s_gt_inv_cum_target_histo.npy' % prefix,
+    np.save('%s/%s_gt_inv_cum_target_histo.npy' % (out_path, prefix),
             gt_histo_specification.inv_cum_target_histo)
 
-    np.save('%s_exp_n_bins.npy' % prefix, exp_histo_specification.n_bins)
-    np.save('%s_exp_cum_data_histo.npy' % prefix,
+    np.save('%s/%s_exp_n_bins.npy' % (out_path, prefix),
+            exp_histo_specification.n_bins)
+    np.save('%s/%s_exp_cum_data_histo.npy' % (out_path, prefix),
             exp_histo_specification.cum_data_histo)
-    np.save('%s_exp_inv_cum_target_histo.npy' % prefix,
+    np.save('%s/%s_exp_inv_cum_target_histo.npy' % (out_path, prefix),
             exp_histo_specification.inv_cum_target_histo)
 
     # Step 3 - get limits & eval for transformed gt_histo
@@ -1332,8 +1335,7 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
     print('L1 [0,1] : %8.4f' % (l1_01))
     print('L2 [0,1] : %8.4f' % (l2_01))
 
-    csv_path = './logs_%s/%s_after_scale_and_trans_histo.csv' % (dataset,
-                                                                 prefix)
+    csv_path = '%s/%s_after_scale_and_trans_histo.csv' % (out_path, prefix)
     suffix = '%s_all' % (prefix)
     histo_bins, gt_histo, cum_gt_histo, exp_histo, cum_exp_histo = get_histogram(
         dataloader, bm_fct, n_bins_gen_histo, csv_path, suffix,
@@ -1343,11 +1345,11 @@ def run_analysis_v4(dataset, split_name, exp_name, splits, db_type, gt_path,
     plt.plot(histo_bins[1:], gt_histo, label='gt')
     plt.plot(histo_bins[1:], exp_histo, label='exp')
     plt.legend()
-    plt.savefig('./logs_%s/%s_final_histo.png' % (dataset, prefix))
+    plt.savefig('%s/%s_final_histo.png' % (out_path, prefix))
     plt.close()
 
     # save example
-    save_path = '%s_example.png' % (prefix)
+    save_path = '%s/%s_example.png' % (out_path, prefix)
     save_example(dataloader, bm_fct, save_path,
                  [gt_scale, gt_histo_specification],
                  [exp_scale, exp_histo_specification])
@@ -1399,7 +1401,7 @@ if __name__ == "__main__":
 
     if argv[5] == 'all':
         run_analysis_v4(dataset, 'all', exp_name, splits, db_type, gt_path,
-                        rgb_path, bm_fct)
+                        rgb_path, bm_fct, './logs_%s' % dataset)
         '''
         print(
             '===================================================================='
