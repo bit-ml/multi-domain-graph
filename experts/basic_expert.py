@@ -41,5 +41,6 @@ class BasicExpert():
     def test_gt(self, loss_fct, pred, target):
         '''
         GT eval - added for depth GT only (mask wrong pixels in GT)
+                - used for testing purpose, to treat different nan values of the gt 
         '''
         return loss_fct(pred, target)

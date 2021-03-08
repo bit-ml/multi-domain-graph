@@ -7,11 +7,14 @@ import torchvision
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-logs_out_path = r'/data/multi-domain-graph-6/datasets/replica_raw/runs'
+#logs_out_path = r'/data/multi-domain-graph-6/datasets/replica_raw_1/runs'
+logs_out_path = r'/data/multi-domain-graph-2/datasets/replica_raw_2/runs'
 
-experts_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica'
-gt_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica'
-split_name = 'train'
+#experts_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica'
+#gt_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica'
+experts_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica_2'
+gt_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica_2'
+split_name = 'val'
 n_samples = 100
 
 experts_path = os.path.join(experts_path, split_name)

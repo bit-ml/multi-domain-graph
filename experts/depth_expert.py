@@ -27,18 +27,20 @@ class DepthModel():
             opt.inference_resize_width = W
             self.model = Inference(opt)
             self.model.model.eval()
-        self.domain_name = "depth"
+        self.domain_name = "depth_n_1"
         self.n_maps = 1
         self.str_id = "sgdepth"
         self.identifier = self.domain_name + "_" + self.str_id
 
     def apply_expert_batch(self, batch_rgb_frames):
+        batch_rgb_frames = batch_rgb_frames / 255.
         depth_maps = []
         for idx, rgb_frame in enumerate(batch_rgb_frames):
             depth_map, segm_map = self.model.inference(rgb_frame.numpy())
             depth_maps.append(depth_map[0].cpu().numpy())
         depth_maps = np.array(depth_maps).astype('float32')
-        return depth_maps
+
+        return 1 / (depth_maps)  #1 - depth_maps
 
     '''
     def apply_expert(self, rgb_frames):
@@ -78,7 +80,7 @@ class DepthModelXTC(BasicExpert):
                 #transforms.CenterCrop(W),
                 transforms.ToTensor()
             ])
-        self.domain_name = "depth"
+        self.domain_name = "depth_n_1"
         self.n_maps = 1
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
@@ -94,17 +96,20 @@ class DepthModelXTC(BasicExpert):
     def apply_expert_batch(self, batch_rgb_frames):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
         depth_maps = self.model(batch_rgb_frames.to(self.device))
-        depth_maps = depth_maps.clamp(min=0, max=1).data.cpu().numpy()
+        depth_maps = depth_maps.data.cpu().numpy()
+        #depth_maps = depth_maps.clamp(min=0, max=1).data.cpu().numpy()
         depth_maps = np.array(depth_maps).astype('float32')
         return depth_maps
 
     def test_gt(self, loss_fct, pred, target):
+        l_target = target.clone()
+
         is_nan = target != target
         bm = ~is_nan
 
-        new_target = target.clone()
-        new_target[is_nan] = 0
-        new_target = new_target * bm
+        l_target[is_nan] = 0
+        l_target = l_target * bm
+        l_pred = pred * bm
 
-        loss = loss_fct(pred * bm, new_target)
+        loss = loss_fct(l_pred, l_target)
         return loss

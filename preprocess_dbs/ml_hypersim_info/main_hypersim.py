@@ -50,13 +50,14 @@ usage_str = 'usage: python main_hypersim.py type split_name exp1 exp2 ...'
 #                           - 'all' to run all available experts / domains
 
 VALID_EXPERTS_NAME = [
-    'depth_xtc', 'normals_xtc', 'edges_dexined', 'cartoon_wb',
+    'depth_n_1_xtc', 'normals_xtc', 'edges_dexined', 'cartoon_wb',
     'superpixel_fcn', 'sobel_small', 'sobel_medium', 'sobel_large'
 ]
 #'sem_seg_hrnet'
 #]
 VALID_DOMAINS_NAME = [
-    'rgb', 'grayscale', 'hsv', 'halftone_gray', 'depth', 'normals', 'sem_seg'
+    'rgb', 'grayscale', 'hsv', 'halftone_gray', 'depth_n_1', 'normals',
+    'sem_seg'
 ]
 
 COMPUTED_GT_DOMAINS = ['grayscale', 'hsv', 'halftone_gray']
@@ -70,6 +71,29 @@ EXP_OUT_PATH_ = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hyper
 GT_OUT_PATH_ = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim'
 DATASET_PATH = r'/data/multi-domain-graph-6/datasets/hypersim/data'
 SPLITS_CSV_PATH = r'/data/multi-domain-graph-6/datasets/hypersim/metadata_images_split_scene_v1_selection.csv'
+
+DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-6/datasets/hypersim/depth_align_data"
+depth_align_prefix = 'v4_hypersim_all_xtc'
+hypersim_gt_min_path = r'%s/%s_gt_min.npy' % (DEPTH_ALIGNED_PATH,
+                                              depth_align_prefix)
+hypersim_gt_max_path = r'%s/%s_gt_max.npy' % (DEPTH_ALIGNED_PATH,
+                                              depth_align_prefix)
+hypersim_exp_min_path = r'%s/%s_exp_min.npy' % (DEPTH_ALIGNED_PATH,
+                                                depth_align_prefix)
+hypersim_exp_max_path = r'%s/%s_exp_max.npy' % (DEPTH_ALIGNED_PATH,
+                                                depth_align_prefix)
+hypersim_gt_n_bins_path = r'%s/%s_gt_n_bins.npy' % (DEPTH_ALIGNED_PATH,
+                                                    depth_align_prefix)
+hypersim_gt_cum_data_histo = r'%s/%s_gt_cum_data_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
+hypersim_gt_inv_cum_target_histo = r'%s/%s_gt_inv_cum_target_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
+hypersim_exp_n_bins_path = r'%s/%s_gt_n_bins.npy' % (DEPTH_ALIGNED_PATH,
+                                                     depth_align_prefix)
+hypersim_exp_cum_data_histo = r'%s/%s_exp_cum_data_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
+hypersim_exp_inv_cum_target_histo = r'%s/%s_exp_inv_cum_target_histo.npy' % (
+    DEPTH_ALIGNED_PATH, depth_align_prefix)
 
 RUN_TYPE = 0
 EXPERTS_NAME = []
@@ -221,12 +245,65 @@ class RGBDataset_ForExperts(Dataset):
         return len(self.paths)
 
 
+class TransFct_ScaleMinMax():
+    def __init__(self, min_npy_path, max_npy_path):
+        self.min_v = np.load(min_npy_path)
+        self.max_v = np.load(max_npy_path)
+
+    def apply(self, data):
+        data = (data - self.min_v) / (self.max_v - self.min_v)
+        return data
+
+
+class TransFct_HistoSpecification():
+    def __init__(self, n_bins_path, cum_data_histo_path,
+                 inv_cum_target_histo_path):
+        self.n_bins = np.load(n_bins_path)
+        self.cum_data_histo = np.load(cum_data_histo_path)
+        self.inv_cum_target_histo = np.load(inv_cum_target_histo_path)
+
+    def apply(self, data):
+
+        data_ = data * self.n_bins
+        data_ = data_.astype('int32')
+        data_ = self.inv_cum_target_histo[self.cum_data_histo[data_]]
+        data_ = data_.astype('float32')
+        data_ = data_ / self.n_bins
+        return data_
+
+
+class TransFct_DepthExp():
+    def __init__(self, min_path, max_path, n_bins_path, cum_data_histo_path,
+                 inv_cum_target_histo_path):
+        self.min_v = np.load(min_path)
+        self.max_v = np.load(max_path)
+        self.n_bins = np.load(n_bins_path)
+        self.cum_data_histo = np.load(cum_data_histo_path)
+        self.inv_cum_target_histo = np.load(inv_cum_target_histo_path)
+
+    def apply(self, data):
+        data = (data - self.min_v) / (self.max_v - self.min_v)
+        data_ = data * self.n_bins
+        data_ = data_.astype('int32')
+        data_ = self.inv_cum_target_histo[self.cum_data_histo[data_]]
+        data_ = data_.astype('float32')
+        data_ = data_ / self.n_bins
+        data_ = data_.astype('float32')
+        data = data_
+        return data
+
+
 class DepthDataset(Dataset):
     def __init__(self, dataset_path, splits_csv_path, split_name):
         super(DepthDataset, self).__init__()
         self.paths = get_task_split_paths(dataset_path, splits_csv_path,
                                           split_name, 'geometry_hdf5',
                                           'depth_meters', 'hdf5')
+        self.scale_min_max_fct = TransFct_ScaleMinMax(hypersim_gt_min_path,
+                                                      hypersim_gt_max_path)
+        self.histo_specification = TransFct_HistoSpecification(
+            hypersim_gt_n_bins_path, hypersim_gt_cum_data_histo,
+            hypersim_gt_inv_cum_target_histo)
 
     def __getitem__(self, index):
         depth_file = h5py.File(self.paths[index], "r")
@@ -234,9 +311,11 @@ class DepthDataset(Dataset):
         depth_info = torch.from_numpy(depth_info).unsqueeze(0)
         depth_info = torch.nn.functional.interpolate(depth_info[None],
                                                      (WORKING_H, WORKING_W))[0]
-        depth_info[depth_info != depth_info] = 0  # get rid of nan values
-        depth_info = depth_info / 31.25
-        depth_info = torch.clamp(depth_info, 0, 1)
+        nan_mask = depth_info != depth_info
+        depth_info[nan_mask] = 0  # get rid of nan values
+        depth_info = TransFct_ScaleMinMax(depth_info)
+        depth_info = TransFct_HistoSpecification(depth_info)
+        depth_info[nan_mask] = float("nan")
         return depth_info, self.paths[index]
 
     def __len__(self):
@@ -266,7 +345,7 @@ class NormalsDataset(Dataset):
         normal_info = normal_info / norm
 
         normal_info = (normal_info + 1) / 2
-        normal_info[nan_mask] = 2
+        normal_info[nan_mask] = float("nan")
         return normal_info, self.paths[index]
 
     def __len__(self):
@@ -322,10 +401,6 @@ def get_expert(exp_name):
     return None
 
 
-def add_depth_process(data):
-    return data / 2
-
-
 def add_normals_process(data):
     data = np.clip(data, 0, 1)
     data = data * 2 - 1
@@ -336,6 +411,12 @@ def add_normals_process(data):
 
 
 def get_exp_results():
+    depth_exp_trans_fct = TransFct_DepthExp(hypersim_exp_min_path,
+                                            hypersim_exp_max_path,
+                                            hypersim_exp_n_bins_path,
+                                            hypersim_exp_cum_data_histo,
+                                            hypersim_exp_inv_cum_target_histo)
+
     print("get experts ", EXPERTS_NAME)
 
     dataset = RGBDataset_ForExperts(DATASET_PATH, SPLITS_CSV_PATH, SPLIT_NAME)
@@ -348,8 +429,8 @@ def get_exp_results():
         os.makedirs(exp_out_path, exist_ok=True)
         expert = get_expert(exp)
         process_fct = expert.apply_expert_batch
-        if exp == 'depth_xtc':
-            add_process_fct = add_depth_process
+        if exp == 'depth_n_1_xtc':
+            add_process_fct = depth_exp_trans_fct.apply
         elif exp == 'normals_xtc':
             add_process_fct = add_normals_process
         else:
