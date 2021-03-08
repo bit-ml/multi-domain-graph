@@ -43,7 +43,7 @@ VALID_ORIG_GT_DOMAINS = [
 # our internal domain names
 VALID_GT_DOMAINS = [\
     'rgb',
-    'depth_n_2',
+    'depth_n_1',
     'normals',
     'halftone_gray',
     'grayscale',
@@ -51,8 +51,8 @@ VALID_GT_DOMAINS = [\
 ]
 
 VALID_EXPERTS_NAME = [\
-    'depth_n_2_xtc',
-    'depth_n_2_sgdepth',
+    'depth_n_1_xtc',
+    'depth_n_1_sgdepth',
     'normals_xtc',
     'sem_seg_hrnet',
     'superpixel_fcn',
@@ -344,8 +344,6 @@ class TransFct_DepthExp():
 
     def apply(self, data):
         data = (data - self.min_v) / (self.max_v - self.min_v)
-        '''
-        # uncomment for depth_n_1 TODO
         data_ = data * self.n_bins
         data_ = data_.astype('int32')
         data_ = self.inv_cum_target_histo[self.cum_data_histo[data_]]
@@ -353,7 +351,6 @@ class TransFct_DepthExp():
         data_ = data_ / self.n_bins
         data_ = data_.astype('float32')
         data = data_
-        '''
         return data
 
 
@@ -376,8 +373,7 @@ class GT_DepthDataset(Dataset):
         bm = depth == 0
 
         depth = self.scale_min_max_fct.apply(depth)
-        # uncomment for depth_n_1 - TODO
-        #depth = self.histo_specification.apply(depth)
+        depth = self.histo_specification.apply(depth)
         depth[bm] = float("nan")
 
         #depth = self.scale_min_max_fct.apply(depth)
