@@ -21,7 +21,6 @@ import experts.normals_expert
 import experts.raft_of_expert
 import experts.rgb_expert
 import experts.saliency_seg_expert
-import experts.semantic_segmentation_expert
 import experts.vmos_stm_expert
 
 WORKING_H = 256
@@ -239,6 +238,7 @@ def get_expert(exp_name):
     elif exp_name == 'rgb':
         return experts.rgb_expert.RGBModel(full_expert=True)
     elif exp_name == 'sem_seg_hrnet':
+        import experts.semantic_segmentation_expert
         return experts.semantic_segmentation_expert.SSegHRNet(
             dataset_name="replica", full_expert=True)
     elif exp_name == 'grayscale':
@@ -517,12 +517,11 @@ def post_process_depth_xtc_fct(data):
 
 
 def get_exp_results(main_exp_out_path, experts_name):
-
-    depth_exp_trans_fct = TransFct_DepthExp(replica_exp_min_path,
-                                            replica_exp_max_path,
-                                            replica_exp_n_bins_path,
-                                            replica_exp_cum_data_histo,
-                                            replica_exp_inv_cum_target_histo)
+    if 'depth_n_xtc' in experts_name:
+        depth_exp_trans_fct = TransFct_DepthExp(
+            replica_exp_min_path, replica_exp_max_path,
+            replica_exp_n_bins_path, replica_exp_cum_data_histo,
+            replica_exp_inv_cum_target_histo)
 
     with torch.no_grad():
         rgbs_path = os.path.join(MAIN_DB_PATH, 'rgb')

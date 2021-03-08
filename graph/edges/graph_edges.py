@@ -13,8 +13,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
-from utils.utils import EnsembleFilter_TwdExpert, SSIMLoss, img_for_plot, VarianceScore
-from utils.utils import SimScore_L1, SimScore_L2, SimScore_SSIM, SimScore_LPIPS
+from utils.utils import (EnsembleFilter_TwdExpert, SimScore_L1, SimScore_L2,
+                         SimScore_LPIPS, SimScore_SSIM, SSIMLoss,
+                         VarianceScore, img_for_plot)
 
 empty_fcn = (lambda x: x)
 
@@ -25,6 +26,7 @@ class Edge:
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
+        kernel_fct = config.get('Ensemble', 'kernel_fct')
 
         # Analysis data
         silent_analysis = config.getboolean('Analysis', 'silent')
@@ -167,6 +169,7 @@ class Edge:
         self.gt_train_transform = self.expert2.gt_train_transform
         self.gt_eval_transform = self.expert2.gt_eval_transform
         self.gt_to_inp_transform = self.expert2.gt_to_inp_transform
+        self.test_gt = self.expert2.test_gt
 
         self.global_step = 0
         self.trained = False
@@ -364,7 +367,6 @@ class Edge:
             self.optimizer.zero_grad()
 
             domain1, domain2_gt = batch
-            #domain2_gt = torch.clamp(domain2_gt, 0, 1)
             domain2_gt = domain2_gt.to(device=device)
 
             domain2_pred = self.net([domain1, empty_fcn])
@@ -410,8 +412,10 @@ class Edge:
 
         eval_losses /= len(loader)
 
-        self.log_to_tb(writer, split_tag, wtag, eval_losses, domain1[:3],
-                       domain2_pred[:3], domain2_gt[:3])
+        self.log_to_tb(
+            writer, split_tag, wtag, eval_losses, domain1[:3],
+            self.net.module.to_exp.postprocess_eval(domain2_pred[:3]),
+            domain2_gt[:3])
 
         return eval_losses
 
@@ -680,8 +684,10 @@ class Edge:
                         domain2_exp_gt, edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
+                domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
+                    1, 2, 3, 4, 0)
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
+                    domain2_1hop_ens_list_perm)
 
                 edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
                                       edge.logs_path, 'test')
@@ -691,6 +697,7 @@ class Edge:
                     edge.gt_to_inp_transform(
                         domain2_exp_gt, edge.expert2.no_maps_as_ens_input()),
                     edge.gt_eval_transform(domain2_gt))
+
                 l1_expert += crt_loss.view(
                     crt_loss.shape[0],
                     -1).mean(dim=1).data.cpu().numpy().tolist()
@@ -775,8 +782,10 @@ class Edge:
                         domain2_exp_gt, edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
+                domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
+                    1, 2, 3, 4, 0)
                 domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
+                    domain2_1hop_ens_list_perm)
 
                 edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
                                       edge.logs_path, 'valid')
@@ -798,10 +807,11 @@ class Edge:
         return l1_edge, l1_ensemble1hop, domain2_1hop_ens, domain2_exp_gt, save_idxes
 
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
+        print("Ensemble: ",
+              colored(config.get('Ensemble', 'similarity_fct'), 'red'))
 
         # === VALID ====
         wtag_valid = "to_%s_valid_set" % (edges_1hop[0].expert2.identifier)
-
         l1_edge_valid, l1_ens_valid, domain2_1hop_ens, domain2_gt, save_idxes_valid = Edge.eval_1hop_ensemble_valid_set(
             edges_1hop, device, writer, wtag_valid)
 
@@ -879,8 +889,10 @@ class Edge:
                 domain2_1hop_ens_list.append(domain2_exp_gt)
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
-                domain2_1hop_ens = edge.ensemble_filter(
-                    domain2_1hop_ens_list.permute(1, 2, 3, 4, 0))
+                domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
+                    1, 2, 3, 4, 0)
+                domain2_1hop_ens, std = edge.ensemble_filter(
+                    domain2_1hop_ens_list_perm)
 
                 save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
                 for elem_idx in range(domain2_1hop_ens.shape[0]):

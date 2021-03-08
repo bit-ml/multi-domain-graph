@@ -5,11 +5,9 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
-import torchvision.transforms as transforms
 
 from experts.basic_expert import BasicExpert
-from experts.spixel.Spixel_single_layer import SpixelNet1l_bn
-from experts.spixel.train_util import *
+from experts.spixel.train_util import shift9pos
 
 current_dir_name = os.path.dirname(os.path.realpath(__file__))
 sp_model_path = os.path.join(current_dir_name, 'models/SpixelNet_bsd_ckpt.tar')
@@ -21,6 +19,8 @@ DOWNSIZE = 16
 class SuperPixel(BasicExpert):
     def __init__(self, full_expert=True):
         if full_expert:
+            from experts.spixel.Spixel_single_layer import SpixelNet1l_bn
+
             # create model
             network_data = torch.load(sp_model_path)
             self.device = "cuda" if torch.cuda.is_available() else "cpu"

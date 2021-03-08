@@ -3,7 +3,6 @@ import os
 
 import cv2
 import numpy as np
-import tensorflow as tf
 import torch
 from torchvision import transforms
 
@@ -20,6 +19,8 @@ saliency_model_path = os.path.join(current_dir_name,
 class SaliencySegmModel(BasicExpert):
     def __init__(self, full_expert=True):
         if full_expert:
+            import tensorflow as tf
+
             #resnet_path = 'experts/models/resnet50_caffe.pth'
             checkpoint_path = saliency_model_path  #"experts/models/egnet_resnet.pth"
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -50,29 +51,3 @@ class SaliencySegmModel(BasicExpert):
             edge_maps.append(pred[None])
         edge_maps = np.array(edge_maps).astype('float32')
         return edge_maps
-
-    '''
-    def apply_expert(self, rgb_frames):
-        edge_maps = []
-
-        for rgb_frame in rgb_frames:
-            resized_rgb_frame = cv2.resize(np.array(rgb_frame),
-                                           (W, H)).astype(np.float32)
-            input_tensor = self.trans_totensor(resized_rgb_frame)[None].to(
-                self.device)
-            up_edge, up_sal, up_sal_f = self.net_bone(input_tensor)
-            pred = np.squeeze(torch.sigmoid(up_sal_f[-1]).cpu().data.numpy())
-            edge_maps.append(pred[None])
-        return edge_maps
-
-    def apply_expert_one_frame(self, rgb_frame):
-        resized_rgb_frame = cv2.resize(np.array(rgb_frame),
-                                       (W, H)).astype(np.float32)
-        input_tensor = self.trans_totensor(resized_rgb_frame)[None].to(
-            self.device)
-        up_edge, up_sal, up_sal_f = self.net_bone(input_tensor)
-        pred = np.squeeze(torch.sigmoid(up_sal_f[-1]).cpu().data.numpy())
-
-        # out shape: expert.n_maps x 256 x 256
-        return pred[None]
-    '''

@@ -51,10 +51,15 @@ def img_for_plot(img, dst_id):
     '''
     img = img.clone()
     n, c, _, _ = img.shape
-    if c == 2:
-        img = img[:, 0:1]
+    if dst_id.find("halftone") >= 0:
+        if img.shape[1] > 1:
+            tasko_labels = img.argmax(dim=1, keepdim=True)
+        else:
+            tasko_labels = img
+
+        img = tasko_labels
         c = 1
-    if dst_id.find("sem_seg") >= 0:
+    elif dst_id.find("sem_seg") >= 0:
         if img.shape[1] > 1:
             tasko_labels = img.argmax(dim=1, keepdim=True)
         else:
@@ -77,10 +82,10 @@ def img_for_plot(img, dst_id):
     # return (img - min_img) / (max_img - min_img)
 
     # normalize per all input (all channels)
-    img_view = img.view(n, -1)
-    min_img = img_view.min(axis=1)[0][:, None, None, None]
-    max_img = img_view.max(axis=1)[0][:, None, None, None]
-    return img  #(img - min_img) / (max_img - min_img)
+    # img_view = img.view(n, -1)
+    # min_img = img_view.min(axis=1)[0][:, None, None, None]
+    # max_img = img_view.max(axis=1)[0][:, None, None, None]
+    return img  #.clamp(0, 1)  #(img - min_img) / (max_img - min_img)
 
 
 def get_gaussian_filter(n_channels, win_size, sigma):
@@ -198,16 +203,16 @@ class SimScore_SSIM(nn.Module):
                     (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) *
                                            (sigma1_sq + sigma2_sq + C2))
         if self.reduction:
-            res = ssim_map.view((ssim_map.shape[0], ssim_map.shape[1],
-                                 -1)).mean(2).mean(1).sum()
+            sim_score = ssim_map.view((ssim_map.shape[0], ssim_map.shape[1],
+                                       -1)).mean(2).mean(1).sum()
         else:
-            res = ssim_map
-        res = torch.clamp(res, -1,
-                          1)  # there seem to be small numerical issues
-        # res has now values in range [-1,1]
-        res = (res + 1) / 2  # => values in range [0,1], with 0 worst, 1 best
-        res = 1 - res  # => [0,1] with 0 best, 1 worst => distance metric
-        return res
+            sim_score = ssim_map
+
+        # there seem to be small numerical issues
+        sim_score = torch.clamp(sim_score, -1, 1)
+
+        sim_score = (sim_score + 1) / 2
+        return 1 - sim_score
 
 
 class SimScore_MSSIM(torch.nn.Module):
@@ -271,18 +276,42 @@ class SimScore_MSSIM(torch.nn.Module):
             res = ssim_map
         # res has now values in range [-1,1]
         res = torch.clamp(res, -1, 1)
-        res = (res + 1) / 2  # => values in range [0,1], with 0 worst, 1 best
-        res = 1 - res  # => [0,1] with 0 best, 1 worst => distance metric
-        return res
+
+        # => values in range [0,1], with 0 worst, 1 best
+        res = (res + 1) / 2
+
+        # => [0,1] with 0 best, 1 worst => distance metric
+        return 1 - res
 
     def forward(self, batch1, batch2):
-        res = torch.zeros(batch1.shape).cuda()
+        sim_score = torch.zeros(batch1.shape).cuda()
         for i in range(len(self.win_sizes)):
-            res = res + self.get_similarity_score_aux(
+            sim_score = sim_score + self.get_similarity_score_aux(
                 batch1, batch2, self.__getattr__('g_filter_' + str(i)),
                 self.win_sizes[i])
-        res = res / len(self.win_sizes)
-        return res
+        sim_score = sim_score / len(self.win_sizes)
+
+        # sim_score -= sim_score.amin(axis=(2, 3), keepdim=True)
+        # sim_score /= (sim_score.amax(axis=(2, 3), keepdim=True) + EPSILON)
+        sim_score = (sim_score + 1) / 2
+
+        return 1 - sim_score
+
+
+class SimScore_L2(nn.Module):
+    def __init__(self, reduction=False):
+        super(SimScore_L2, self).__init__()
+        if not reduction:
+            self.reduction = 'none'
+        else:
+            self.reduction = 'mean'
+
+    def forward(self, batch1, batch2):
+        distance = torch.nn.functional.mse_loss(batch1,
+                                                batch2,
+                                                reduction=self.reduction)
+
+        return distance
 
 
 class SimScore_L1(nn.Module):
@@ -314,16 +343,19 @@ class SimScore_L2(nn.Module):
 
 
 class SimScore_Equal(nn.Module):
-    def __init__(self, reduction=False):
+    def __init__(self):
         super(SimScore_Equal, self).__init__()
-        self.reduction = reduction
+        self.ones = torch.ones((70, 3, 256, 256)).cuda()
 
     def forward(self, batch1, batch2):
         bs, n_chs, h, w = batch1.shape
-        if self.reduction:
-            return torch.ones((n_chs, h, w))
-        else:
-            return torch.ones((bs, n_chs, h, w))
+        bso, n_chso, ho, wo = self.ones.shape
+        if bso == bs and n_chso == n_chs and ho == h and wo == w:
+            return self.ones
+
+        del self.ones
+        self.ones = torch.ones_like(batch1)
+        return self.ones
 
 
 class SimScore_PSNR(nn.Module):
@@ -339,9 +371,7 @@ class SimScore_PSNR(nn.Module):
                                            batch2,
                                            reduction=self.reduction)
         norm_dist = torch.log10(1 / (mse + EPSILON))
-        res = 1 - norm_dist / (norm_dist.max() + EPSILON)
-        # => range [0,1] with 0 worst
-        return res
+        return norm_dist
 
 
 class SimScore_LPIPS(nn.Module):
@@ -358,9 +388,7 @@ class SimScore_LPIPS(nn.Module):
         #                                           spatial=True)
     def forward(self, batch1, batch2):
         distance = self.lpips_net.forward(batch1, batch2)
-        distance = distance.repeat(1, self.n_channels, 1, 1)
-        #distance = 1 - distance - removed in order to return a distance metric
-        return distance
+        return distance.repeat(1, self.n_channels, 1, 1)
 
 
 class EnsembleFilter_TwdExpert(torch.nn.Module):
@@ -393,10 +421,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             self.ens_aggregation_fcn = self.forward_mean
         else:
             self.ens_aggregation_fcn = self.forward_median
-        #if dst_domain_name == 'edges':
-        #    self.ens_aggregation_fcn = self.forward_mean
-        #else:
-        #    self.ens_aggregation_fcn = self.forward_median
         sim_models = []
         for sim_fct in similarity_fcts:
             if sim_fct == 'ssim':
@@ -442,6 +466,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
     def forward_median(self, data, weights):
         bs, n_chs, h, w, n_exps = data.shape
+        fwd_result = torch.zeros_like(data[..., 0])
         for chan in range(n_chs):
             data_chan = data[:, chan].contiguous()
             data_chan = data_chan.view(bs * h * w, n_exps)
@@ -461,39 +486,58 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             data_chan = data_chan[torch.arange(bs * h * w).unsqueeze(1),
                                   indices]
             data_chan = data_chan.view(bs, h, w)
-            data[:, chan, ..., 0] = data_chan
-        data = data[..., 0]
-        return data
+            fwd_result[:, chan] = data_chan
 
-    def twd_expert_distances(self, data, similarity_models):
+        return fwd_result
+
+    def kernel_flat(self, chan_dist_maps, meanshift_iter):
+        chan_mask = chan_dist_maps > self.thresholds[
+            meanshift_iter]  # indicates what we want to remove
+        chan_dist_maps[chan_mask] = 0
+        chan_dist_maps[~chan_mask] = 1
+        return chan_dist_maps
+
+    def kernel_flat_weighted(self, chan_dist_maps, meanshift_iter):
+        chan_mask = chan_dist_maps > self.thresholds[
+            meanshift_iter]  # indicates what we want to remove
+        chan_dist_maps[chan_mask] = 0
+        chan_dist_maps[~chan_mask] = 1 - chan_dist_maps[~chan_mask]
+        return chan_dist_maps
+
+    def kernel_gauss(self, chan_dist_maps, meanshift_iter):
+        chan_dist_maps = torch.exp(-((chan_dist_maps**2) /
+                                     (2 * self.thresholds[meanshift_iter]**2)))
+        return chan_dist_maps
+
+    def twd_expert_distances(self, data, similarity_model):
         bs, n_chs, h, w, n_tasks = data.shape
+        distance_maps = []
 
-        similarity_maps = []
+        for i in range(n_tasks - 1):
+            distance_map = similarity_model(data[..., -1], data[..., i])
+            distance_maps.append(distance_map)
 
-        for i in range(n_tasks):
-            sim_map = similarity_models[0](data[..., -1], data[..., i])
-            for j in np.arange(1, len(similarity_models)):
-                sim_map_ = similarity_models[j](data[..., -1], data[..., i])
-                sim_map += sim_map_
-            sim_map = sim_map / len(similarity_models)
-            similarity_maps.append(sim_map)
+        # add expert vs expert
+        distance_maps.append(torch.zeros_like(distance_map))
 
-        similarity_maps = torch.stack(similarity_maps,
-                                      0).permute(1, 2, 3, 4, 0)
+        distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
+        return distance_maps
 
-        return similarity_maps
+    def scale_distance_maps(self, distance_maps):
+        max_val = torch.amax(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
+        min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
+        return (distance_maps - min_val) / (max_val - min_val + EPSILON)
 
     def kernel_flat(self, chan_sim_maps, meanshift_iter):
-
-        chan_mask = chan_sim_maps > self.thresholds[
-            meanshift_iter]  # indicates what we want to remove
+        # indicates what we want to remove
+        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
         chan_sim_maps[chan_mask] = 0
         chan_sim_maps[~chan_mask] = 1
         return chan_sim_maps
 
     def kernel_flat_weighted(self, chan_sim_maps, meanshift_iter):
-        chan_mask = chan_sim_maps > self.thresholds[
-            meanshift_iter]  # indicates what we want to remove
+        # indicates what we want to remove
+        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
         chan_sim_maps = 1 - chan_sim_maps
         chan_sim_maps[chan_mask] = 0
         return chan_sim_maps
@@ -504,33 +548,35 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return chan_sim_maps
 
     def forward(self, data):
+        batch_std = data.std(axis=-1).mean(axis=(1, 2, 3))
         for meanshift_iter in range(len(self.thresholds)):
             bs, n_chs, h, w, n_tasks = data.shape
-
-            sim_maps = self.twd_expert_distances(data,
-                                                 [self.similarity_models[0]])
-            sim_maps = self.scale_similarity_maps(sim_maps)
-            similarity_maps = sim_maps
+            distance_maps = self.twd_expert_distances(
+                data, self.similarity_models[0])
+            distance_maps = self.scale_distance_maps(distance_maps)
 
             for sim_idx in np.arange(1, len(self.similarity_models)):
                 sim_model = self.similarity_models[sim_idx]
-                sim_maps = self.twd_expert_distances(data, [sim_model])
+                sim_maps = self.twd_expert_distances(data, sim_model)
                 sim_maps = self.scale_similarity_maps(sim_maps)
-                similarity_maps += sim_maps
-            similarity_maps = self.scale_similarity_maps(similarity_maps)
+                distance_maps += sim_maps
+            distance_maps = self.scale_similarity_maps(distance_maps)
 
+            # kernel: transform distances to similarities
             for chan in range(n_chs):
-                similarity_maps[:,
-                                chan] = self.kernel(similarity_maps[:, chan],
-                                                    meanshift_iter)
+                distance_maps[:, chan] = self.kernel(distance_maps[:, chan],
+                                                     meanshift_iter)
+            similarities_maps = distance_maps
 
-            sum_ = torch.sum(similarity_maps, dim=-1, keepdim=True)
+            # sum = 1
+            sum_ = torch.sum(similarities_maps, dim=-1, keepdim=True)
             sum_[sum_ == 0] = 1
-            similarity_maps = similarity_maps / sum_
+            similarities_maps = similarities_maps / sum_
 
-            ensemble_result = self.ens_aggregation_fcn(data, similarity_maps)
+            ensemble_result = self.ens_aggregation_fcn(data, similarities_maps)
 
-            ensemble_result = self.postprocess_eval(ensemble_result)
+            # 2. clamp/other the ensemble
+            # ensemble_result = self.postprocess_eval(ensemble_result)
 
             data[..., -1] = ensemble_result
         return ensemble_result
