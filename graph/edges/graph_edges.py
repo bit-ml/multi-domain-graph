@@ -26,8 +26,6 @@ class Edge:
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
-        thresholds = np.float32(
-            config.get('Ensemble', 'thresholds').split(','))
         kernel_fct = config.get('Ensemble', 'kernel_fct')
 
         # Analysis data
