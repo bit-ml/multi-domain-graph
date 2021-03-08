@@ -263,9 +263,8 @@ class TransFct_HistoSpecification():
         self.inv_cum_target_histo = np.load(inv_cum_target_histo_path)
 
     def apply(self, data):
-
         data_ = data * self.n_bins
-        data_ = data_.astype('int32')
+        data_ = data_.type(torch.int32)
         data_ = self.inv_cum_target_histo[self.cum_data_histo[data_]]
         data_ = data_.astype('float32')
         data_ = data_ / self.n_bins
@@ -313,8 +312,8 @@ class DepthDataset(Dataset):
                                                      (WORKING_H, WORKING_W))[0]
         nan_mask = depth_info != depth_info
         depth_info[nan_mask] = 0  # get rid of nan values
-        depth_info = TransFct_ScaleMinMax(depth_info)
-        depth_info = TransFct_HistoSpecification(depth_info)
+        depth_info = self.scale_min_max_fct.apply(depth_info)
+        depth_info = self.histo_specification.apply(depth_info)
         depth_info[nan_mask] = float("nan")
         return depth_info, self.paths[index]
 
@@ -341,7 +340,11 @@ class NormalsDataset(Dataset):
         normal_info[1, :, :] = normal_info[1, :, :] * (-1)
         normal_info[2, :, :] = normal_info[2, :, :] * (-1)
 
+        normal_info[
+            2, :, :] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
+
         norm = torch.norm(normal_info, dim=0, keepdim=True)
+        norm[norm == 0] = 1
         normal_info = normal_info / norm
 
         normal_info = (normal_info + 1) / 2
@@ -377,7 +380,7 @@ class SemanticSegDataset(Dataset):
 
 
 def get_expert(exp_name):
-    if exp_name == 'depth_xtc':
+    if exp_name == 'depth_xtc' or exp_name == 'depth_n_1_xtc':
         return experts.depth_expert.DepthModelXTC(full_expert=True)
     elif exp_name == 'normals_xtc':
         return experts.normals_expert.SurfaceNormalsXTC(
@@ -411,6 +414,7 @@ def add_normals_process(data):
 
 
 def get_exp_results():
+
     depth_exp_trans_fct = TransFct_DepthExp(hypersim_exp_min_path,
                                             hypersim_exp_max_path,
                                             hypersim_exp_n_bins_path,
@@ -464,7 +468,7 @@ def get_dataset_type(dom_name):
         return RGBDataset_ForExperts
     elif dom_name == 'rgb':
         return RGBDataset
-    elif dom_name == 'depth':
+    elif dom_name == 'depth_n_1':
         return DepthDataset
     elif dom_name == 'normals':
         return NormalsDataset
@@ -487,6 +491,7 @@ def get_gt_domains():
             process_fct = lambda x: x
 
         task_dataset_cls = get_dataset_type(dom)
+
         dataset = task_dataset_cls(DATASET_PATH, SPLITS_CSV_PATH, SPLIT_NAME)
         dataloader = DataLoader(dataset,
                                 batch_size=100,
