@@ -407,7 +407,9 @@ def get_expert(exp_name):
 def add_normals_process(data):
     data = np.clip(data, 0, 1)
     data = data * 2 - 1
+    data[:, 2] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
     norm_data = np.linalg.norm(data, axis=1, keepdims=True)
+    norm_data[norm_data == 0] = 1
     data = data / norm_data
     data = (data + 1) / 2
     return data
