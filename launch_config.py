@@ -6,8 +6,10 @@ from datetime import datetime
 os.system("mkdir -p generated_configs/")
 
 domain_id = sys.argv[1]
-# cfg_template = sys.argv[2]
-cfg_template = "replica_template_iter1.ini"
+cfg_template = sys.argv[2]
+# replica_template_iter1.ini
+# hypersim_template_train_iter1.ini
+# cfg_template = "replica_template_iter1.ini"
 
 # intro
 cfg_out = "generated_configs/launch_%s_%s.ini" % (domain_id, str(
