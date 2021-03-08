@@ -23,15 +23,7 @@ import experts.rgb_expert
 import experts.saliency_seg_expert
 import experts.semantic_segmentation_expert
 import experts.vmos_stm_expert
-'''
-depth_gt_th_50 = 1.5025
-depth_exp_th_50 = 0.0999
-depth_scale_factor_exp = depth_gt_th_50 / depth_exp_th_50
-depth_gt_th_5 = 0.6077
-depth_gt_th_95 = 3.6066
-depth_exp_th_5 = 0.6889
-depth_exp_th_95 = 3.6226
-'''
+
 WORKING_H = 256
 WORKING_W = 256
 
@@ -80,11 +72,15 @@ usage_str = 'usage: python main_taskonomy.py type split-name exp1 exp2 ...'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-REPLICA_PROC_NAME = "replica"
-REPLICA_RAW_NAME = "replica_raw_1"
+#REPLICA_PROC_NAME = "replica"
+#REPLICA_RAW_NAME = "replica_raw_1"
+REPLICA_PROC_NAME = "replica_2"
+REPLICA_RAW_NAME = "replica_raw_2"
 
-DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-6/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
-depth_align_prefix = 'v4_replica_all_xtc'
+#DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-6/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
+DEPTH_ALIGNED_PATH = "/data/multi-domain-graph-2/datasets/%s/depth_align_data" % REPLICA_RAW_NAME
+#depth_align_prefix = 'v4_replica_all_xtc'
+depth_align_prefix = 'v4_replica2_all_xtc'
 replica_gt_min_path = r'%s/%s_gt_min.npy' % (DEPTH_ALIGNED_PATH,
                                              depth_align_prefix)
 replica_gt_max_path = r'%s/%s_gt_max.npy' % (DEPTH_ALIGNED_PATH,
@@ -132,7 +128,9 @@ def check_arguments_without_delete(argv):
         return status, status_code
     SPLIT_NAME = split_name
 
-    MAIN_DB_PATH = r'/data/multi-domain-graph-6/datasets/%s/%s' % (
+    #MAIN_DB_PATH = r'/data/multi-domain-graph-6/datasets/%s/%s' % (
+    #    REPLICA_RAW_NAME, split_name)
+    MAIN_DB_PATH = r'/data/multi-domain-graph-2/datasets/%s/%s' % (
         REPLICA_RAW_NAME, split_name)
     MAIN_GT_OUT_PATH = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/%s/%s' % (
         REPLICA_PROC_NAME, split_name)
