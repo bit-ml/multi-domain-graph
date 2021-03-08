@@ -27,7 +27,9 @@ if domain_id in [
     config.set("Edge Models", "regression_losses_weights", "1")
 
 config.set("Edge Models", "model_type", "1")
-config.set("Logs", "tensorboard_prefix", "rep_it1_%s" % domain_id)
+tensorboard_prefix = config.get("Logs", "tensorboard_prefix")
+config.set("Logs", "tensorboard_prefix",
+           "%s_%s" % (tensorboard_prefix, domain_id))
 
 with open(cfg_out, "w") as fd:
     config.write(fd)
