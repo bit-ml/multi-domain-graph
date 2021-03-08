@@ -37,3 +37,9 @@ class BasicExpert():
         GT ensemble eval - added for sem segm expert only
         '''
         return x
+
+    def test_gt(self, loss_fct, pred, target):
+        '''
+        will be used for testing purpose, to treat different nan values of the gt 
+        '''
+        return loss_fct(pred, target)

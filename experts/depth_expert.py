@@ -102,11 +102,12 @@ class DepthModelXTC(BasicExpert):
         return depth_maps
 
     def test_gt(self, loss_fct, pred, target):
-
-        bm = target != target
+        l_target = target.clone()
+        l_pred = pred.clone()
+        bm = l_target != l_target
         bm = ~bm
-        target[target != target] = 0
-        target = target * bm
-        pred = pred * bm
-        loss = loss_fct(pred, target)
+        l_target[l_target != l_target] = 0
+        l_target = l_target * bm
+        l_pred = l_pred * bm
+        loss = loss_fct(l_pred, l_target)
         return loss
