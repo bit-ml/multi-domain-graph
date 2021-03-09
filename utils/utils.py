@@ -629,7 +629,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return chan_dist_maps
 
     def scale_distance_maps(self, distance_maps):
-        bm = distance_maps < BIG_VALUE
+        bm = distance_maps == BIG_VALUE
         distance_maps[bm] = 0
         max_val = torch.amax(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
         min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
