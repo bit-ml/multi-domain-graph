@@ -80,3 +80,6 @@ class HalftoneModel(BasicExpert):
         for chan in range(n_classes):
             outp_multichan[:, chan][inp_1chan_cls == chan] = 1.
         return outp_multichan
+
+    def postprocess_eval(self, nn_outp):
+        return nn_outp

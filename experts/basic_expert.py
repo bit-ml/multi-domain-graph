@@ -18,7 +18,8 @@ class BasicExpert():
         '''
         POST PROCESSING eval - posprocess operations for evaluation (e.g. scale/normalize)
         '''
-        return nn_outp
+        return nn_outp.clamp(min=0, max=1)
+
 
     def gt_train_transform(self, x):
         '''

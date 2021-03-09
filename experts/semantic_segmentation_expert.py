@@ -212,9 +212,10 @@ class SSegHRNet(BasicExpert):
         with torch.no_grad():
             # analyze_cls()
             batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
-            sseg_maps = self.decoder(self.encoder(batch_rgb_frames.to(self.device),
-                                                return_feature_maps=True),
-                                    segSize=256)
+            sseg_maps = self.decoder(self.encoder(batch_rgb_frames.to(
+                self.device),
+                                                  return_feature_maps=True),
+                                     segSize=256)
 
             # combine outputs
             for tuple in self.combine_list:
@@ -223,11 +224,12 @@ class SSegHRNet(BasicExpert):
                     sseg_maps[:, first_elem] += sseg_maps[:, elem]
                     sseg_maps[:, elem] = 0
 
-            class_labels = sseg_maps[:, self.to_keep_list].argmax(dim=1)[:, None]
+            class_labels = sseg_maps[:, self.to_keep_list].argmax(dim=1)[:,
+                                                                         None]
 
-            class_labels = np.array(class_labels.data.cpu().numpy()).astype('long')
+            class_labels = np.array(
+                class_labels.data.cpu().numpy()).astype('long')
         return class_labels
-
 
     def no_maps_as_nn_input(self):
         return 1
@@ -306,6 +308,9 @@ class DeepLabv3Model(BasicExpert):
         results = torch.softmax(results, 1)
         results = results.cpu().numpy().astype('float32')
         return results
+
+    def postprocess_eval(self, nn_outp):
+        return nn_outp
 
 
 class FCNModel(BasicExpert):
