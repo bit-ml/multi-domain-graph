@@ -882,6 +882,9 @@ class Edge:
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
         print("Ensemble: ",
               colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+        print(
+            "Meanshift Thresholds: ",
+            colored(config.get('Ensemble', 'meanshiftiter_thresholds'), 'red'))
 
         fix_variance = config.getboolean('Ensemble', 'fix_variance')
         print("Use Variance?: ", colored(str(fix_variance), 'red'))
