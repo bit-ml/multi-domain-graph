@@ -623,22 +623,32 @@ class Edge:
                                 'red'))
         print("Load Path",
               colored(config.get('Edge Models', 'load_path'), 'red'))
-        print("Ensemble: ",
-              colored(config.get('Ensemble', 'similarity_fct'), 'red'))
-        print("Kernel function: ",
-              colored(config.get('Ensemble', 'kernel_fct'), 'red'))
-        print(
-            "Meanshift Thresholds: ",
-            colored(config.get('Ensemble', 'meanshiftiter_thresholds'), 'red'))
-
-        fix_variance = config.getboolean('Ensemble', 'fix_variance')
-        print("Use Variance?: ", colored(str(fix_variance), 'red'))
-        if fix_variance:
+        enable_simple_mean = config.getboolean('Ensemble',
+                                               'enable_simple_mean')
+        enable_simple_median = config.getboolean('Ensemble',
+                                                 'enable_simple_median')
+        if enable_simple_mean:
+            print(colored("Simple mean ensemble", 'red'))
+        elif enable_simple_median:
+            print(colored("Simple median ensemble", 'red'))
+        else:
+            print("Ensemble: ",
+                  colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+            print("Kernel function: ",
+                  colored(config.get('Ensemble', 'kernel_fct'), 'red'))
             print(
-                "Variance dismiss THRESHOLD: ",
-                colored(
-                    config.getfloat('Ensemble', 'variance_dismiss_threshold'),
-                    'red'))
+                "Meanshift Thresholds: ",
+                colored(config.get('Ensemble', 'meanshiftiter_thresholds'),
+                        'red'))
+
+            fix_variance = config.getboolean('Ensemble', 'fix_variance')
+            print("Use Variance?: ", colored(str(fix_variance), 'red'))
+            if fix_variance:
+                print(
+                    "Variance dismiss THRESHOLD: ",
+                    colored(
+                        config.getfloat('Ensemble',
+                                        'variance_dismiss_threshold'), 'red'))
         print(
             colored(tag, "green"),
             "L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
@@ -904,22 +914,32 @@ class Edge:
         return l1_edge, l1_ensemble1hop, domain2_1hop_ens, domain2_exp_gt, save_idxes
 
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
-        print("Ensemble: ",
-              colored(config.get('Ensemble', 'similarity_fct'), 'red'))
-        print("Kernel function: ",
-              colored(config.get('Ensemble', 'kernel_fct'), 'red'))
-        print(
-            "Meanshift Thresholds: ",
-            colored(config.get('Ensemble', 'meanshiftiter_thresholds'), 'red'))
-
-        fix_variance = config.getboolean('Ensemble', 'fix_variance')
-        print("Use Variance?: ", colored(str(fix_variance), 'red'))
-        if fix_variance:
+        enable_simple_mean = config.getboolean('Ensemble',
+                                               'enable_simple_mean')
+        enable_simple_median = config.getboolean('Ensemble',
+                                                 'enable_simple_median')
+        if enable_simple_mean:
+            print(colored("Simple mean ensemble", 'red'))
+        elif enable_simple_median:
+            print(colored("Simple median ensemble", 'red'))
+        else:
+            print("Ensemble: ",
+                  colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+            print("Kernel function: ",
+                  colored(config.get('Ensemble', 'kernel_fct'), 'red'))
             print(
-                "Variance dismiss THRESHOLD: ",
-                colored(
-                    config.getfloat('Ensemble', 'variance_dismiss_threshold'),
-                    'red'))
+                "Meanshift Thresholds: ",
+                colored(config.get('Ensemble', 'meanshiftiter_thresholds'),
+                        'red'))
+
+            fix_variance = config.getboolean('Ensemble', 'fix_variance')
+            print("Use Variance?: ", colored(str(fix_variance), 'red'))
+            if fix_variance:
+                print(
+                    "Variance dismiss THRESHOLD: ",
+                    colored(
+                        config.getfloat('Ensemble',
+                                        'variance_dismiss_threshold'), 'red'))
 
         # === VALID ====
         wtag_valid = "to_%s_valid_set" % (edges_1hop[0].expert2.identifier)
