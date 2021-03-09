@@ -639,6 +639,8 @@ class Edge:
                 "Meanshift Thresholds: ",
                 colored(config.get('Ensemble', 'meanshiftiter_thresholds'),
                         'red'))
+            print("Forward type: ",
+                  colored(config.get('Ensemble', 'comb_type'), 'red'))
 
             fix_variance = config.getboolean('Ensemble', 'fix_variance')
             print("Use Variance?: ", colored(str(fix_variance), 'red'))
@@ -930,6 +932,8 @@ class Edge:
                 "Meanshift Thresholds: ",
                 colored(config.get('Ensemble', 'meanshiftiter_thresholds'),
                         'red'))
+            print("Forward type: ",
+                  colored(config.get('Ensemble', 'comb_type'), 'red'))
 
             fix_variance = config.getboolean('Ensemble', 'fix_variance')
             print("Use Variance?: ", colored(str(fix_variance), 'red'))

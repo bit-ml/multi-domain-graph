@@ -52,7 +52,7 @@ class MultiDomainGraph:
                         bs_test = 60
                         bs_train = 60
                     else:
-                        bs_test = 60
+                        bs_test = 25
                         bs_train = 40
                     # if expert_j.identifier in ["sem_seg_hrnet"]:
                     #     bs_train = 90
