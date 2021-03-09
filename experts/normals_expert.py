@@ -6,7 +6,6 @@ import numpy as np
 import PIL
 import torch
 
-
 from experts.basic_expert import BasicExpert
 from experts.xtc.unet import UNet
 
@@ -24,8 +23,8 @@ class SurfaceNormalsXTC(BasicExpert):
             dataset_name: "taskonomy" or "replica"
         '''
         if full_expert:
-    #         from tensorflow.python.keras.utils.generic_utils import \
-    # _SKIP_FAILED_SERIALIZATION
+            #         from tensorflow.python.keras.utils.generic_utils import \
+            # _SKIP_FAILED_SERIALIZATION
             model_path = normals_model_path
             self.model = UNet()
             model_state_dict = torch.load(model_path)
@@ -80,11 +79,12 @@ class SurfaceNormalsXTC(BasicExpert):
     def postprocess_eval(self, nn_outp):
         bs, nch, h, w = nn_outp.shape
 
-        if nch < self.n_final_maps:
-            # add the 3rd dimension
-            nn_outp = torch.cat(
-                (nn_outp, self.chan_gen_fcn(nn_outp[:, 1][:, None]) / 2),
-                dim=1)
+        if nch == self.n_final_maps:
+            return nn_outp.clamp(min=0, max=1)
+
+        # add the 3rd dimension
+        nn_outp = torch.cat(
+            (nn_outp, self.chan_gen_fcn(nn_outp[:, 1][:, None]) / 2), dim=1)
 
         # 1. CLAMP
         torch.clamp_(nn_outp[:, :2], min=0, max=1)

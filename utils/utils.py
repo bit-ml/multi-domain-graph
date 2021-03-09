@@ -738,7 +738,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             ensemble_result = self.ens_aggregation_fcn(data, distance_maps)
 
             # 2. clamp/other the ensemble
-            # ensemble_result = self.postprocess_eval(ensemble_result)
+            ensemble_result = self.postprocess_eval(ensemble_result)
 
             data[..., -1] = ensemble_result
         return ensemble_result
