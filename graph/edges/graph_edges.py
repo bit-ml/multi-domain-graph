@@ -68,6 +68,10 @@ class Edge:
         meanshiftiter_thresholds = np.float32(
             config.get('Ensemble', 'meanshiftiter_thresholds').split(','))
         comb_type = config.get('Ensemble', 'comb_type')
+        fix_variance = config.getboolean('Ensemble', 'fix_variance')
+        variance_dismiss_threshold = config.getfloat(
+            'Ensemble', 'variance_dismiss_threshold')
+
         self.ensemble_filter = EnsembleFilter_TwdExpert(
             n_channels=expert2.no_maps_as_ens_input(),
             similarity_fcts=similarity_fcts,
@@ -75,6 +79,8 @@ class Edge:
             comb_type=comb_type,
             postprocess_eval=expert2.postprocess_eval,
             thresholds=meanshiftiter_thresholds,
+            fix_variance=fix_variance,
+            variance_th=variance_dismiss_threshold,
             dst_domain_name=expert2.domain_name).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
@@ -809,6 +815,15 @@ class Edge:
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
         print("Ensemble: ",
               colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+
+        fix_variance = config.getboolean('Ensemble', 'fix_variance')
+        print("Use Variance?: ", colored(str(fix_variance), 'red'))
+        if fix_variance:
+            print(
+                "Variance dismiss THRESHOLD: ",
+                colored(
+                    config.getfloat('Ensemble', 'variance_dismiss_threshold'),
+                    'red'))
 
         # === VALID ====
         wtag_valid = "to_%s_valid_set" % (edges_1hop[0].expert2.identifier)

@@ -517,7 +517,7 @@ def post_process_depth_xtc_fct(data):
 
 
 def get_exp_results(main_exp_out_path, experts_name):
-    if 'depth_n_xtc' in experts_name:
+    if 'depth_n_1_xtc' in experts_name:
         depth_exp_trans_fct = TransFct_DepthExp(
             replica_exp_min_path, replica_exp_max_path,
             replica_exp_n_bins_path, replica_exp_cum_data_histo,

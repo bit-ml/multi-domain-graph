@@ -209,22 +209,23 @@ class SSegHRNet(BasicExpert):
         return BasicExpert.TASK_CLASSIFICATION
 
     def apply_expert_batch(self, batch_rgb_frames):
-        # analyze_cls()
-        batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
-        sseg_maps = self.decoder(self.encoder(batch_rgb_frames.to(self.device),
-                                              return_feature_maps=True),
-                                 segSize=256)
+        with torch.no_grad():
+            # analyze_cls()
+            batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
+            sseg_maps = self.decoder(self.encoder(batch_rgb_frames.to(self.device),
+                                                return_feature_maps=True),
+                                    segSize=256)
 
-        # combine outputs
-        for tuple in self.combine_list:
-            first_elem = tuple[0]
-            for elem in tuple[1:]:
-                sseg_maps[:, first_elem] += sseg_maps[:, elem]
-                sseg_maps[:, elem] = 0
+            # combine outputs
+            for tuple in self.combine_list:
+                first_elem = tuple[0]
+                for elem in tuple[1:]:
+                    sseg_maps[:, first_elem] += sseg_maps[:, elem]
+                    sseg_maps[:, elem] = 0
 
-        class_labels = sseg_maps[:, self.to_keep_list].argmax(dim=1)[:, None]
+            class_labels = sseg_maps[:, self.to_keep_list].argmax(dim=1)[:, None]
 
-        class_labels = np.array(class_labels.data.cpu().numpy()).astype('long')
+            class_labels = np.array(class_labels.data.cpu().numpy()).astype('long')
         return class_labels
 
 
