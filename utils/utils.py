@@ -509,9 +509,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             self.log_w_variance_fct = self.log_w_variance
             self.logs_path = analysis_logs_path
 
-        self.fct_before_dist_metric = self.scale_maps_before_comparison
-        #self.fct_before_dist_metric = lambda x: x
-
         if kernel_fct == 'flat':
             self.kernel = self.kernel_flat
         elif kernel_fct == 'flat_weighted':
@@ -566,18 +563,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 f.write('%d, %20.10f,\n' % (ch, ch_w_variance[i]))
 
         f.close()
-
-    def scale_maps_before_comparison(self, batch1, batch2):
-        b1_max = torch.amax(batch1, (1, 2, 3))
-        b2_max = torch.amax(batch2, (1, 2, 3))
-        b1_min = torch.amin(batch1, (1, 2, 3))
-        b2_min = torch.amin(batch2, (1, 2, 3))
-        all_max = torch.max(torch.cat((b1_max[None], b2_max[None]), 0),
-                            0)[0][:, None, None, None]
-        all_min = torch.min(torch.cat((b1_min[None], b2_min[None]), 0),
-                            0)[0][:, None, None, None]
-        return (batch1 - all_min) / (all_max - all_min), (batch2 - all_min) / (
-            all_max - all_min)
 
     def forward_mean(self, data, weights):
         data = data * weights.cuda()
@@ -637,25 +622,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                                                      EPSILON)
         distance_maps[bm] = 1
         return distance_maps
-
-    def kernel_flat(self, chan_sim_maps, meanshift_iter):
-        # indicates what we want to remove
-        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
-        chan_sim_maps[chan_mask] = 0
-        chan_sim_maps[~chan_mask] = 1
-        return chan_sim_maps
-
-    def kernel_flat_weighted(self, chan_sim_maps, meanshift_iter):
-        # indicates what we want to remove
-        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
-        chan_sim_maps = 1 - chan_sim_maps
-        chan_sim_maps[chan_mask] = 0
-        return chan_sim_maps
-
-    def kernel_gauss(self, chan_sim_maps, meanshift_iter):
-        chan_sim_maps = torch.exp(-((chan_sim_maps**2) /
-                                    (2 * self.thresholds[meanshift_iter]**2)))
-        return chan_sim_maps
 
     def reduce_variance(self, data, distance_map, dist_model):
         if not self.fix_variance:
