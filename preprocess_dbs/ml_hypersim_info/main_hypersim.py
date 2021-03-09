@@ -1,14 +1,15 @@
-import os
-import sys
-import shutil
-import cv2
-import torch
-import h5py
 import glob
+import os
+import shutil
+import sys
+
+import cv2
+import h5py
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+import torch
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 # semantic labels - NYU 40
 # from https://github.com/ankurhanda/SceneNetv1.0
@@ -29,15 +30,15 @@ sys.path.insert(
 sys.path.append(
     os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
-import experts.halftone_expert
-import experts.grayscale_expert
-import experts.hsv_expert
-import experts.normals_expert
 import experts.depth_expert
 import experts.edges_expert
+import experts.grayscale_expert
+import experts.halftone_expert
+import experts.hsv_expert
+import experts.normals_expert
 import experts.sobel_expert
 import experts.superpixel_expert
-#import experts.semantic_segmentation_expert
+
 # cartoon expert disables eager execution for tf, which is not indicated for edges_expert => should not be used simultaneous
 #import experts.cartoon_expert
 
@@ -49,12 +50,18 @@ usage_str = 'usage: python main_hypersim.py type split_name exp1 exp2 ...'
 #                           - should be one of the VALID_EXPERTS_NAME / VALID_GT_DOMAINS
 #                           - 'all' to run all available experts / domains
 
-VALID_EXPERTS_NAME = [
-    'depth_n_1_xtc', 'normals_xtc', 'edges_dexined', 'cartoon_wb',
-    'superpixel_fcn', 'sobel_small', 'sobel_medium', 'sobel_large'
-]
-#'sem_seg_hrnet'
-#]
+VALID_EXPERTS_NAME = [\
+    'depth_n_1_xtc',
+    'normals_xtc',
+    'edges_dexined',
+    'cartoon_wb',
+    'superpixel_fcn',
+    'sobel_small',
+    'sobel_medium',
+    'sobel_large',
+    'sem_seg_hrnet'
+                      ]
+
 VALID_DOMAINS_NAME = [
     'rgb', 'grayscale', 'hsv', 'halftone_gray', 'depth_n_1', 'normals',
     'sem_seg'
@@ -398,8 +405,9 @@ def get_expert(exp_name):
     elif exp_name == 'superpixel_fcn':
         return experts.superpixel_expert.SuperPixel()
     elif exp_name == 'sem_seg_hrnet':
-        return experts.semantic_segmentation_expert(dataset_name='hypersim',
-                                                    full_expert=True)
+        import experts.semantic_segmentation_expert
+        return experts.semantic_segmentation_expert.SSegHRNet(
+            dataset_name='hypersim', full_expert=True)
 
     return None
 
@@ -416,28 +424,27 @@ def add_normals_process(data):
 
 
 def get_exp_results():
-
-    depth_exp_trans_fct = TransFct_DepthExp(hypersim_exp_min_path,
-                                            hypersim_exp_max_path,
-                                            hypersim_exp_n_bins_path,
-                                            hypersim_exp_cum_data_histo,
-                                            hypersim_exp_inv_cum_target_histo)
-
     print("get experts ", EXPERTS_NAME)
+
+    if 'depth_n_1_xtc' in EXPERTS_NAME:
+        depth_exp_trans_fct = TransFct_DepthExp(
+            hypersim_exp_min_path, hypersim_exp_max_path,
+            hypersim_exp_n_bins_path, hypersim_exp_cum_data_histo,
+            hypersim_exp_inv_cum_target_histo)
 
     dataset = RGBDataset_ForExperts(DATASET_PATH, SPLITS_CSV_PATH, SPLIT_NAME)
     dataloader = DataLoader(dataset,
                             batch_size=30,
                             shuffle=False,
                             num_workers=20)
-    for exp in EXPERTS_NAME:
-        exp_out_path = os.path.join(EXP_OUT_PATH, exp)
+    for exp_name in EXPERTS_NAME:
+        exp_out_path = os.path.join(EXP_OUT_PATH, exp_name)
         os.makedirs(exp_out_path, exist_ok=True)
-        expert = get_expert(exp)
+        expert = get_expert(exp_name)
         process_fct = expert.apply_expert_batch
-        if exp == 'depth_n_1_xtc':
+        if exp_name == 'depth_n_1_xtc':
             add_process_fct = depth_exp_trans_fct.apply
-        elif exp == 'normals_xtc':
+        elif exp_name == 'normals_xtc':
             add_process_fct = add_normals_process
         else:
             add_process_fct = lambda x: x

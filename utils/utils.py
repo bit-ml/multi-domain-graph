@@ -22,6 +22,23 @@ COLORS_SHORT = ('red', 'blue', 'yellow', 'magenta', 'green', 'indigo',
                 'aquamarine', 'lightcyan', 'oldlace', 'darkred', 'snow')
 
 
+def binw_variance(data, weights, axis):
+    '''
+        binary weighted variance
+    '''
+    sum_weights = weights.sum(axis=axis)
+    sum_weights[sum_weights == 0] = 1
+
+    w_mean = ((data * weights).sum(axis=axis) / sum_weights)[..., None]
+
+    numerator = (weights * (data - w_mean)**2.0).sum(axis=axis)
+    denominator = (sum_weights - 1)
+    denominator[denominator == 0] = 1
+
+    weighted_variance = numerator / denominator
+    return weighted_variance
+
+
 # for normals - call with val = 0.788, tol=1e-3, kernel=1
 # for depth - call with val=1.0, tol=1e-3, kernel=1
 def build_mask(target, val=0.0, tol=1e-3, kernel=1):
@@ -425,6 +442,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                  similarity_fcts=['ssim'],
                  kernel_fct='gauss',
                  comb_type='mean',
+                 fix_variance=False,
+                 variance_th=0.05,
                  thresholds=[0.5],
                  analysis_silent=True,
                  analysis_logs_path=''):
@@ -434,6 +453,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         self.n_channels = n_channels
         self.dst_domain_name = dst_domain_name
         self.postprocess_eval = postprocess_eval
+        self.fix_variance = fix_variance
+        self.variance_th = variance_th
 
         if analysis_silent:
             self.w_variance_score = lambda x: x
@@ -476,7 +497,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 sim_model = SimScore_LPIPS(n_channels)
 
             sim_models.append(sim_model)
-        self.similarity_models = torch.nn.ModuleList(sim_models)
+        self.distance_models = torch.nn.ModuleList(sim_models)
 
     def log_w_variance(self, data, weights, meanshift_iter_idx):
         # data, weights - bs x n_chs x h x w x n_exps
@@ -580,19 +601,73 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
         return (distance_maps - min_val) / (max_val - min_val + EPSILON)
 
+    def kernel_flat(self, chan_sim_maps, meanshift_iter):
+        # indicates what we want to remove
+        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
+        chan_sim_maps[chan_mask] = 0
+        chan_sim_maps[~chan_mask] = 1
+        return chan_sim_maps
+
+    def kernel_flat_weighted(self, chan_sim_maps, meanshift_iter):
+        # indicates what we want to remove
+        chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
+        chan_sim_maps = 1 - chan_sim_maps
+        chan_sim_maps[chan_mask] = 0
+        return chan_sim_maps
+
+    def kernel_gauss(self, chan_sim_maps, meanshift_iter):
+        chan_sim_maps = torch.exp(-((chan_sim_maps**2) /
+                                    (2 * self.thresholds[meanshift_iter]**2)))
+        return chan_sim_maps
+
+    def reduce_variance(self, data, distance_map):
+        if not self.fix_variance:
+            return distance_map
+
+        # remove until the variance is small enough
+        std_weights = torch.ones_like(data)
+        pixel_variance = binw_variance(data, weights=std_weights, axis=-1)
+        n_tasks_in_ens = data.shape[-1]
+        while True:
+            to_change_idxs = (pixel_variance > self.variance_th).nonzero(
+                as_tuple=True)
+            assert (n_tasks_in_ens > 0)
+            if to_change_idxs[0].shape[0] == 0:
+                break
+
+            distance_maps_argmax = distance_map[to_change_idxs].argmax(axis=-1)
+
+            to_change_idxs_with_argmax = list(to_change_idxs) + [
+                distance_maps_argmax
+            ]
+            distance_map[to_change_idxs_with_argmax] = -1
+            std_weights[to_change_idxs_with_argmax] = 0
+
+            pixel_variance = binw_variance(data, weights=std_weights, axis=-1)
+
+            n_tasks_in_ens -= 1
+            break
+            # if n_tasks_in_ens > 10:
+            #     break
+
+        # print("Used pixels %.2f%%" %
+        #       ((distance_map.numel() -
+        #         (distance_map == -1).sum()) * 100. / distance_map.numel()))
+        BIG_VALUE = 1000
+        distance_map[distance_map == -1] = BIG_VALUE
+        return distance_map
+
     def forward(self, data):
-        #batch_std = data.std(axis=-1).mean(axis=(1, 2, 3))
         for meanshift_iter in range(len(self.thresholds)):
             bs, n_chs, h, w, n_tasks = data.shape
-            distance_maps = self.twd_expert_distances(
-                data, self.similarity_models[0])
-            distance_maps = self.scale_distance_maps(distance_maps)
+            distance_maps = torch.zeros_like(data)
 
-            for sim_idx in np.arange(1, len(self.similarity_models)):
-                sim_model = self.similarity_models[sim_idx]
-                sim_maps = self.twd_expert_distances(data, sim_model)
-                sim_maps = self.scale_distance_maps(sim_maps)
-                distance_maps += sim_maps
+            # combine multiple similarities functions
+            for dist_idx, dist_model in enumerate(self.distance_models):
+                distance_map = self.twd_expert_distances(data, dist_model)
+                distance_map = self.scale_distance_maps(distance_map)
+                distance_map = self.reduce_variance(data, distance_map)
+                distance_maps += distance_map
             distance_maps = self.scale_distance_maps(distance_maps)
 
             # kernel: transform distances to similarities
