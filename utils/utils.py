@@ -689,3 +689,21 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             data[..., -1] = ensemble_result
         return ensemble_result
+
+
+class EnsembleFilter_SimpleMean(torch.nn.Module):
+    def __init__(self):
+        super(EnsembleFilter_SimpleMean, self).__init__()
+
+    def forward(self, data):
+        #  bs, n_chs, h, w, n_tasks = data.shape
+        return torch.mean(data, dim=4)
+
+
+class EnsembleFilter_SimpleMedian(torch.nn.Module):
+    def __init__(self):
+        super(EnsembleFilter_SimpleMedian, self).__init__()
+
+    def forward(self, data):
+        # bs, n_chs, h, w, n_tasks = data.shape
+        return torch.median(data, dim=4)

@@ -14,9 +14,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
 import globals
-from utils.utils import (EnsembleFilter_TwdExpert, SimScore_L1, SimScore_L2,
-                         SimScore_LPIPS, SimScore_SSIM, SSIMLoss,
-                         VarianceScore, img_for_plot)
+from utils.utils import (EnsembleFilter_SimpleMean,
+                         EnsembleFilter_SimpleMedian, EnsembleFilter_TwdExpert,
+                         SimScore_L1, SimScore_L2, SimScore_LPIPS,
+                         SimScore_SSIM, SSIMLoss, VarianceScore, img_for_plot)
 
 empty_fcn = (lambda x: x)
 
@@ -65,30 +66,39 @@ class Edge:
             self.log_ensemble_errors_fct_complete = self.log_ensemble_errors_complete
 
         # Initialize ensemble model for destination task
+        enable_simple_mean = config.getboolean('Ensemble',
+                                               'enable_simple_mean')
 
-        similarity_fcts = re.sub('\s+', '',
-                                 config.get('Ensemble',
-                                            'similarity_fct')).split(',')
-        kernel_fct = config.get('Ensemble', 'kernel_fct')
-        meanshiftiter_thresholds = np.float32(
-            config.get('Ensemble', 'meanshiftiter_thresholds').split(','))
-        comb_type = config.get('Ensemble', 'comb_type')
-        fix_variance = config.getboolean('Ensemble', 'fix_variance')
-        variance_dismiss_threshold = config.getfloat(
-            'Ensemble', 'variance_dismiss_threshold')
+        enable_simple_median = config.getboolean('Ensemble',
+                                                 'enable_simple_median')
+        if enable_simple_mean:
+            self.ensemble_filter = EnsembleFilter_SimpleMean()
+        elif enable_simple_median:
+            self.ensemble_filter = EnsembleFilter_SimpleMedian()
+        else:
+            similarity_fcts = re.sub('\s+', '',
+                                     config.get('Ensemble',
+                                                'similarity_fct')).split(',')
+            kernel_fct = config.get('Ensemble', 'kernel_fct')
+            meanshiftiter_thresholds = np.float32(
+                config.get('Ensemble', 'meanshiftiter_thresholds').split(','))
+            comb_type = config.get('Ensemble', 'comb_type')
+            fix_variance = config.getboolean('Ensemble', 'fix_variance')
+            variance_dismiss_threshold = config.getfloat(
+                'Ensemble', 'variance_dismiss_threshold')
 
-        self.ensemble_filter = EnsembleFilter_TwdExpert(
-            n_channels=expert2.no_maps_as_ens_input(),
-            similarity_fcts=similarity_fcts,
-            kernel_fct=kernel_fct,
-            comb_type=comb_type,
-            postprocess_eval=expert2.postprocess_eval,
-            thresholds=meanshiftiter_thresholds,
-            fix_variance=fix_variance,
-            variance_th=variance_dismiss_threshold,
-            dst_domain_name=expert2.domain_name,
-            analysis_logs_path=self.logs_path,
-            analysis_silent=silent_analysis).to(device)
+            self.ensemble_filter = EnsembleFilter_TwdExpert(
+                n_channels=expert2.no_maps_as_ens_input(),
+                similarity_fcts=similarity_fcts,
+                kernel_fct=kernel_fct,
+                comb_type=comb_type,
+                postprocess_eval=expert2.postprocess_eval,
+                thresholds=meanshiftiter_thresholds,
+                fix_variance=fix_variance,
+                variance_th=variance_dismiss_threshold,
+                dst_domain_name=expert2.domain_name,
+                analysis_logs_path=self.logs_path,
+                analysis_silent=silent_analysis).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         model_type = config.getint('Edge Models', 'model_type')
