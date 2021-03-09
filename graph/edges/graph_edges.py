@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
+import globals
 from utils.utils import (EnsembleFilter_TwdExpert, SimScore_L1, SimScore_L2,
                          SimScore_LPIPS, SimScore_SSIM, SSIMLoss,
                          VarianceScore, img_for_plot)
@@ -655,6 +656,7 @@ class Edge:
         print("")
 
     def eval_1hop_ensemble_test_set(edges_1hop, device, writer, wtag):
+        globals.set_split('test')
         loaders = []
         test_edges = []
         l1_edge = []
@@ -741,8 +743,6 @@ class Edge:
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
 
-                edge.ensemble_filter.working_split = 'test'
-
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
@@ -784,6 +784,7 @@ class Edge:
         return l1_edge, l1_ensemble1hop, l1_expert, domain2_1hop_ens, domain2_exp_gt, domain2_gt, save_idxes
 
     def eval_1hop_ensemble_valid_set(edges_1hop, device, writer, wtag):
+        globals.set_split('valid')
         save_idxes = None
         loaders = []
         l1_edge = []
@@ -848,7 +849,7 @@ class Edge:
 
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
-                edge.ensemble_filter.working_split = 'valid'
+
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
