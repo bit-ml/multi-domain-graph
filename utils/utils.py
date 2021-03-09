@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 from skimage import color
 from torch import nn
+import globals
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -497,8 +498,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         self.fix_variance = fix_variance
         self.variance_th = variance_th
 
-        # used for analysis
-        self.working_split = 'none'
         if analysis_silent:
             self.w_variance_score = lambda x: x
             self.log_w_variance_fct = lambda *args: True
@@ -546,11 +545,12 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
     def log_w_variance(self, data, weights, meanshift_iter_idx):
         # data, weights - bs x n_chs x h x w x n_exps
+
         bs, n_chs, h, w, n_exps = data.shape
         w_variance = self.w_variance_score(data, weights)
         file_path = os.path.join(
-            self.logs_path,
-            'w_variance_%s_%d.csv' % (self.working_split, meanshift_iter_idx))
+            self.logs_path, 'w_variance_%s_%d.csv' %
+            (globals.working_split_name, meanshift_iter_idx))
         if os.path.exists(file_path):
             f = open(file_path, 'a')
         else:
@@ -735,3 +735,21 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             data[..., -1] = ensemble_result
         return ensemble_result
+
+
+class EnsembleFilter_SimpleMean(torch.nn.Module):
+    def __init__(self):
+        super(EnsembleFilter_SimpleMean, self).__init__()
+
+    def forward(self, data):
+        #  bs, n_chs, h, w, n_tasks = data.shape
+        return torch.mean(data, dim=4)
+
+
+class EnsembleFilter_SimpleMedian(torch.nn.Module):
+    def __init__(self):
+        super(EnsembleFilter_SimpleMedian, self).__init__()
+
+    def forward(self, data):
+        # bs, n_chs, h, w, n_tasks = data.shape
+        return torch.median(data, dim=4)[0]

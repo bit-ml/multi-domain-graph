@@ -13,9 +13,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
-from utils.utils import (EnsembleFilter_TwdExpert, SimScore_L1, SimScore_L2,
-                         SimScore_LPIPS, SimScore_SSIM, SSIMLoss,
-                         VarianceScore, img_for_plot)
+import globals
+from utils.utils import (EnsembleFilter_SimpleMean,
+                         EnsembleFilter_SimpleMedian, EnsembleFilter_TwdExpert,
+                         SimScore_L1, SimScore_L2, SimScore_LPIPS,
+                         SimScore_SSIM, SSIMLoss, VarianceScore, img_for_plot)
 
 empty_fcn = (lambda x: x)
 
@@ -64,30 +66,39 @@ class Edge:
             self.log_ensemble_errors_fct_complete = self.log_ensemble_errors_complete
 
         # Initialize ensemble model for destination task
+        enable_simple_mean = config.getboolean('Ensemble',
+                                               'enable_simple_mean')
 
-        similarity_fcts = re.sub('\s+', '',
-                                 config.get('Ensemble',
-                                            'similarity_fct')).split(',')
-        kernel_fct = config.get('Ensemble', 'kernel_fct')
-        meanshiftiter_thresholds = np.float32(
-            config.get('Ensemble', 'meanshiftiter_thresholds').split(','))
-        comb_type = config.get('Ensemble', 'comb_type')
-        fix_variance = config.getboolean('Ensemble', 'fix_variance')
-        variance_dismiss_threshold = config.getfloat(
-            'Ensemble', 'variance_dismiss_threshold')
+        enable_simple_median = config.getboolean('Ensemble',
+                                                 'enable_simple_median')
+        if enable_simple_mean:
+            self.ensemble_filter = EnsembleFilter_SimpleMean()
+        elif enable_simple_median:
+            self.ensemble_filter = EnsembleFilter_SimpleMedian()
+        else:
+            similarity_fcts = re.sub('\s+', '',
+                                     config.get('Ensemble',
+                                                'similarity_fct')).split(',')
+            kernel_fct = config.get('Ensemble', 'kernel_fct')
+            meanshiftiter_thresholds = np.float32(
+                config.get('Ensemble', 'meanshiftiter_thresholds').split(','))
+            comb_type = config.get('Ensemble', 'comb_type')
+            fix_variance = config.getboolean('Ensemble', 'fix_variance')
+            variance_dismiss_threshold = config.getfloat(
+                'Ensemble', 'variance_dismiss_threshold')
 
-        self.ensemble_filter = EnsembleFilter_TwdExpert(
-            n_channels=expert2.no_maps_as_ens_input(),
-            similarity_fcts=similarity_fcts,
-            kernel_fct=kernel_fct,
-            comb_type=comb_type,
-            postprocess_eval=expert2.postprocess_eval,
-            thresholds=meanshiftiter_thresholds,
-            fix_variance=fix_variance,
-            variance_th=variance_dismiss_threshold,
-            dst_domain_name=expert2.domain_name,
-            analysis_logs_path=self.logs_path,
-            analysis_silent=silent_analysis).to(device)
+            self.ensemble_filter = EnsembleFilter_TwdExpert(
+                n_channels=expert2.no_maps_as_ens_input(),
+                similarity_fcts=similarity_fcts,
+                kernel_fct=kernel_fct,
+                comb_type=comb_type,
+                postprocess_eval=expert2.postprocess_eval,
+                thresholds=meanshiftiter_thresholds,
+                fix_variance=fix_variance,
+                variance_th=variance_dismiss_threshold,
+                dst_domain_name=expert2.domain_name,
+                analysis_logs_path=self.logs_path,
+                analysis_silent=silent_analysis).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         model_type = config.getint('Edge Models', 'model_type')
@@ -661,6 +672,7 @@ class Edge:
         print("")
 
     def eval_1hop_ensemble_test_set(edges_1hop, device, writer, wtag):
+        globals.set_split('test')
         loaders = []
         test_edges = []
         l1_edge = []
@@ -747,8 +759,6 @@ class Edge:
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
 
-                edge.ensemble_filter.working_split = 'test'
-
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
@@ -790,6 +800,7 @@ class Edge:
         return l1_edge, l1_ensemble1hop, l1_expert, domain2_1hop_ens, domain2_exp_gt, domain2_gt, save_idxes
 
     def eval_1hop_ensemble_valid_set(edges_1hop, device, writer, wtag):
+        globals.set_split('valid')
         save_idxes = None
         loaders = []
         l1_edge = []
@@ -854,7 +865,7 @@ class Edge:
 
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
-                edge.ensemble_filter.working_split = 'valid'
+
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
