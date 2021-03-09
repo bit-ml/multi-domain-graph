@@ -625,7 +625,20 @@ class Edge:
               colored(config.get('Edge Models', 'load_path'), 'red'))
         print("Ensemble: ",
               colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+        print("Kernel function: ",
+              colored(config.get('Ensemble', 'kernel_fct'), 'red'))
+        print(
+            "Meanshift Thresholds: ",
+            colored(config.get('Ensemble', 'meanshiftiter_thresholds'), 'red'))
 
+        fix_variance = config.getboolean('Ensemble', 'fix_variance')
+        print("Use Variance?: ", colored(str(fix_variance), 'red'))
+        if fix_variance:
+            print(
+                "Variance dismiss THRESHOLD: ",
+                colored(
+                    config.getfloat('Ensemble', 'variance_dismiss_threshold'),
+                    'red'))
         print(
             colored(tag, "green"),
             "L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
@@ -893,6 +906,8 @@ class Edge:
     def eval_all_1hop_ensembles(edges_1hop, device, writer, config):
         print("Ensemble: ",
               colored(config.get('Ensemble', 'similarity_fct'), 'red'))
+        print("Kernel function: ",
+              colored(config.get('Ensemble', 'kernel_fct'), 'red'))
         print(
             "Meanshift Thresholds: ",
             colored(config.get('Ensemble', 'meanshiftiter_thresholds'), 'red'))

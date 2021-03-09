@@ -2,13 +2,13 @@ import os
 import sys
 from math import exp
 
+import globals
 import lpips
 import numpy as np
 import torch
 import torch.nn.functional as F
 from skimage import color
 from torch import nn
-import globals
 
 sys.path.insert(0,
                 os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -20,6 +20,8 @@ COLORS_SHORT = ('red', 'blue', 'yellow', 'magenta', 'green', 'indigo',
                 'darkorange', 'cyan', 'pink', 'yellowgreen', 'chocolate',
                 'lightsalmon', 'lime', 'silver', 'gainsboro', 'gold', 'coral',
                 'aquamarine', 'lightcyan', 'oldlace', 'darkred', 'snow')
+
+BIG_VALUE = 1000
 
 
 def binw_variance(data, weights, axis):
@@ -216,7 +218,7 @@ class MeanScoreFunction(nn.Module):
 
     def compute_distances(self, data):
         mean = data.mean(dim=-1, keepdim=True)
-        distance_maps = data - mean
+        distance_maps = torch.abs(data - mean)
 
         return distance_maps
 
@@ -225,7 +227,7 @@ class MeanScoreFunction(nn.Module):
         sum_weights[sum_weights == 0] = 1
 
         w_mean = ((data * weights).sum(axis=-1) / sum_weights)[..., None]
-        distance_maps = data - w_mean
+        distance_maps = torch.abs(data - w_mean)
 
         return distance_maps
 
@@ -684,7 +686,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             if update_distances_fcn and callable(update_distances_fcn):
                 new_distance_map = dist_model.update_distances(
                     data, std_weights)
-                new_distance_map[distance_map == -1] = 0
+                new_distance_map[distance_map == -1] = BIG_VALUE
                 new_distance_map = self.scale_distance_maps(new_distance_map)
                 new_distance_map[distance_map == -1] = -1
                 distance_map = new_distance_map
@@ -698,7 +700,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         #       ((distance_map.numel() -
         #         (distance_map == -1).sum()) * 100. / distance_map.numel()))
 
-        BIG_VALUE = 1000
         distance_map[distance_map == -1] = BIG_VALUE
         return distance_map
 
@@ -714,7 +715,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 distance_map = self.reduce_variance(data, distance_map,
                                                     dist_model)
                 distance_maps += distance_map
-            distance_maps = self.scale_distance_maps(distance_maps)
+            if len(self.distance_models) > 0:
+                distance_maps = self.scale_distance_maps(distance_maps)
 
             # kernel: transform distances to similarities
             for chan in range(n_chs):
