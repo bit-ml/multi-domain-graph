@@ -21,6 +21,8 @@ COLORS_SHORT = ('red', 'blue', 'yellow', 'magenta', 'green', 'indigo',
                 'lightsalmon', 'lime', 'silver', 'gainsboro', 'gold', 'coral',
                 'aquamarine', 'lightcyan', 'oldlace', 'darkred', 'snow')
 
+BIG_VALUE = 1000
+
 
 def binw_variance(data, weights, axis):
     '''
@@ -216,7 +218,7 @@ class MeanScoreFunction(nn.Module):
 
     def compute_distances(self, data):
         mean = data.mean(dim=-1, keepdim=True)
-        distance_maps = data - mean
+        distance_maps = torch.abs(data - mean)
 
         return distance_maps
 
@@ -225,7 +227,7 @@ class MeanScoreFunction(nn.Module):
         sum_weights[sum_weights == 0] = 1
 
         w_mean = ((data * weights).sum(axis=-1) / sum_weights)[..., None]
-        distance_maps = data - w_mean
+        distance_maps = torch.abs(data - w_mean)
 
         return distance_maps
 
@@ -627,9 +629,17 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return chan_dist_maps
 
     def scale_distance_maps(self, distance_maps):
-        max_val = torch.amax(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
-        min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
-        return (distance_maps - min_val) / (max_val - min_val + EPSILON)
+        bm = distance_maps < BIG_VALUE
+        max_val = torch.amax(distance_maps[bm],
+                             axis=(1, 2, 3, 4),
+                             keepdim=True)
+        min_val = torch.amin(distance_maps[bm],
+                             axis=(1, 2, 3, 4),
+                             keepdim=True)
+        distance_maps = (distance_maps - min_val) / (max_val - min_val +
+                                                     EPSILON)
+        distance_maps[~bm] = 1
+        return distance_maps  #(distance_maps - min_val) / (max_val - min_val + EPSILON)
 
     def kernel_flat(self, chan_sim_maps, meanshift_iter):
         # indicates what we want to remove
@@ -698,7 +708,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         #       ((distance_map.numel() -
         #         (distance_map == -1).sum()) * 100. / distance_map.numel()))
 
-        BIG_VALUE = 1000
         distance_map[distance_map == -1] = BIG_VALUE
         return distance_map
 
