@@ -539,8 +539,10 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 sim_model = SimScore_PSNR()
             elif sim_fct == 'lpips':
                 sim_model = SimScore_LPIPS(n_channels)
-            elif sim_fct == 'dist_to_mean':
+            elif sim_fct == 'dist_mean':
                 sim_model = MeanScoreFunction()
+            else:
+                assert (False)
 
             sim_models.append(sim_model)
         self.distance_models = torch.nn.ModuleList(sim_models)
@@ -608,25 +610,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             fwd_result[:, chan] = data_chan
 
         return fwd_result
-
-    def kernel_flat(self, chan_dist_maps, meanshift_iter):
-        chan_mask = chan_dist_maps > self.thresholds[
-            meanshift_iter]  # indicates what we want to remove
-        chan_dist_maps[chan_mask] = 0
-        chan_dist_maps[~chan_mask] = 1
-        return chan_dist_maps
-
-    def kernel_flat_weighted(self, chan_dist_maps, meanshift_iter):
-        chan_mask = chan_dist_maps > self.thresholds[
-            meanshift_iter]  # indicates what we want to remove
-        chan_dist_maps = 1 - chan_dist_maps
-        chan_dist_maps[chan_mask] = 0
-        return chan_dist_maps
-
-    def kernel_gauss(self, chan_dist_maps, meanshift_iter):
-        chan_dist_maps = torch.exp(-((chan_dist_maps**2) /
-                                     (2 * self.thresholds[meanshift_iter]**2)))
-        return chan_dist_maps
 
     def scale_distance_maps(self, distance_maps):
         bm = distance_maps == BIG_VALUE

@@ -2,6 +2,7 @@ import os
 import re
 import sys
 
+import globals
 import numpy as np
 import torch
 from experts.basic_expert import BasicExpert
@@ -13,7 +14,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from utils import utils
-import globals
 from utils.utils import (EnsembleFilter_SimpleMean,
                          EnsembleFilter_SimpleMedian, EnsembleFilter_TwdExpert,
                          SimScore_L1, SimScore_L2, SimScore_LPIPS,
@@ -28,7 +28,6 @@ class Edge:
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
-        kernel_fct = config.get('Ensemble', 'kernel_fct')
 
         # Analysis data
         silent_analysis = config.getboolean('Analysis', 'silent')
