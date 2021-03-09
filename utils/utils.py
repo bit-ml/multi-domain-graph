@@ -706,4 +706,4 @@ class EnsembleFilter_SimpleMedian(torch.nn.Module):
 
     def forward(self, data):
         # bs, n_chs, h, w, n_tasks = data.shape
-        return torch.median(data, dim=4)
+        return torch.median(data, dim=4)[0]
