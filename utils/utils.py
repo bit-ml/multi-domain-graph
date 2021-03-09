@@ -595,15 +595,15 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return fwd_result
 
     def kernel_flat(self, chan_dist_maps, meanshift_iter):
-        chan_mask = chan_dist_maps > self.thresholds[
-            meanshift_iter]  # indicates what we want to remove
+        # indicates what we want to remove
+        chan_mask = chan_dist_maps > self.thresholds[meanshift_iter]
         chan_dist_maps[chan_mask] = 0
         chan_dist_maps[~chan_mask] = 1
         return chan_dist_maps
 
     def kernel_flat_weighted(self, chan_dist_maps, meanshift_iter):
-        chan_mask = chan_dist_maps > self.thresholds[
-            meanshift_iter]  # indicates what we want to remove
+        # indicates what we want to remove
+        chan_mask = chan_dist_maps > self.thresholds[meanshift_iter]
         chan_dist_maps = 1 - chan_dist_maps
         chan_dist_maps[chan_mask] = 0
         return chan_dist_maps
