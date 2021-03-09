@@ -36,6 +36,8 @@ class Edge:
             self.log_metrics_fct = lambda *args: True
             self.var_score = lambda x: x
             self.logs_path = ''
+            self.log_ensemble_errors_fct = lambda *args: True
+            self.log_ensemble_errors_fct_complete = lambda *args: True
         else:
             # prepare output path
             self.logs_path = '%s/%s_%s/%s' % (config.get(
@@ -58,6 +60,8 @@ class Edge:
             for idx in range(len(self.analysis_score_fcts)):
                 self.analysis_score_fcts[idx] = nn.DataParallel(
                     self.analysis_score_fcts[idx])
+            self.log_ensemble_errors_fct = self.log_ensemble_errors
+            self.log_ensemble_errors_fct_complete = self.log_ensemble_errors_complete
 
         # Initialize ensemble model for destination task
 
@@ -81,7 +85,9 @@ class Edge:
             thresholds=meanshiftiter_thresholds,
             fix_variance=fix_variance,
             variance_th=variance_dismiss_threshold,
-            dst_domain_name=expert2.domain_name).to(device)
+            dst_domain_name=expert2.domain_name,
+            analysis_logs_path=self.logs_path,
+            analysis_silent=silent_analysis).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         model_type = config.getint('Edge Models', 'model_type')
@@ -495,11 +501,59 @@ class Edge:
                         (ch, ch_var_with_exp[i], ch_var_without_exp[i]))
         f.close()
 
+    def log_ensemble_errors(self, losses, logs_path, split, gt_type,
+                            src_identifier):
+        '''
+            losses - computed errors
+            logs_path - where we store data 
+        '''
+        bs, nchs, h, w = losses.shape
+        file_path = os.path.join(
+            logs_path,
+            'ensemble_errors_%s_%s_%s.csv' % (split, gt_type, src_identifier))
+
+        if os.path.exists(file_path):
+            f = open(file_path, 'a')
+        else:
+            f = open(file_path, 'w')
+            f.write('channel,errors,\n')
+
+        err = losses.clone()
+        err = err.cpu().numpy()
+        for ch in range(nchs):
+            ch_err = err[:, ch, :, :].flatten()
+            for i in range(ch_err.size):
+                f.write('%d, %20.10f,\n' % (ch, ch_err[i]))
+
+        f.close()
+
+    def log_ensemble_errors_complete(self, loss_fct, preds, target, logs_path,
+                                     split, gt_type, src_identifier):
+        losses = loss_fct(preds, target)
+        bs, nchs, h, w = losses.shape
+        file_path = os.path.join(
+            logs_path,
+            'ensemble_errors_%s_%s_%s.csv' % (split, gt_type, src_identifier))
+
+        if os.path.exists(file_path):
+            f = open(file_path, 'a')
+        else:
+            f = open(file_path, 'w')
+            f.write('channel,errors,\n')
+
+        err = losses.clone()
+        err = err.cpu().numpy()
+        for ch in range(nchs):
+            ch_err = err[:, ch, :, :].flatten()
+            for i in range(ch_err.size):
+                f.write('%d, %20.10f,\n' % (ch, ch_err[i]))
+
+        f.close()
+
     def log_errors(self, losses, logs_path, split, gt_type, src_identifier):
         '''
             losses - computed errors
             logs_path - where we store data 
-            suffix - indicating the data subset & type of eval - 'valid_exp' / 'test_exp' / 'test_gt'
         '''
         bs, nchs, h, w = losses.shape
         file_path = os.path.join(
@@ -692,6 +746,9 @@ class Edge:
 
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
+
+                edge.ensemble_filter.working_split = 'test'
+
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
@@ -708,8 +765,15 @@ class Edge:
                     crt_loss.shape[0],
                     -1).mean(dim=1).data.cpu().numpy().tolist()
 
+                edge.log_ensemble_errors_fct_complete(
+                    edge.eval_loss, domain2_1hop_ens,
+                    edge.gt_eval_transform(domain2_exp_gt), edge.logs_path,
+                    'test', 'exp', edge.expert1.identifier)
+
                 crt_loss = edge.test_gt(edge.eval_loss, domain2_1hop_ens,
                                         edge.gt_eval_transform(domain2_gt))
+                edge.log_ensemble_errors_fct(crt_loss, edge.logs_path, 'test',
+                                             'gt', edge.expert1.identifier)
                 l1_ensemble1hop += crt_loss.view(
                     crt_loss.shape[0],
                     -1).mean(dim=1).data.cpu().numpy().tolist()
@@ -790,6 +854,7 @@ class Edge:
 
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
+                edge.ensemble_filter.working_split = 'valid'
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
@@ -798,6 +863,8 @@ class Edge:
 
                 crt_loss = edge.eval_loss(
                     domain2_1hop_ens, edge.gt_eval_transform(domain2_exp_gt))
+                edge.log_ensemble_errors_fct(crt_loss, edge.logs_path, 'valid',
+                                             'exp', edge.expert1.identifier)
                 l1_ensemble1hop += crt_loss.view(
                     domain2_1hop_ens.shape[0],
                     -1).mean(dim=1).data.cpu().numpy().tolist()

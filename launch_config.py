@@ -6,8 +6,10 @@ from datetime import datetime
 os.system("mkdir -p generated_configs/")
 
 domain_id = sys.argv[1]
-# cfg_template = sys.argv[2]
-cfg_template = "replica_template_iter1.ini"
+cfg_template = sys.argv[2]
+# replica_template_iter1.ini
+# hypersim_template_train_iter1.ini
+# cfg_template = "replica_template_iter1.ini"
 
 # intro
 cfg_out = "generated_configs/launch_%s_%s.ini" % (domain_id, str(
@@ -25,7 +27,9 @@ if domain_id in [
     config.set("Edge Models", "regression_losses_weights", "1")
 
 config.set("Edge Models", "model_type", "1")
-config.set("Logs", "tensorboard_prefix", "rep_it1_%s" % domain_id)
+tensorboard_prefix = config.get("Logs", "tensorboard_prefix")
+config.set("Logs", "tensorboard_prefix",
+           "%s_%s" % (tensorboard_prefix, domain_id))
 
 with open(cfg_out, "w") as fd:
     config.write(fd)
