@@ -209,7 +209,49 @@ class WeightedVarianceScore(nn.Module):
         return variance
 
 
-class SimScore_SSIM(nn.Module):
+class MeanScoreFunction(nn.Module):
+    def __init__(self):
+        super(MeanScoreFunction, self).__init__()
+
+    def compute_distances(self, data):
+        mean = data.mean(dim=-1, keepdim=True)
+        distance_maps = data - mean
+
+        return distance_maps
+
+    def update_distances(self, data, weights):
+        sum_weights = weights.sum(axis=-1)
+        sum_weights[sum_weights == 0] = 1
+
+        w_mean = ((data * weights).sum(axis=-1) / sum_weights)[..., None]
+        distance_maps = data - w_mean
+
+        return distance_maps
+
+
+class ScoreFunctions(nn.Module):
+    def compute_distances(self, data):
+        '''
+            twd_expert_distances
+        '''
+        bs, n_chs, h, w, n_tasks = data.shape
+        distance_maps = []
+
+        for i in range(n_tasks - 1):
+            distance_map = self.forward(data[..., -1], data[..., i])
+            distance_maps.append(distance_map)
+
+        # add expert vs expert
+        distance_maps.append(torch.zeros_like(distance_map))
+
+        distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
+        return distance_maps
+
+    def forward(self, batch1, batch2):
+        pass
+
+
+class SimScore_SSIM(ScoreFunctions):
     def __init__(self, n_channels, win_size, reduction=False):
         super(SimScore_SSIM, self).__init__()
         self.n_channels = n_channels
@@ -257,7 +299,7 @@ class SimScore_SSIM(nn.Module):
         return 1 - sim_score
 
 
-class SimScore_MSSIM(torch.nn.Module):
+class SimScore_MSSIM(ScoreFunctions):
     def __init__(self, n_channels, win_sizes, reduction=False):
         super(SimScore_MSSIM, self).__init__()
         self.n_channels = n_channels
@@ -340,7 +382,7 @@ class SimScore_MSSIM(torch.nn.Module):
         return 1 - sim_score
 
 
-class SimScore_L2(nn.Module):
+class SimScore_L2(ScoreFunctions):
     def __init__(self, reduction=False):
         super(SimScore_L2, self).__init__()
         if not reduction:
@@ -356,7 +398,7 @@ class SimScore_L2(nn.Module):
         return distance
 
 
-class SimScore_L1(nn.Module):
+class SimScore_L1(ScoreFunctions):
     def __init__(self, reduction=False):
         super(SimScore_L1, self).__init__()
         if reduction:
@@ -370,7 +412,7 @@ class SimScore_L1(nn.Module):
         return res
 
 
-class SimScore_L2(nn.Module):
+class SimScore_L2(ScoreFunctions):
     def __init__(self, reduction=False):
         super(SimScore_L2, self).__init__()
         if reduction:
@@ -384,23 +426,23 @@ class SimScore_L2(nn.Module):
         return res
 
 
-class SimScore_Equal(nn.Module):
+class SimScore_Equal(ScoreFunctions):
     def __init__(self):
         super(SimScore_Equal, self).__init__()
-        self.ones = torch.ones((70, 3, 256, 256)).cuda()
+        self.zeros = torch.zeros((70, 3, 256, 256)).cuda()
 
     def forward(self, batch1, batch2):
         bs, n_chs, h, w = batch1.shape
-        bso, n_chso, ho, wo = self.ones.shape
+        bso, n_chso, ho, wo = self.zeros.shape
         if bso == bs and n_chso == n_chs and ho == h and wo == w:
-            return self.ones
+            return self.zeros
 
-        del self.ones
-        self.ones = torch.ones_like(batch1)
-        return self.ones
+        del self.zeros
+        self.zeros = torch.zeros_like(batch1)
+        return self.zeros
 
 
-class SimScore_PSNR(nn.Module):
+class SimScore_PSNR(ScoreFunctions):
     def __init__(self, reduction=False):
         super(SimScore_PSNR, self).__init__()
         if reduction:
@@ -416,7 +458,7 @@ class SimScore_PSNR(nn.Module):
         return norm_dist
 
 
-class SimScore_LPIPS(nn.Module):
+class SimScore_LPIPS(ScoreFunctions):
     def __init__(self, n_channels):
         super(SimScore_LPIPS, self).__init__()
         self.n_channels = n_channels
@@ -496,6 +538,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 sim_model = SimScore_PSNR()
             elif sim_fct == 'lpips':
                 sim_model = SimScore_LPIPS(n_channels)
+            elif sim_fct == 'dist_to_mean':
+                sim_model = MeanScoreFunction()
 
             sim_models.append(sim_model)
         self.distance_models = torch.nn.ModuleList(sim_models)
@@ -582,20 +626,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                                      (2 * self.thresholds[meanshift_iter]**2)))
         return chan_dist_maps
 
-    def twd_expert_distances(self, data, similarity_model):
-        bs, n_chs, h, w, n_tasks = data.shape
-        distance_maps = []
-
-        for i in range(n_tasks - 1):
-            distance_map = similarity_model(data[..., -1], data[..., i])
-            distance_maps.append(distance_map)
-
-        # add expert vs expert
-        distance_maps.append(torch.zeros_like(distance_map))
-
-        distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
-        return distance_maps
-
     def scale_distance_maps(self, distance_maps):
         max_val = torch.amax(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
         min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
@@ -620,7 +650,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                                     (2 * self.thresholds[meanshift_iter]**2)))
         return chan_sim_maps
 
-    def reduce_variance(self, data, distance_map):
+    def reduce_variance(self, data, distance_map, dist_model):
         if not self.fix_variance:
             return distance_map
 
@@ -631,6 +661,9 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         while True:
             to_change_idxs = (pixel_variance > self.variance_th).nonzero(
                 as_tuple=True)
+            # print("n_tasks_in_ens", n_tasks_in_ens, "to_change_idxs",
+            #       to_change_idxs[0].shape)
+
             assert (n_tasks_in_ens > 0)
             if to_change_idxs[0].shape[0] == 0:
                 break
@@ -645,14 +678,26 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             pixel_variance = binw_variance(data, weights=std_weights, axis=-1)
 
+            # update distances if necessary
+            update_distances_fcn = getattr(dist_model, "update_distances",
+                                           None)
+            if update_distances_fcn and callable(update_distances_fcn):
+                new_distance_map = dist_model.update_distances(
+                    data, std_weights)
+                new_distance_map[distance_map == -1] = 0
+                new_distance_map = self.scale_distance_maps(new_distance_map)
+                new_distance_map[distance_map == -1] = -1
+                distance_map = new_distance_map
+
             n_tasks_in_ens -= 1
-            break
+            # break
             # if n_tasks_in_ens > 10:
             #     break
 
         # print("Used pixels %.2f%%" %
         #       ((distance_map.numel() -
         #         (distance_map == -1).sum()) * 100. / distance_map.numel()))
+
         BIG_VALUE = 1000
         distance_map[distance_map == -1] = BIG_VALUE
         return distance_map
@@ -664,9 +709,10 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             # combine multiple similarities functions
             for dist_idx, dist_model in enumerate(self.distance_models):
-                distance_map = self.twd_expert_distances(data, dist_model)
+                distance_map = dist_model.compute_distances(data)
                 distance_map = self.scale_distance_maps(distance_map)
-                distance_map = self.reduce_variance(data, distance_map)
+                distance_map = self.reduce_variance(data, distance_map,
+                                                    dist_model)
                 distance_maps += distance_map
             distance_maps = self.scale_distance_maps(distance_maps)
 
