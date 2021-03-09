@@ -17,6 +17,7 @@ type_of_run = np.int32(sys.argv[3])
 # 2 - test metrics - without variance
 # 3 - test metrics + variance logic
 # 4 - test metrics with variance as dist
+# 10 - all
 
 # intro
 cfg_out = "generated_configs/launch_ensembles_%s_%s_%s.ini" % (
@@ -27,7 +28,7 @@ config.read(cfg_template)
 config.set("GraphStructure", "restricted_graph_type", '2')
 config.set("GraphStructure", "restricted_graph_exp_identifier", domain_id)
 
-if type_of_run == 0:
+if type_of_run == 0 or type_of_run == 10:
     ## test simple mean
     config.set('Ensemble', 'enable_simple_mean', 'yes')
     tensorboard_prefix = config.get("Logs", "tensorboard_prefix")
@@ -51,35 +52,37 @@ if type_of_run == 0:
 
     os.system('python main.py "%s"' % (cfg_out))
 
-if type_of_run == 1:
+if type_of_run == 1 or type_of_run == 10:
     ## test simple variance filter
     config.set('Ensemble', 'enable_simple_mean', 'no')
     config.set('Ensemble', 'enable_simple_median', 'no')
     config.set('Ensemble', 'similarity_fct', 'dist_mean')
     config.set('Ensemble', 'fix_variance', 'yes')
-    config.set('Ensemble', 'kernel_fct', 'flat')
-    config.set('Ensemble', 'meanshiftiter_thresholds', '1')
-    config.set('Ensemble', 'comb_type', 'mean')
-    tensorboard_prefix = config.get("Logs", "tensorboard_prefix")
-    config.set(
-        "Logs", "tensorboard_prefix",
-        "%s_%s_simple_variance_comb_mean" % (tensorboard_prefix, domain_id))
-    with open(cfg_out, "w") as fd:
-        config.write(fd)
 
-    os.system('python main.py "%s"' % (cfg_out))
+    for kernel_f in ['flat', 'flat_weighted', 'gauss']:
+        config.set('Ensemble', 'kernel_fct', kernel_f)
+        if kernel_f == 'flat' or kernel_f == 'flat_weighted':
+            ths = np.array([0, 0.25, 0.5, 0.75, 1])
+        else:
+            ths = np.array([0.25, 0.5, 1])
+        for th in ths:
+            config.set('Ensemble', 'meanshiftiter_thresholds', str(th))
+            for comb_type in ['mean', 'median']:
+                config.set('Ensemble', 'comb_type', comb_type)
 
-    config.set('Ensemble', 'comb_type', 'median')
-    tensorboard_prefix = config.get("Logs", "tensorboard_prefix")
-    config.set(
-        "Logs", "tensorboard_prefix",
-        "%s_%s_simple_variance_comb_median" % (tensorboard_prefix, domain_id))
-    with open(cfg_out, "w") as fd:
-        config.write(fd)
+                tensorboard_prefix = config.get("Logs", "tensorboard_prefix")
+                config.set(
+                    "Logs", "tensorboard_prefix",
+                    "%s_%s_simple_variance__%s__%s__%s" %
+                    (tensorboard_prefix, domain_id, kernel_f, str(th),
+                     comb_type))
 
-    os.system('python main.py "%s"' % (cfg_out))
+                with open(cfg_out, "w") as fd:
+                    config.write(fd)
 
-if type_of_run == 2:
+                os.system('python main.py "%s"' % (cfg_out))
+
+if type_of_run == 2 or type_of_run == 10:
     ## test metrics without variance
     config.set('Ensemble', 'enable_simple_mean', 'no')
     config.set('Ensemble', 'enable_simple_median', 'no')
@@ -109,7 +112,7 @@ if type_of_run == 2:
 
                     os.system('python main.py "%s"' % (cfg_out))
 
-if type_of_run == 3:
+if type_of_run == 3 or type_of_run == 10:
     ## test metrics with variance
     config.set('Ensemble', 'enable_simple_mean', 'no')
     config.set('Ensemble', 'enable_simple_median', 'no')
@@ -143,7 +146,7 @@ if type_of_run == 3:
 
                         os.system('python main.py "%s"' % (cfg_out))
 
-if type_of_run == 4:
+if type_of_run == 4 or type_of_run == 10:
     ## test metrics with variance integrated as dist_fct
     config.set('Ensemble', 'enable_simple_mean', 'no')
     config.set('Ensemble', 'enable_simple_median', 'no')
