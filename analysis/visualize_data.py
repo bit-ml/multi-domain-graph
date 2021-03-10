@@ -11,6 +11,9 @@ import glob
 #logs_path = '/root/logs_analysis/test_2021-03-06 20:30:23.730137'
 # 200 samples
 logs_path = '/root/logs_analysis/test_2021-03-09 09:46:43.297180'
+# only variance - full db
+logs_path = '/root/logs_analysis/test_2021-03-10 12:52:56.649979'
+logs_path = '/root/logs_analysis/test_2021-03-10 14:10:39.179684'
 out_path = '/root/logs_analysis_visualization_v2'
 
 
@@ -157,11 +160,35 @@ def process_split(channel, variance_path, w_variance_path, errors_paths,
     df = df[df['channel'] == channel]
     variance_with_exp = df['variance_with_exp'].values
     variance_without_exp = df['variance_without_exp'].values
+
+    h_var_with_exp, _ = np.histogram(variance_with_exp, bins=1000)
+    plt.plot(h_var_with_exp)
+    plt.savefig('ch_%d_%s_var_with_exp_1000bins.png' % (channel, split_name))
+    plt.close()
+    print(
+        'ch %d %s %s var_with_exp -- min %20.10f -- max %20.10f -- median %20.10f'
+        % (channel, split_name, gt_type, np.min(variance_with_exp),
+           np.max(variance_with_exp), np.median(variance_with_exp)))
+
+    h_var_with_exp, _ = np.histogram(variance_without_exp, bins=1000)
+    plt.plot(h_var_with_exp)
+    plt.savefig('ch_%d_%s_var_without_exp_1000bins.png' %
+                (channel, split_name))
+    plt.close()
+    print(
+        'ch %d %s %s var_without_exp -- min %20.10f -- max %20.10f -- median %20.10f'
+        % (channel, split_name, gt_type, np.min(variance_without_exp),
+           np.max(variance_without_exp), np.median(variance_without_exp)))
+    '''
     min_v = min(np.min(variance_with_exp), np.min(variance_without_exp))
     max_v = max(np.max(variance_with_exp), np.max(variance_without_exp))
     variance_with_exp = (variance_with_exp - min_v) / (max_v - min_v)
     variance_without_exp = (variance_without_exp - min_v) / (max_v - min_v)
 
+    import pdb
+    pdb.set_trace()
+    '''
+    '''
     w_df = pd.read_csv(w_variance_path)
     w_df = w_df[w_df['channel'] == channel]
     w_variance_with_exp = w_df['variance'].values
@@ -235,6 +262,7 @@ def process_split(channel, variance_path, w_variance_path, errors_paths,
         '%s - w variance (with exp) vs. avg edge errors ' % set_str,
         os.path.join(out_path,
                      '%s_w_variances_with_exp_vs_avg_errors.png' % set_str))
+    '''
     '''
     ### get metrics
     for idx in range(len(metrics)):

@@ -29,6 +29,7 @@ class Edge:
         self.config = config
         self.silent = silent
 
+        self.init_logs_csv(config)
         # Analysis data
         silent_analysis = config.getboolean('Analysis', 'silent')
         if silent_analysis:
@@ -49,6 +50,12 @@ class Edge:
             # get var function
             self.var_score = VarianceScore()
             self.log_variance_fct = self.log_variance
+
+            self.log_errors_fct = lambda *args: True
+            self.log_metrics_fct = lambda *args: True
+            self.log_ensemble_errors_fct = lambda *args: True
+            self.log_ensemble_errors_fct_complete = lambda *args: True
+            '''
             self.log_errors_fct = self.log_errors
             self.log_metrics_fct = self.log_metrics
             self.analysis_score_names = ['l1', 'l2', 'ssim', 'lpips']
@@ -63,6 +70,7 @@ class Edge:
                     self.analysis_score_fcts[idx])
             self.log_ensemble_errors_fct = self.log_ensemble_errors
             self.log_ensemble_errors_fct_complete = self.log_ensemble_errors_complete
+            '''
 
         # Initialize ensemble model for destination task
         enable_simple_mean = config.getboolean('Ensemble',
@@ -214,6 +222,22 @@ class Edge:
 
             self.save_epochs_distance = config.getint('Edge Models',
                                                       'save_epochs_distance')
+
+    def init_logs_csv(self, config):
+        self.logs_csv_path = config.get('Logs', 'csv_results')
+        os.makedirs(self.logs_csv_path, exist_ok=True)
+        self.logs_csv_path = '%s/%s_%s.csv' % (
+            self.logs_csv_path, config.get('Logs', 'tensorboard_prefix'),
+            config.get('Run id', 'datetime'))
+        f = open(self.logs_csv_path, 'w')
+        f.write(
+            'enable_simple_mean, enable_simple_median, sim_fct, kernel_fct, meanshift_threshold, comb_type, fix_variance, var_th,'
+        )
+        f.write(
+            'exp_error, direct_edge, valid_twd_exp_error, test_twd_gt_error,')
+        f.write('\n')
+
+        f.close()
 
     def init_edge(self, expert1, expert2, device, model_type):
         self.expert1 = expert1
@@ -695,6 +719,23 @@ class Edge:
         print("")
         print("")
 
+        f = open(edges_1hop[0].logs_csv_path, 'a')
+        f.write('%s,' % config.get('Ensemble', 'enable_simple_mean'))
+        f.write('%s,' % config.get('Ensemble', 'enable_simple_median'))
+        f.write('%s,' % config.get('Ensemble', 'similarity_fct'))
+        f.write('%s,' % config.get('Ensemble', 'kernel_fct'))
+        f.write('%s,' % config.get('Ensemble', 'meanshiftiter_thresholds'))
+        f.write('%s,' % config.get('Ensemble', 'comb_type'))
+        f.write('%s,' % config.get('Ensemble', 'fix_variance'))
+        f.write('%s,' % config.get('Ensemble', 'variance_dismiss_threshold'))
+        f.write('%20.10f,' % l1_expert_test)
+        # will be invalid for dst rgb
+        f.write('%20.10f,' % l1_per_edge_valid[0])
+        f.write('%20.10f,' % l1_ens_valid)
+        f.write('%20.10f,' % l1_ens_test)
+        f.write('\n')
+        f.close()
+
     def eval_1hop_ensemble_test_set(edges_1hop, device, writer, wtag):
         globals.set_split('test')
         loaders = []
@@ -829,11 +870,9 @@ class Edge:
         loaders = []
         l1_edge = []
         l1_ensemble1hop = []
-        per_pixel_losses_exp = []
         for edge in edges_1hop:
             loaders.append(iter(edge.valid_loader))
             l1_edge.append([])
-            per_pixel_losses_exp.append([])
 
         with torch.no_grad():
             num_batches = len(loaders[0])
@@ -875,8 +914,6 @@ class Edge:
                         one_hop_pred, edge.gt_eval_transform(domain2_exp_gt))
                     edge.log_errors_fct(crt_loss, edge.logs_path, 'valid',
                                         'exp', edge.expert1.identifier)
-
-                    per_pixel_losses_exp[idx_edge].append(crt_loss)
                     l1_edge[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
                         -1).mean(dim=1).data.cpu().numpy().tolist()

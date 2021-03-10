@@ -16,7 +16,27 @@ cfg_out = "generated_configs/launch_%s_%s.ini" % (domain_id, str(
     datetime.now()))
 config = configparser.ConfigParser()
 config.read(cfg_template)
-
+'''
+if cfg_template == 'hypersim_template_iter1.ini':
+    if domain_id == 'depth_n_1_xtc':
+        config.set('Experts', 'selector_map',
+                   '1, 4, 5, 6, 7, 8, 9, 10, 11, 12')
+    if domain_id == 'normals_xtc':
+        config.set('Experts', 'selector_map', '2, 8, 9, 10, 11, 12')
+    if domain_id == 'sobel_small':
+        config.set('Experts', 'selector_map', '6, 7, 8, 9, 10, 11, 12')
+    if domain_id == 'edges_dexined':
+        config.set('Experts', 'selector_map',
+                   '3, 4, 5, 6, 7, 8, 9, 10, 11, 12')
+    if domain_id == 'halftone_gray':
+        config.set('Experts', 'selector_map', '4, 8, 9, 10, 11, 12')
+    if domain_id == 'grayscale':
+        config.set('Experts', 'selector_map',
+                   '3, 4, 5, 6, 7, 8, 9, 10, 11, 12')
+    if domain_id == 'rgb':
+        config.set('Experts', 'selector_map',
+                   '0, 4, 5, 6, 7, 8, 9, 10, 11, 12')
+'''
 config.set("GraphStructure", "restricted_graph_exp_identifier", domain_id)
 
 # SET model type
