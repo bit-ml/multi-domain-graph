@@ -703,7 +703,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 distance_map = self.reduce_variance(data, distance_map,
                                                     dist_model)
                 distance_maps += distance_map
-            if len(self.distance_models) > 0:
+            if len(self.distance_models) > 1:
                 distance_maps = self.scale_distance_maps(distance_maps)
 
             # kernel: transform distances to similarities

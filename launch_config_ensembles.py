@@ -60,7 +60,8 @@ if type_of_run == 1 or type_of_run == 10:
     config.set('Ensemble', 'similarity_fct', 'dist_mean')
     config.set('Ensemble', 'fix_variance', 'yes')
 
-    var_dismiss_ths = np.array([0.11, 0.1, 0.09, 0.08, 0.07, 0.06])
+    var_dismiss_ths = np.array(
+        [1e-6, 1e-5, 1e-4, 1e-3, 0.005, 1e-2, 0.03, 0.05, 0.08, 1e-1])
     for th_variance in var_dismiss_ths:
         config.set('Ensemble', 'variance_dismiss_threshold', str(th_variance))
         for kernel_f in ['flat', 'flat_weighted', 'gauss']:
@@ -117,31 +118,30 @@ if type_of_run == 3 or type_of_run == 10:
     config.set('Ensemble', 'enable_simple_median', 'no')
     config.set('Ensemble', 'fix_variance', 'yes')
 
-    var_dismiss_ths = np.array([0.11, 0.1, 0.09, 0.08, 0.07, 0.06])
+    var_dismiss_ths = np.array(
+        [1e-6, 1e-5, 1e-4, 1e-3, 0.005, 1e-2, 0.03, 0.05, 0.08, 1e-1])
     for th_variance in var_dismiss_ths:
         config.set('Ensemble', 'variance_dismiss_threshold', str(th_variance))
         for sim_f in ['l1', 'l2', 'ssim', 'lpips', 'dist_mean']:
             config.set('Ensemble', 'similarity_fct', sim_f)
-            for kernel_f in ['flat', 'flat_weighted', 'gauss']:
+            for kernel_f, th, comb_type in [("flat", 1, "median"),
+                                            ("flat_weighted", 0.75, "median"),
+                                            ("flat_weighted", 1, "median"),
+                                            ("gauss", 0.5, "median")]:
                 config.set('Ensemble', 'kernel_fct', kernel_f)
-                if kernel_f == 'flat' or kernel_f == 'flat_weighted':
-                    ths = np.array([0.25, 0.5, 0.75, 1])
-                else:
-                    ths = np.array([0.25, 0.5, 1])
-                for th in ths:
-                    config.set('Ensemble', 'meanshiftiter_thresholds', str(th))
-                    for comb_type in ['mean', 'median']:
-                        config.set('Ensemble', 'comb_type', comb_type)
-                        config.set(
-                            "Logs", "tensorboard_prefix",
-                            "%s_%s__var__%s__%s__%s__%s__%04.2f" %
-                            (tensorboard_prefix, domain_id, sim_f, kernel_f,
-                             comb_type, str(th), th_variance))
-                        print(config.get("Logs", "tensorboard_prefix"))
-                        with open(cfg_out, "w") as fd:
-                            config.write(fd)
+                config.set('Ensemble', 'meanshiftiter_thresholds', str(th))
+                config.set('Ensemble', 'comb_type', comb_type)
 
-                        os.system('python main.py "%s"' % (cfg_out))
+                config.set(
+                    "Logs", "tensorboard_prefix",
+                    "%s_%s__var__%s__%s__%s__%s__%04.2f" %
+                    (tensorboard_prefix, domain_id, sim_f, kernel_f, comb_type,
+                     str(th), th_variance))
+                print(config.get("Logs", "tensorboard_prefix"))
+                with open(cfg_out, "w") as fd:
+                    config.write(fd)
+
+                os.system('python main.py "%s"' % (cfg_out))
 
 if type_of_run == 4 or type_of_run == 10:
     ## test metrics with variance integrated as dist_fct
@@ -149,27 +149,26 @@ if type_of_run == 4 or type_of_run == 10:
     config.set('Ensemble', 'enable_simple_median', 'no')
     config.set('Ensemble', 'fix_variance', 'yes')
 
-    var_dismiss_ths = np.array([0.11, 0.1, 0.09, 0.08, 0.07, 0.06])
+    var_dismiss_ths = np.array(
+        [1e-6, 1e-5, 1e-4, 1e-3, 0.005, 1e-2, 0.03, 0.05, 0.08, 1e-1])
     for th_variance in var_dismiss_ths:
         config.set('Ensemble', 'variance_dismiss_threshold', str(th_variance))
         for sim_f in ['l1', 'l2', 'ssim', 'lpips']:
             config.set('Ensemble', 'similarity_fct', sim_f + ', dist_mean')
-            for kernel_f in ['flat', 'flat_weighted', 'gauss']:
-                config.set('Ensemble', 'kernel_fct', kernel_f)
-                if kernel_f == 'flat' or kernel_f == 'flat_weighted':
-                    ths = np.array([0.25, 0.5, 0.75, 1])
-                else:
-                    ths = np.array([0.25, 0.5, 1])
-                for th in ths:
-                    config.set('Ensemble', 'meanshiftiter_thresholds', str(th))
-                    for comb_type in ['mean', 'median']:
-                        config.set('Ensemble', 'comb_type', comb_type)
-                        config.set(
-                            "Logs", "tensorboard_prefix",
-                            "%s_%s__varmetric__%s__%s__%s__%s" %
-                            (tensorboard_prefix, domain_id, sim_f, kernel_f,
-                             comb_type, str(th)))
-                        with open(cfg_out, "w") as fd:
-                            config.write(fd)
 
-                        os.system('python main.py "%s"' % (cfg_out))
+            for kernel_f, th, comb_type in [("flat", 1, "median"),
+                                            ("flat_weighted", 0.75, "median"),
+                                            ("flat_weighted", 1, "median"),
+                                            ("gauss", 0.5, "median")]:
+                config.set('Ensemble', 'kernel_fct', kernel_f)
+                config.set('Ensemble', 'meanshiftiter_thresholds', str(th))
+                config.set('Ensemble', 'comb_type', comb_type)
+                config.set(
+                    "Logs", "tensorboard_prefix",
+                    "%s_%s__varmetric__%s__%s__%s__%s" %
+                    (tensorboard_prefix, domain_id, sim_f, kernel_f, comb_type,
+                     str(th)))
+                with open(cfg_out, "w") as fd:
+                    config.write(fd)
+
+                os.system('python main.py "%s"' % (cfg_out))
