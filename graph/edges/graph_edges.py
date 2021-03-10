@@ -30,7 +30,6 @@ class Edge:
         self.silent = silent
 
         self.init_logs_csv(config)
-
         # Analysis data
         silent_analysis = config.getboolean('Analysis', 'silent')
         if silent_analysis:
@@ -51,6 +50,12 @@ class Edge:
             # get var function
             self.var_score = VarianceScore()
             self.log_variance_fct = self.log_variance
+
+            self.log_errors_fct = lambda *args: True
+            self.log_metrics_fct = lambda *args: True
+            self.log_ensemble_errors_fct = lambda *args: True
+            self.log_ensemble_errors_fct_complete = lambda *args: True
+            '''
             self.log_errors_fct = self.log_errors
             self.log_metrics_fct = self.log_metrics
             self.analysis_score_names = ['l1', 'l2', 'ssim', 'lpips']
@@ -65,6 +70,7 @@ class Edge:
                     self.analysis_score_fcts[idx])
             self.log_ensemble_errors_fct = self.log_ensemble_errors
             self.log_ensemble_errors_fct_complete = self.log_ensemble_errors_complete
+            '''
 
         # Initialize ensemble model for destination task
         enable_simple_mean = config.getboolean('Ensemble',
@@ -864,11 +870,9 @@ class Edge:
         loaders = []
         l1_edge = []
         l1_ensemble1hop = []
-        per_pixel_losses_exp = []
         for edge in edges_1hop:
             loaders.append(iter(edge.valid_loader))
             l1_edge.append([])
-            per_pixel_losses_exp.append([])
 
         with torch.no_grad():
             num_batches = len(loaders[0])
@@ -910,8 +914,6 @@ class Edge:
                         one_hop_pred, edge.gt_eval_transform(domain2_exp_gt))
                     edge.log_errors_fct(crt_loss, edge.logs_path, 'valid',
                                         'exp', edge.expert1.identifier)
-
-                    per_pixel_losses_exp[idx_edge].append(crt_loss)
                     l1_edge[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
                         -1).mean(dim=1).data.cpu().numpy().tolist()
