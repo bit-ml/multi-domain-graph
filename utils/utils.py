@@ -250,6 +250,24 @@ class ScoreFunctions(nn.Module):
         distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
         return distance_maps
 
+    def compute_distances_to_mean(self, data):
+        '''
+            twd_mean
+        '''
+
+        bs, n_chs, h, w, n_tasks = data.shape
+        distance_maps = []
+        mean_data = torch.mean(data, dim=-1)
+        for i in range(n_tasks - 1):
+            distance_map = self.forward(mean_data, data[..., i])
+            distance_maps.append(distance_map)
+
+        # add expert vs expert
+        distance_maps.append(torch.zeros_like(distance_map))
+
+        distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
+        return distance_maps
+
     def forward(self, batch1, batch2):
         pass
 
@@ -641,18 +659,20 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         return chan_sim_maps
 
     def reduce_variance(self, data, distance_map, dist_model):
+
         if not self.fix_variance:
             return distance_map
 
         # remove until the variance is small enough
         std_weights = torch.ones_like(data)
         pixel_variance = binw_variance(data, weights=std_weights, axis=-1)
+
         n_tasks_in_ens = data.shape[-1]
         while True:
             to_change_idxs = (pixel_variance > self.variance_th).nonzero(
                 as_tuple=True)
             # print("n_tasks_in_ens", n_tasks_in_ens, "to_change_idxs",
-            #       to_change_idxs[0].shape)
+            #       to_change_idxs[0].shape
 
             assert (n_tasks_in_ens > 0)
             if to_change_idxs[0].shape[0] == 0:
@@ -668,7 +688,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             pixel_variance = binw_variance(data, weights=std_weights, axis=-1)
 
-            # update distances if necessary
             update_distances_fcn = getattr(dist_model, "update_distances",
                                            None)
             if update_distances_fcn and callable(update_distances_fcn):
@@ -680,7 +699,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 distance_map = new_distance_map
 
             n_tasks_in_ens -= 1
-            # break
+
+            #break
             # if n_tasks_in_ens > 10:
             #     break
 
@@ -699,11 +719,12 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             # combine multiple similarities functions
             for dist_idx, dist_model in enumerate(self.distance_models):
                 distance_map = dist_model.compute_distances(data)
+
                 distance_map = self.scale_distance_maps(distance_map)
                 distance_map = self.reduce_variance(data, distance_map,
                                                     dist_model)
                 distance_maps += distance_map
-            if len(self.distance_models) > 0:
+            if len(self.distance_models) > 1:
                 distance_maps = self.scale_distance_maps(distance_maps)
 
             # kernel: transform distances to similarities
