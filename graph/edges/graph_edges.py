@@ -722,9 +722,11 @@ class Edge:
         f = open(edges_1hop[0].logs_csv_path, 'a')
         f.write('%s,' % config.get('Ensemble', 'enable_simple_mean'))
         f.write('%s,' % config.get('Ensemble', 'enable_simple_median'))
-        f.write('%s,' % config.get('Ensemble', 'similarity_fct'))
+        f.write('%s,' %
+                config.get('Ensemble', 'similarity_fct').replace(',', '+'))
         f.write('%s,' % config.get('Ensemble', 'kernel_fct'))
-        f.write('%s,' % config.get('Ensemble', 'meanshiftiter_thresholds'))
+        f.write('%s,' % config.get(
+            'Ensemble', 'meanshiftiter_thresholds').replace(',', '+'))
         f.write('%s,' % config.get('Ensemble', 'comb_type'))
         f.write('%s,' % config.get('Ensemble', 'fix_variance'))
         f.write('%s,' % config.get('Ensemble', 'variance_dismiss_threshold'))
