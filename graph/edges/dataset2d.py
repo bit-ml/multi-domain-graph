@@ -35,6 +35,8 @@ iter_idx > 1  |  train - src |          conf            |       STORE
 --------------------------------------------------------------------------------------------------                
 '''
 
+experts_using_gt_in_second_iter = ['rgb', 'hsv', 'grayscale', 'halftone_gray']
+
 
 def load_glob_with_cache_multiple_patterns(cache_file, glob_paths):
     if not os.path.exists(cache_file):
@@ -53,7 +55,8 @@ def load_glob_with_cache_multiple_patterns(cache_file, glob_paths):
 
 
 def get_paths_for_idx_and_split(config, iter_idx, split_str, running_iter_idx,
-                                for_next_iter_idx_subset):
+                                for_next_iter_idx_subset, src_expert,
+                                dst_expert):
     iters_config = config.getint('General', 'iters_config')
 
     if running_iter_idx == 1:
@@ -62,7 +65,8 @@ def get_paths_for_idx_and_split(config, iter_idx, split_str, running_iter_idx,
         dst_path = config.get('PathsIter%d' % iter_idx, 'ITER%d_%s_DST_PATH' %
                               (iter_idx, split_str)).split('\n')
     else:
-        if iters_config == 1:
+        if (iters_config == 1) or (src_expert.identifier
+                                   in experts_using_gt_in_second_iter):
             src_path = config.get('PathsIter%d' % iter_idx,
                                   'ITER%d_%s_SRC_PATH' %
                                   (iter_idx, split_str)).split('\n')
@@ -70,9 +74,14 @@ def get_paths_for_idx_and_split(config, iter_idx, split_str, running_iter_idx,
             src_path = config.get(
                 'PathsIter%d' % iter_idx,
                 'ITER%d_%s_STORE_PATH' % (iter_idx, split_str)).split('\n')
-        dst_path = config.get('PathsIter%d' % iter_idx,
-                              'ITER%d_%s_STORE_PATH' %
-                              (iter_idx, split_str)).split('\n')
+        if dst_expert.identifier in experts_using_gt_in_second_iter:
+            dst_path = config.get('PathsIter%d' % iter_idx,
+                                  'ITER%d_%s_DST_PATH' %
+                                  (iter_idx, split_str)).split('\n')
+        else:
+            dst_path = config.get(
+                'PathsIter%d' % iter_idx,
+                'ITER%d_%s_STORE_PATH' % (iter_idx, split_str)).split('\n')
 
     patterns = config.get('PathsIter%d' % iter_idx, 'ITER%d_%s_PATTERNS' %
                           (iter_idx, split_str)).split('\n')
@@ -143,7 +152,7 @@ class ImageLevelDataset(Dataset):
         src_path, dst_path, patterns, first_k, gt_dst_path = get_paths_for_idx_and_split(
             config, iter_idx, split_str,
             (iter_idx - 1) if for_next_iter else iter_idx,
-            for_next_iter_idx_subset)
+            for_next_iter_idx_subset, src_expert, dst_expert)
 
         paths_str = [
             pathlib.Path(src_path_).parts[-1] for src_path_ in src_path
