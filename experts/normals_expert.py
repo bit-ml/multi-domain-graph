@@ -101,3 +101,21 @@ class SurfaceNormalsXTC(BasicExpert):
 
     def gt_train_transform(edge, gt_inp):
         return gt_inp[:, :2]
+
+    def test_gt(self, loss_fct, pred, target):
+        is_nan = target != target
+
+        if is_nan.sum() > 0:
+            l_target = target.clone()
+
+            bm = ~is_nan
+
+            l_target[is_nan] = 0
+            l_target = l_target * bm
+            l_pred = pred * bm
+        else:
+            l_pred = pred
+            l_target = target
+
+        loss = loss_fct(l_pred, l_target)
+        return loss
