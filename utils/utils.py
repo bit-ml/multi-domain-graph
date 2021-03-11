@@ -492,8 +492,15 @@ class SimScore_LPIPS(ScoreFunctions):
         # LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
         #                                           spatial=True)
     def forward(self, batch1, batch2):
-        distance = self.lpips_net.forward(batch1, batch2)
-        return distance.repeat(1, self.n_channels, 1, 1)
+        n_chn = batch1.shape[1]
+        if n_chn in [1, 3]:
+            distance = self.lpips_net.forward(batch1, batch2)
+            return distance.repeat(1, n_chn, 1, 1)
+        else:
+            distance = torch.zeros_like(batch1)
+            for chan in range(n_chn):
+                distance[:, chan:chan+1] = self.lpips_net.forward(batch1[:, chan:chan+1], batch2[:, chan:chan+1])
+            return distance
 
 
 class EnsembleFilter_TwdExpert(torch.nn.Module):
@@ -632,8 +639,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def scale_distance_maps(self, distance_maps):
         bm = distance_maps == BIG_VALUE
         distance_maps[bm] = 0
-        max_val = torch.amax(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
-        min_val = torch.amin(distance_maps, axis=(1, 2, 3, 4), keepdim=True)
+        max_val = torch.amax(distance_maps, axis=(2, 3, 4), keepdim=True)
+        min_val = torch.amin(distance_maps, axis=(2, 3, 4), keepdim=True)
         distance_maps = (distance_maps - min_val) / (max_val - min_val +
                                                      EPSILON)
         distance_maps[bm] = 1
