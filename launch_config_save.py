@@ -6,7 +6,6 @@ from datetime import datetime
 import numpy as np
 
 os.system("mkdir -p generated_configs/")
-
 # dst domain
 domain_id = sys.argv[1]
 # base template
@@ -28,4 +27,4 @@ print(config.get("Logs", "tensorboard_prefix"))
 with open(cfg_out, "w") as fd:
     config.write(fd)
 
-    os.system('python main.py "%s"' % (cfg_out))
+os.system('python main.py "%s"' % (cfg_out))
