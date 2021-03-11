@@ -55,8 +55,10 @@ def build_mask(target, val=0.0, tol=1e-3, kernel=1):
     return (~mask).expand_as(target)
 
 
-OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/taskonomy/tiny-train-0.15-part3/normals"
-OUTPUT_DIR2 = "/data/multi-domain-graph-2/datasets/datasets_preproc_exp/taskonomy/tiny-train-0.15-part3/normals_xtc"
+# first one is the GT
+OUTPUT_DIR1 = "/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica/test/depth_n_1"
+
+OUTPUT_DIR2 = "/data/multi-domain-graph-4/datasets/datasets_preproc_ens_iter1/replica/test/depth_n_1_xtc"
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -80,11 +82,14 @@ with torch.no_grad():
 
         f1 = f1.to(device=device, dtype=torch.float32)
         f2 = f2.to(device=device, dtype=torch.float32)
-        '''
-        mask = build_mask(f1, 0.788, tol=1e-3)
-        f1 = f1 * mask
-        f2 - f2 * mask
-        '''
+
+        is_nan = f1 != f1
+        bm = ~is_nan
+
+        f1[is_nan] = 0
+        f1 = f1 * bm
+        f2 = f2 * bm
+
         l2_loss = loss_l2(f1, f2)
         l1_loss = loss_l1(f1, f2)
 
