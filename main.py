@@ -125,8 +125,6 @@ def save_1hop_ensembles(space_graph, config, iter_no):
 
         # 1. Select edges that ends in end_id
         for edge_xk in space_graph.edges:
-            if edge_xk.ill_posed:
-                continue
             if not edge_xk.trained:
                 continue
             if edge_xk.expert2.identifier == end_id:
@@ -351,9 +349,14 @@ def main(argv):
 
         # Save data for next iter
         if iter_saveNextIter_flag:
+            if config.has_option('Experts', 'selector_map'):
+                selector_map = config.get('Experts', 'selector_map')
+            else:
+                selector_map = None
             all_experts = Experts(full_experts=False,
-                                  selector_map=config.get(
-                                      'Experts', 'selector_map'))
+                                  dataset_name=config.get(
+                                      'General', 'DATASET_NAME'),
+                                  selector_map=selector_map)
             prepare_store_folders(config=config,
                                   iter_no=iteration_idx + 1,
                                   all_experts=all_experts)

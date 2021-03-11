@@ -1057,12 +1057,14 @@ class Edge:
                         domain2_1hop_ens_list.append(one_hop_pred.clone())
 
                 # with_expert
-                domain2_1hop_ens_list.append(domain2_exp_gt)
+                domain2_1hop_ens_list.append(
+                    edge.gt_to_inp_transform(
+                        domain2_exp_gt, edge.expert2.no_maps_as_ens_input()))
                 domain2_1hop_ens_list = torch.stack(domain2_1hop_ens_list)
 
                 domain2_1hop_ens_list_perm = domain2_1hop_ens_list.permute(
                     1, 2, 3, 4, 0)
-                domain2_1hop_ens, std = edge.ensemble_filter(
+                domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
                 save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
