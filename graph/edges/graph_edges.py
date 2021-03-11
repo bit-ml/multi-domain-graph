@@ -1069,6 +1069,11 @@ class Edge:
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
+                if edge.expert2.get_task_type(
+                ) == BasicExpert.TASK_CLASSIFICATION:
+                    domain2_1hop_ens = domain2_1hop_ens.argmax(
+                        dim=1, keepdims=True).long()
+
                 save_dir_ = os.path.join(save_dir, edge.expert2.identifier)
                 for elem_idx in range(domain2_1hop_ens.shape[0]):
                     save_path = "%s/%08d.npy" % (save_dir_, crt_idx + elem_idx)
