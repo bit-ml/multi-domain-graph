@@ -302,6 +302,7 @@ def prepare_store_folders(config, iter_no, all_experts):
 
 
 def main(argv):
+
     config = configparser.ConfigParser()
     config.read(argv[1])
     preprocess_config_file(config)
@@ -320,6 +321,9 @@ def main(argv):
                                            'Steps_Iter%d_test' % iteration_idx)
         iter_saveNextIter_flag = config.getboolean(
             'General', 'Steps_Iter%d_saveNextIter' % iteration_idx)
+
+        if not (iter_train_flag or iter_test_flag or iter_saveNextIter_flag):
+            continue
 
         # Build graph
         silent = config.getboolean('Logs', 'silent')
@@ -363,7 +367,8 @@ def main(argv):
 
             save_1hop_ensembles(graph, config=config, iter_no=iteration_idx)
 
-        return
+        if (iter_train_flag or iter_test_flag or iter_saveNextIter_flag):
+            return
 
 
 if __name__ == "__main__":
