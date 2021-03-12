@@ -354,7 +354,9 @@ def main(argv):
         # Save data for next iter
         if iter_saveNextIter_flag:
             if config.has_option('Experts', 'selector_map'):
-                selector_map = config.get('Experts', 'selector_map')
+                selector_map_str = config.get('Experts',
+                                              'selector_map').split(",")
+                selector_map = [int(token) for token in selector_map_str]
             else:
                 selector_map = None
             all_experts = Experts(full_experts=False,
