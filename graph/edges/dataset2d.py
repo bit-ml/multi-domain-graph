@@ -159,9 +159,10 @@ class ImageLevelDataset(Dataset):
         ]
         paths_str = '_'.join(paths_str)
 
-        tag = 'iter_%d_split_%s_nPaths_%d_%s_%s_iters_config_%d' % (
-            iter_idx, split_str, len(src_path), paths_str, '_for_next_iter'
-            if for_next_iter else '', config.getint('General', 'iters_config'))
+        tag = 'iter_%d_split_%s_nPaths_%d_%s_%s_iters_config_%d_%d' % (
+            iter_idx, split_str, len(src_path), paths_str,
+            '_for_next_iter' if for_next_iter else '',
+            config.getint('General', 'iters_config'), for_next_iter_idx_subset)
 
         CACHE_NAME = config.get('General', 'CACHE_NAME')
 
