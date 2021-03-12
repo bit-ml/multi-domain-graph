@@ -499,7 +499,8 @@ class SimScore_LPIPS(ScoreFunctions):
         else:
             distance = torch.zeros_like(batch1)
             for chan in range(n_chn):
-                distance[:, chan:chan+1] = self.lpips_net.forward(batch1[:, chan:chan+1], batch2[:, chan:chan+1])
+                distance[:, chan:chan + 1] = self.lpips_net.forward(
+                    batch1[:, chan:chan + 1], batch2[:, chan:chan + 1])
             return distance
 
 
@@ -656,6 +657,9 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def kernel_flat_weighted(self, chan_sim_maps, meanshift_iter):
         # indicates what we want to remove
         chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
+        # print(
+        #     "Keep %.2f%%" %
+        #     ((chan_mask.numel() - chan_mask.sum()) * 100. / chan_mask.numel()))
         chan_sim_maps = 1 - chan_sim_maps
         chan_sim_maps[chan_mask] = 0
         return chan_sim_maps
@@ -726,7 +730,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
             # combine multiple similarities functions
             for dist_idx, dist_model in enumerate(self.distance_models):
                 distance_map = dist_model.compute_distances(data)
-
                 distance_map = self.scale_distance_maps(distance_map)
                 distance_map = self.reduce_variance(data, distance_map,
                                                     dist_model)
@@ -739,7 +742,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 distance_maps[:, chan] = self.kernel(distance_maps[:, chan],
                                                      meanshift_iter)
 
-            # sum = 1
+            # sum = 1, similarity maps in fact!!!
+            # distance_maps[..., -1] = distance_maps[..., -1] * 1.5
             sum_ = torch.sum(distance_maps, dim=-1, keepdim=True)
             sum_[sum_ == 0] = 1
             distance_maps = distance_maps / sum_
