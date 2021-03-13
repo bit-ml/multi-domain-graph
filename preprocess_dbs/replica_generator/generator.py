@@ -434,7 +434,7 @@ def main():
     args = parser.parse_args()
 
     generator = Generator(path=args.dataset_folder)
-    # 48 rooms
+    # 18 appertments/"rooms" with a total of 48 scenes
     generator.generate(out_folder=args.output,
                        split_name='train',
                        frames_per_room=200)

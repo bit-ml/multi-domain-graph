@@ -6,7 +6,7 @@ from .unet_parts import *
 
 
 def get_unet(model_type, n_channels, n_classes, from_exp, to_exp):
-    assert (model_type == 0 or model_type == 1)
+    assert (model_type in [0, 1, 2])
     if model_type == 0:
         return UNetGood(n_channels=n_channels,
                         n_classes=n_classes,
@@ -17,10 +17,21 @@ def get_unet(model_type, n_channels, n_classes, from_exp, to_exp):
                           n_classes=n_classes,
                           from_exp=from_exp,
                           to_exp=to_exp)
+    elif model_type == 2:
+        return UNetMedium(n_channels=n_channels,
+                          n_classes=n_classes,
+                          from_exp=from_exp,
+                          with_dropout=True,
+                          to_exp=to_exp)
 
 
 class UNetMedium(nn.Module):
-    def __init__(self, n_channels, n_classes, from_exp, to_exp):
+    def __init__(self,
+                 n_channels,
+                 n_classes,
+                 from_exp,
+                 to_exp,
+                 with_dropout=False):
         # 4 mil params
         super(UNetMedium, self).__init__()
         self.n_channels = n_channels
@@ -28,16 +39,16 @@ class UNetMedium(nn.Module):
         bilinear = True
         self.to_exp = to_exp
 
-        self.inc = DoubleConv(n_channels, 32)
-        self.down1 = Down(32, 64)
-        self.down2 = Down(64, 128)
-        self.down3 = Down(128, 256)
+        self.inc = DoubleConv(n_channels, 32, with_dropout=with_dropout)
+        self.down1 = Down(32, 64, with_dropout=with_dropout)
+        self.down2 = Down(64, 128, with_dropout=with_dropout)
+        self.down3 = Down(128, 256, with_dropout=with_dropout)
         factor = 2 if bilinear else 1
         self.down4 = Down(256, 512 // factor)
-        self.up1 = Up(512, 256 // factor, bilinear)
-        self.up2 = Up(256, 128 // factor, bilinear)
-        self.up3 = Up(128, 64 // factor, bilinear)
-        self.up4 = Up(64, 32, bilinear)
+        self.up1 = Up(512, 256 // factor, bilinear, with_dropout=with_dropout)
+        self.up2 = Up(256, 128 // factor, bilinear, with_dropout=with_dropout)
+        self.up3 = Up(128, 64 // factor, bilinear, with_dropout=with_dropout)
+        self.up4 = Up(64, 32, bilinear, with_dropout=with_dropout)
         self.outc = OutConv(32, n_classes)
 
     def forward(self, inp):

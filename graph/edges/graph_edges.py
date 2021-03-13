@@ -494,7 +494,7 @@ class Edge:
                 print("Loss %.2f" % valid_losses[idx], end="  ")
             print("   TRAIN: ", end="")
             for idx in range(len(train_losses)):
-                print("Loss %.2f" % valid_losses[idx], end="  ")
+                print("Loss %.2f" % train_losses[idx], end="  ")
 
             crt_lr = self.optimizer.param_groups[0]['lr']
             print("[LR %f]" % crt_lr)
