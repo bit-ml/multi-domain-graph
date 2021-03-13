@@ -3,12 +3,12 @@ import shutil
 import numpy as np
 import cv2
 
-path = '/root/code/multi-domain-graph/csv_results'
+path = '/root/code/multi-domain-graph/csv_results_hypersim_test_configs'
 
 files = os.listdir(path)
 files.sort()
 idx = 0
-final_path = 'final.csv'
+final_path = 'final_hypersim_depth_configs.csv'
 final_f = open(final_path, 'w')
 for file_ in files:
     f = open(os.path.join(path, file_), 'r')

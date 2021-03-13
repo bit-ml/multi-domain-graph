@@ -8,13 +8,14 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 #logs_out_path = r'/data/multi-domain-graph-6/datasets/replica_raw_1/runs'
+#logs_out_path = r'/data/multi-domain-graph-2/datasets/replica_raw_2/runs'
 logs_out_path = r'/data/multi-domain-graph-2/datasets/replica_raw_2/runs'
 
 #experts_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica'
 #gt_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica'
-experts_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica_2'
-gt_path = r'/data/multi-domain-graph-2/datasets/datasets_preproc_gt/replica_2'
-split_name = 'val'
+experts_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_ens_iter1/replica_2'
+gt_path = r'/data/multi-domain-graph-4/datasets/datasets_preproc_ens_iter1/replica'
+split_name = 'train'
 n_samples = 100
 
 experts_path = os.path.join(experts_path, split_name)
@@ -43,18 +44,30 @@ os.makedirs(logs_out_path, exist_ok=True)
 writer = SummaryWriter(
     os.path.join(logs_out_path, split_name + '_' + str(datetime.now())))
 
+import pdb
+pdb.set_trace()
 for idx in indexes:
     for exp in all_experts:
-        path = os.path.join(experts_path, exp, '%08d.npy' % idx)
+        if exp == 'rgb' or exp == 'hsv' or exp == 'halftone_gray' or exp == 'grayscale':
+            experts_path_ = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica_2/train'
+        else:
+            experts_path_ = experts_path
+            #continue
+        path = os.path.join(experts_path_, exp, '%08d.npy' % idx)
         if not os.path.exists(path):
-            path = os.path.join(experts_path, exp, '%05d.npy' % idx)
+            path = os.path.join(experts_path_, exp, '%05d.npy' % idx)
         v = torch.from_numpy(np.load(path))
         img_grid = torchvision.utils.make_grid(v[None], 1)
         writer.add_image('experts/%s' % (exp), img_grid, idx)
     for gt in all_gts:
-        path = os.path.join(gt_path, gt, '%08d.npy' % idx)
+        if gt == 'rgb' or gt == 'hsv' or gt == 'halftone_gray' or gt == 'grayscale':
+            gt_path_ = r'/data/multi-domain-graph-2/datasets/datasets_preproc_exp/replica/train'
+        else:
+            gt_path_ = gt_path
+            #continue
+        path = os.path.join(gt_path_, gt, '%08d.npy' % idx)
         if not os.path.exists(path):
-            path = os.path.join(gt_path, gt, '%05d.npy' % idx)
+            path = os.path.join(gt_path_, gt, '%05d.npy' % idx)
         v = torch.from_numpy(np.load(path))
         v[v > 1] = 1
         img_grid = torchvision.utils.make_grid(v[None], 1)
