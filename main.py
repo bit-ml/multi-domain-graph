@@ -70,19 +70,30 @@ def eval_1hop_ensembles(space_graph, silent, config):
         edges_order = Edge.eval_all_1hop_ensembles(edges_1hop, device, writer,
                                                    config)
 
-        # 3. print expert indexes - in ascending order of l1 per test set
-        ordered_identifiers = []
-        for i in edges_order:
-            ordered_identifiers.append(edges_1hop[i].expert1.identifier)
-
         if config.has_option('Ensemble', 'eval_top_edges_nr'):
+            ordered_identifiers = []
+            for i in edges_order:
+                ordered_identifiers.append(edges_1hop[i].expert1.identifier)
+            rand_order = np.arange(0, len(edges_1hop))
+            np.random.seed(115)
+            np.random.shuffle(rand_order)
+            rand_identifiers = []
+            for i in rand_order:
+                rand_identifiers.append(edges_1hop[i].expert1.identifier)
+            random_edges = config.getboolean('Ensemble', 'random_edges')
+
             eval_top_edges_nr = np.int32(
                 config.get('Ensemble', 'eval_top_edges_nr').split(','))
 
             for top_nr in eval_top_edges_nr:
-                to_keep_src_identifiers = ordered_identifiers[0:top_nr]
-                print('Top %d sources: ' % (top_nr))
-                print(to_keep_src_identifiers)
+                if random_edges:
+                    to_keep_src_identifiers = rand_identifiers[0:top_nr]
+                    print('Rand %d sources: ' % (top_nr))
+                    print(to_keep_src_identifiers)
+                else:
+                    to_keep_src_identifiers = ordered_identifiers[0:top_nr]
+                    print('Top %d sources: ' % (top_nr))
+                    print(to_keep_src_identifiers)
                 if silent:
                     top_writer = DummySummaryWriter()
                 else:
