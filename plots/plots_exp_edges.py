@@ -30,7 +30,7 @@ fig, ax = plt.subplots(len(domains),
                        sharex=False)
 fig.suptitle(
     'Performance evolution \n under different node selection strategies',
-    fontsize=20,
+    fontsize=15,
     fontweight='bold')
 sns.set()
 sns.set_style('white')
