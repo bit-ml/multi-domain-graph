@@ -25,7 +25,7 @@ fig, ax = plt.subplots(len(domains),
                        figsize=(6, 5 * len(domains)),
                        sharex=False)
 df = pd.read_csv(csv_path)
-fig.suptitle('Performance evolution \n of individual edges',
+fig.suptitle('Performance evolution of individual edges',
              fontsize=15,
              fontweight='bold')
 sns.set()

@@ -14,7 +14,7 @@ colors = ['#488f31', '#de425b']
 df = pd.read_csv(csv_path)
 df = df.replace({'selected': 0}, 'random')
 df = df.replace({'selected': 1}, 'performance-based')
-df = df.replace({'comb': 'our_median'}, 'CShift w/ LPIPS')
+df = df.replace({'comb': 'our_median'}, 'CShift')
 df = df.replace({'comb': 'simple_mean'}, 'Ensemble Mean')
 df = df[df['comb'] != 'our_mean']
 df = df.rename(columns={
