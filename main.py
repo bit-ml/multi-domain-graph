@@ -28,6 +28,9 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
     all_experts = Experts(dataset_name=config.get('General', 'DATASET_NAME'),
                           full_experts=False,
                           selector_map=selector_map)
+    use_older_edges = config.getboolean('Ensemble', 'use_older_edges')
+    if use_older_edges:
+        print("USE OLDER EDGES!!")
 
     md_graph = MultiDomainGraph(
         config,
@@ -36,6 +39,7 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
         iter_no=iter_no,
         silent=silent,
         valid_shuffle=valid_shuffle,
+        use_older_edges=use_older_edges,
     )
     return md_graph
 
@@ -320,7 +324,8 @@ def main(argv):
 
     print(config.get('Run id', 'datetime'))
     print(colored("Config file: %s" % argv[1], "red"))
-    print("load_path", config.get('Edge Models', 'load_path'))
+    print("load_path_iter1", config.get('Edge Models', 'load_path_iter1'))
+    print("load_path_iter2", config.get('Edge Models', 'load_path_iter2'))
 
     n_iters = config.getint('General', 'n_iters')
 

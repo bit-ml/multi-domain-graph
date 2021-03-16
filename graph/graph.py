@@ -11,14 +11,17 @@ class MultiDomainGraph:
                  device,
                  iter_no,
                  silent=False,
-                 valid_shuffle=True):
+                 valid_shuffle=True,
+                 use_older_edges=False):
         super(MultiDomainGraph, self).__init__()
         self.experts = experts
-        self.init_nets(experts, device, silent, config, valid_shuffle, iter_no)
+        self.init_nets(experts, device, silent, config, valid_shuffle, iter_no,
+                       use_older_edges)
+
         print("==================")
 
     def init_nets(self, all_experts, device, silent, config, valid_shuffle,
-                  iter_no):
+                  iter_no, use_older_edges):
 
         restricted_graph_type = config.getint('GraphStructure',
                                               'restricted_graph_type')
@@ -52,7 +55,10 @@ class MultiDomainGraph:
                         bs_test = 60
                         bs_train = 60
                     else:
-                        bs_test = 25
+                        if torch.cuda.device_count() == 3:
+                            bs_test = 60
+                        else:
+                            bs_test = 25
                         bs_train = 40
                     # if expert_j.identifier in ["sem_seg_hrnet"]:
                     #     bs_train = 90
@@ -60,6 +66,18 @@ class MultiDomainGraph:
                     print("Add edge [%15s To: %15s]" %
                           (expert_i.identifier, expert_j.identifier),
                           end=' ')
+                    if use_older_edges:
+                        new_edge = Edge(config,
+                                        expert_i,
+                                        expert_j,
+                                        device,
+                                        silent,
+                                        valid_shuffle,
+                                        iter_no=1,
+                                        bs_train=bs_train,
+                                        bs_test=bs_test)
+                        self.edges.append(new_edge)
+
                     new_edge = Edge(config,
                                     expert_i,
                                     expert_j,

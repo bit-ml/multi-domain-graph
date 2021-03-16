@@ -5,33 +5,25 @@ import torch.nn.functional as F
 from .unet_parts import *
 
 
-def get_unet(model_type, n_channels, n_classes, from_exp, to_exp):
+def get_unet(model_type, n_channels, n_classes, to_exp):
     assert (model_type in [0, 1, 2])
     if model_type == 0:
         return UNetGood(n_channels=n_channels,
                         n_classes=n_classes,
-                        from_exp=from_exp,
                         to_exp=to_exp)
     elif model_type == 1:
         return UNetMedium(n_channels=n_channels,
                           n_classes=n_classes,
-                          from_exp=from_exp,
                           to_exp=to_exp)
     elif model_type == 2:
         return UNetMedium(n_channels=n_channels,
                           n_classes=n_classes,
-                          from_exp=from_exp,
                           with_dropout=True,
                           to_exp=to_exp)
 
 
 class UNetMedium(nn.Module):
-    def __init__(self,
-                 n_channels,
-                 n_classes,
-                 from_exp,
-                 to_exp,
-                 with_dropout=False):
+    def __init__(self, n_channels, n_classes, to_exp, with_dropout=False):
         # 4 mil params
         super(UNetMedium, self).__init__()
         self.n_channels = n_channels
@@ -58,16 +50,17 @@ class UNetMedium(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
+        # x_mid = x5.clone()
         x = self.up1(x5, x4)
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return postproc_fcn(logits)
+        return postproc_fcn(logits)  #, x_mid
 
 
 class UNetGood(nn.Module):
-    def __init__(self, n_channels, n_classes, from_exp, to_exp):
+    def __init__(self, n_channels, n_classes, to_exp):
         # 1 mil params
         super(UNetGood, self).__init__()
         self.n_channels = n_channels

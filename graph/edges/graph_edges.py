@@ -94,6 +94,7 @@ class Edge:
             variance_dismiss_threshold = config.getfloat(
                 'Ensemble', 'variance_dismiss_threshold')
 
+            dist_to = config.get('Ensemble', 'dist_to')
             self.ensemble_filter = EnsembleFilter_TwdExpert(
                 n_channels=expert2.no_maps_as_ens_input(),
                 similarity_fcts=similarity_fcts,
@@ -103,6 +104,7 @@ class Edge:
                 thresholds=meanshiftiter_thresholds,
                 fix_variance=fix_variance,
                 variance_th=variance_dismiss_threshold,
+                dist_to=dist_to,
                 dst_domain_name=expert2.domain_name,
                 analysis_logs_path=self.logs_path,
                 analysis_silent=silent_analysis).to(device)
@@ -208,7 +210,7 @@ class Edge:
 
         # CHECKPOINTing
         self.load_model_dir = os.path.join(
-            config.get('Edge Models', 'load_path'),
+            config.get('Edge Models', 'load_path_iter%d' % iter_no),
             '%s_%s' % (expert1.identifier, expert2.identifier))
 
         if config.getboolean('Edge Models', 'save_models'):
@@ -247,7 +249,6 @@ class Edge:
         net = get_unet(model_type=model_type,
                        n_channels=expert1.no_maps_as_nn_input(),
                        n_classes=expert2.no_maps_as_nn_output(),
-                       from_exp=expert1,
                        to_exp=expert2).to(device)
         self.net = nn.DataParallel(net)
 
@@ -644,8 +645,11 @@ class Edge:
 
         print("Epochs", colored(config.get('Edge Models', 'start_epoch'),
                                 'red'))
-        print("Load Path",
-              colored(config.get('Edge Models', 'load_path'), 'red'))
+        print("Load Path iter1",
+              colored(config.get('Edge Models', 'load_path_iter1'), 'red'))
+        print("Load Path iter2",
+              colored(config.get('Edge Models', 'load_path_iter2'), 'red'))
+
         enable_simple_mean = config.getboolean('Ensemble',
                                                'enable_simple_mean')
         enable_simple_median = config.getboolean('Ensemble',
@@ -666,6 +670,9 @@ class Edge:
             print("Forward type: ",
                   colored(config.get('Ensemble', 'comb_type'), 'red'))
 
+            print("Distance_to: ",
+                  colored(config.get('Ensemble', 'dist_to'), 'red'))
+
             fix_variance = config.getboolean('Ensemble', 'fix_variance')
             print("Use Variance?: ", colored(str(fix_variance), 'red'))
             if fix_variance:
@@ -680,8 +687,8 @@ class Edge:
         )
 
         print("Loss %19s: %30.2f   " % ("Ensemble1Hop", l1_ens_valid),
-              colored("%30.2f " % l1_ens_test, 'green'),
-              colored("%20.2f" % l1_expert_test, "magenta"))
+              colored("%30.3f " % l1_ens_test, 'green'),
+              colored("%20.3f" % l1_expert_test, "magenta"))
         print(
             "%25s-------------------------------------------------------------------------------------"
             % (" "))
@@ -738,7 +745,7 @@ class Edge:
         f.write('\n')
         f.close()
 
-    def eval_1hop_ensemble_test_set(edges_1hop, device, writer, wtag):
+    def eval_1hop_ensemble_test_set(edges_1hop, device, writer, wtag, config):
         globals.set_split('test')
         loaders = []
         test_edges = []
@@ -973,7 +980,8 @@ class Edge:
                         'red'))
             print("Forward type: ",
                   colored(config.get('Ensemble', 'comb_type'), 'red'))
-
+            print("Distance_to: ",
+                  colored(config.get('Ensemble', 'dist_to'), 'red'))
             fix_variance = config.getboolean('Ensemble', 'fix_variance')
             print("Use Variance?: ", colored(str(fix_variance), 'red'))
             if fix_variance:
@@ -1008,7 +1016,7 @@ class Edge:
         wtag_test = "to_%s_test_set" % (edges_1hop[0].expert2.identifier)
 
         l1_edge_test, l1_ens_test, l1_expert_test, domain2_1hop_ens_test, domain2_exp_gt_test, domain2_gt_test, save_idxes_test = Edge.eval_1hop_ensemble_test_set(
-            edges_1hop, device, writer, wtag_test)
+            edges_1hop, device, writer, wtag_test, config)
 
         if len(l1_edge_test) > 0:
             # # Log Test in Tensorboard

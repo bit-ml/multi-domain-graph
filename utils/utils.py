@@ -233,7 +233,7 @@ class MeanScoreFunction(nn.Module):
 
 
 class ScoreFunctions(nn.Module):
-    def compute_distances(self, data):
+    def compute_distances_to_exp(self, data):
         '''
             twd_expert_distances
         '''
@@ -254,16 +254,26 @@ class ScoreFunctions(nn.Module):
         '''
             twd_mean
         '''
-
         bs, n_chs, h, w, n_tasks = data.shape
         distance_maps = []
         mean_data = torch.mean(data, dim=-1)
-        for i in range(n_tasks - 1):
+        for i in range(n_tasks):
             distance_map = self.forward(mean_data, data[..., i])
             distance_maps.append(distance_map)
 
-        # add expert vs expert
-        distance_maps.append(torch.zeros_like(distance_map))
+        distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
+        return distance_maps
+
+    def compute_distances_to_median(self, data):
+        '''
+            twd_median
+        '''
+        bs, n_chs, h, w, n_tasks = data.shape
+        distance_maps = []
+        median_data = torch.median(data, dim=-1).values
+        for i in range(n_tasks):
+            distance_map = self.forward(median_data, data[..., i])
+            distance_maps.append(distance_map)
 
         distance_maps = torch.stack(distance_maps, 0).permute(1, 2, 3, 4, 0)
         return distance_maps
@@ -480,28 +490,34 @@ class SimScore_PSNR(ScoreFunctions):
 
 
 class SimScore_LPIPS(ScoreFunctions):
-    def __init__(self, n_channels):
+    def __init__(self, n_channels, sim_fct):
         super(SimScore_LPIPS, self).__init__()
         self.n_channels = n_channels
-        self.lpips_net = lpips.LPIPS(net='squeeze',
-                                     spatial=True,
-                                     verbose=False)
+        if sim_fct[6:] == 'squeeze':
+            self.lpips_net = lpips.LPIPS(net='squeeze',
+                                         spatial=True,
+                                         verbose=False)
+        elif sim_fct[6:] == 'alex':
+            self.lpips_net = lpips.LPIPS(net='alex',
+                                         spatial=True,
+                                         verbose=False)
+        elif sim_fct[6:] == 'vgg':
+            self.lpips_net = lpips.LPIPS(net='vgg',
+                                         spatial=True,
+                                         verbose=False)
+
         self.lpips_net.eval()
         self.lpips_net.requires_grad_(False)
-        # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True)
-        # LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
-        #                                           spatial=True)
+
     def forward(self, batch1, batch2):
         n_chn = batch1.shape[1]
-        if n_chn in [1, 3]:
-            distance = self.lpips_net.forward(batch1, batch2)
-            return distance.repeat(1, n_chn, 1, 1)
-        else:
-            distance = torch.zeros_like(batch1)
-            for chan in range(n_chn):
-                distance[:, chan:chan + 1] = self.lpips_net.forward(
-                    batch1[:, chan:chan + 1], batch2[:, chan:chan + 1])
-            return distance
+        distance = torch.zeros_like(batch1)
+        for chan in range(n_chn):
+            distance[:, chan:chan + 1] = self.lpips_net.forward(
+                batch1[:, chan:chan + 1].repeat(1, 3, 1, 1),
+                batch2[:, chan:chan + 1].repeat(1, 3, 1, 1),
+                normalize=True)
+        return distance
 
 
 class EnsembleFilter_TwdExpert(torch.nn.Module):
@@ -515,6 +531,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                  fix_variance=False,
                  variance_th=0.05,
                  thresholds=[0.5],
+                 dist_to="exp",
                  analysis_silent=True,
                  analysis_logs_path=''):
         super(EnsembleFilter_TwdExpert, self).__init__()
@@ -563,8 +580,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 sim_model = SimScore_MSSIM(n_channels, np.array([5, 11, 17]))
             elif sim_fct == 'psnr':
                 sim_model = SimScore_PSNR()
-            elif sim_fct == 'lpips':
-                sim_model = SimScore_LPIPS(n_channels)
+            elif sim_fct[:5] == 'lpips':
+                sim_model = SimScore_LPIPS(n_channels, sim_fct)
             elif sim_fct == 'dist_mean':
                 sim_model = MeanScoreFunction()
             else:
@@ -572,6 +589,10 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             sim_models.append(sim_model)
         self.distance_models = torch.nn.ModuleList(sim_models)
+        self.dist_to = dist_to
+        # self.dist_to = "mean"
+        # self.dist_to = "exp"
+        # self.dist_to = "median"
 
     def log_w_variance(self, data, weights, meanshift_iter_idx):
         # data, weights - bs x n_chs x h x w x n_exps
@@ -650,6 +671,9 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
     def kernel_flat(self, chan_sim_maps, meanshift_iter):
         # indicates what we want to remove
         chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
+        print(
+            "Keep Flat %.2f%%" %
+            ((chan_mask.numel() - chan_mask.sum()) * 100. / chan_mask.numel()))
         chan_sim_maps[chan_mask] = 0
         chan_sim_maps[~chan_mask] = 1
         return chan_sim_maps
@@ -658,7 +682,7 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
         # indicates what we want to remove
         chan_mask = chan_sim_maps > self.thresholds[meanshift_iter]
         # print(
-        #     "Keep %.2f%%" %
+        #     "Keep flat_weights %.2f%%" %
         #     ((chan_mask.numel() - chan_mask.sum()) * 100. / chan_mask.numel()))
         chan_sim_maps = 1 - chan_sim_maps
         chan_sim_maps[chan_mask] = 0
@@ -729,7 +753,13 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
 
             # combine multiple similarities functions
             for dist_idx, dist_model in enumerate(self.distance_models):
-                distance_map = dist_model.compute_distances(data)
+                if self.dist_to == "exp":
+                    distance_map = dist_model.compute_distances_to_exp(data)
+                elif self.dist_to == "mean":
+                    distance_map = dist_model.compute_distances_to_mean(data)
+                elif self.dist_to == "median":
+                    distance_map = dist_model.compute_distances_to_median(data)
+
                 distance_map = self.scale_distance_maps(distance_map)
                 distance_map = self.reduce_variance(data, distance_map,
                                                     dist_model)
@@ -743,7 +773,6 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                                                      meanshift_iter)
 
             # sum = 1, similarity maps in fact!!!
-            # distance_maps[..., -1] = distance_maps[..., -1] * 1.5
             sum_ = torch.sum(distance_maps, dim=-1, keepdim=True)
             sum_[sum_ == 0] = 1
             distance_maps = distance_maps / sum_
