@@ -75,11 +75,6 @@ class DepthModelXTC(BasicExpert):
             self.device = device
             self.model.to(device)
 
-            self.trans_totensor = transforms.Compose([
-                #transforms.Resize(W * 2, interpolation=PIL.Image.BILINEAR),
-                #transforms.CenterCrop(W),
-                transforms.ToTensor()
-            ])
         self.domain_name = "depth_n_1"
         self.n_maps = 1
         self.str_id = "xtc"
@@ -95,7 +90,7 @@ class DepthModelXTC(BasicExpert):
 
     def apply_expert_batch(self, batch_rgb_frames):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
-        depth_maps = self.model(batch_rgb_frames.to(self.device))
+        depth_maps, _ = self.model(batch_rgb_frames.to(self.device))
         depth_maps = depth_maps.data.cpu().numpy()
         #depth_maps = depth_maps.clamp(min=0, max=1).data.cpu().numpy()
         depth_maps = np.array(depth_maps).astype('float32')

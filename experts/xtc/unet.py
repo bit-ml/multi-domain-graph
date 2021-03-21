@@ -94,6 +94,7 @@ class UNet(nn.Module):
             xvals.append(x)
 
         x = self.relu(self.bn1(self.mid_conv1(x)))
+        x_mid_layer = x.clone()
         x = self.relu(self.bn2(self.mid_conv2(x)))
         x = self.relu(self.bn3(self.mid_conv3(x)))
 
@@ -102,7 +103,7 @@ class UNet(nn.Module):
 
         x = self.relu(self.last_bn(self.last_conv1(x)))
         x = self.relu(self.last_conv2(x))
-        return x
+        return x, x_mid_layer
 
     def loss(self, pred, target):
         loss = torch.tensor(0.0, device=pred.device)
