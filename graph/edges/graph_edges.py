@@ -50,8 +50,7 @@ class Edge:
             # get var function
             self.var_score = VarianceScore()
             self.log_variance_fct = self.log_variance
-
-            self.log_errors_fct = lambda *args: True
+            self.log_errors_fct = self.log_errors
             self.log_metrics_fct = lambda *args: True
             self.log_ensemble_errors_fct = lambda *args: True
             self.log_ensemble_errors_fct_complete = lambda *args: True
@@ -105,7 +104,7 @@ class Edge:
                 variance_th=variance_dismiss_threshold,
                 dst_domain_name=expert2.domain_name,
                 analysis_logs_path=self.logs_path,
-                analysis_silent=silent_analysis).to(device)
+                analysis_silent=True).to(device)
         self.ensemble_filter = nn.DataParallel(self.ensemble_filter)
 
         model_type = config.getint('Edge Models', 'model_type')
@@ -812,8 +811,8 @@ class Edge:
 
                     crt_loss = edge.eval_loss(
                         one_hop_pred, edge.gt_eval_transform(domain2_exp_gt))
-                    edge.log_errors_fct(crt_loss, edge.logs_path, 'test',
-                                        'exp', edge.expert1.identifier)
+                    #edge.log_errors_fct(crt_loss, edge.logs_path, 'test',
+                    #                    'exp', edge.expert1.identifier)
 
                     l1_edge_exp[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
@@ -921,8 +920,8 @@ class Edge:
 
                     crt_loss = edge.eval_loss(
                         one_hop_pred, edge.gt_eval_transform(domain2_exp_gt))
-                    edge.log_errors_fct(crt_loss, edge.logs_path, 'valid',
-                                        'exp', edge.expert1.identifier)
+                    #edge.log_errors_fct(crt_loss, edge.logs_path, 'valid',
+                    #                    'exp', edge.expert1.identifier)
                     l1_edge[idx_edge] += crt_loss.view(
                         crt_loss.shape[0],
                         -1).mean(dim=1).data.cpu().numpy().tolist()
@@ -939,8 +938,8 @@ class Edge:
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
 
-                edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
-                                      edge.logs_path, 'valid')
+                #edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
+                #                      edge.logs_path, 'valid')
 
                 crt_loss = edge.eval_loss(
                     domain2_1hop_ens, edge.gt_eval_transform(domain2_exp_gt))

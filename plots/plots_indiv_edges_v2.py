@@ -60,7 +60,7 @@ for dom in domains:
 df = pd.concat(dfs)
 
 fig, ax = plt.subplots(1, figsize=(6, 5))
-fig.suptitle('Relative improvement of individual edges\n between iterations',
+fig.suptitle('Relative improvement of edges\n between iterations',
              fontsize=15,
              fontweight='bold')
 sns.set()

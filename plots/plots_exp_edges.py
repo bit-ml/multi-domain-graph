@@ -15,7 +15,7 @@ df = pd.read_csv(csv_path)
 df = df.replace({'selected': 0}, 'random')
 df = df.replace({'selected': 1}, 'performance-based')
 df = df.replace({'comb': 'our_median'}, 'CShift')
-df = df.replace({'comb': 'simple_mean'}, 'Ensemble Mean')
+df = df.replace({'comb': 'simple_mean'}, 'Mean Ensemble')
 df = df[df['comb'] != 'our_mean']
 df = df.rename(columns={
     "comb": "Ensemble Method",
@@ -25,12 +25,17 @@ df = df.rename(columns={
 df['n_nodes'] = df['n_nodes'] + 1
 domains = ['depth', 'normals']
 
-fig, ax = plt.subplots(len(domains),
-                       figsize=(6, 5 * len(domains)),
+#fig, ax = plt.subplots(len(domains),
+#                       figsize=(6, 5 * len(domains)),
+#                       sharex=False)
+fig, ax = plt.subplots(nrows=1,
+                       ncols=len(domains),
+                       figsize=(6 * len(domains), 5),
                        sharex=False)
 fig.suptitle(
-    'Performance evolution \n under different node selection strategies',
-    fontsize=15,
+    'Evolution of L1 score considering different node selection strategies',
+    fontsize=17.5,
+    y=1,
     fontweight='bold')
 sns.set()
 sns.set_style('white')
@@ -45,7 +50,7 @@ for i in range(len(domains)):
                          hue='Ensemble Method',
                          style='Node selection',
                          ax=ax[i],
-                         linewidth=2,
+                         linewidth=3,
                          palette=colors)
     if i < len(domains) - 1:
         ax[i].get_legend().remove()
@@ -56,17 +61,18 @@ for i in range(len(domains)):
                            labels,
                            ncol=2,
                            loc='center',
-                           bbox_to_anchor=(0.5, -0.35),
+                           bbox_to_anchor=(0, -0.35),
                            frameon=True,
                            handlelength=2.5,
-                           fontsize=12.5)
+                           fontsize=17.5)
         for legobj in leg.legendHandles:
             legobj.set_linewidth(3.0)
-    ax[i].tick_params(axis='x', labelsize=12.5)
-    ax[i].tick_params(axis='y', labelsize=12.5)
-    ax[i].set_ylabel('%s L1' % domains[i], size=15)
-    ax[i].set_xlabel('number of nodes / tasks in the Multi-Task Graph',
-                     fontsize=15)
+    ax[i].tick_params(axis='x', labelsize=15)
+    ax[i].tick_params(axis='y', labelsize=15)
+    #ax[i].set_ylabel('%s L1' % domains[i], size=15)
+    ax[i].set_ylabel('', size=15)
+    ax[i].set_xlabel('number of nodes', fontsize=17.5)
+    ax[i].set_title('$%s$' % domains[i], size=17.5)
 
 plt.savefig(fig_path, bbox_inches='tight', dpi=300)
 plt.close()

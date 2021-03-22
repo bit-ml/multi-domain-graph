@@ -1,0 +1,73 @@
+src_node,dst_node,L1,iteration
+rgb,depth,13.42,1
+normals,depth,14.29,1
+edges,depth,14.29,1
+halftone,depth,17.89,1
+semantic seg.,depth,17.34,1
+grayscale,depth,13.14,1
+hsv,depth,13.1,1
+cartoon,depth,13.44,1
+sobel_s,depth,13.42,1
+sobel_m,depth,13.5,1
+sobel_l,depth,14.03,1
+superpixels,depth,13.93,1
+rgb,depth,12.98,2
+normals,depth,13.32,2
+edges,depth,13.16,2
+halftone,depth,16.21,2
+semantic seg.,depth,17.07,2
+grayscale,depth,12.86,2
+hsv,depth,12.86,2
+cartoon,depth,13.17,2
+sobel_s,depth,12.87,2
+sobel_m,depth,13.06,2
+sobel_l,depth,13.34,2
+superpixels,depth,13.32,2
+rgb,normals,8.23,1
+depth,normals,9.46,1
+edges,normals,9.12,1
+halftone,normals,12.6,1
+semantic seg.,normals,12.28,1
+grayscale,normals,8.35,1
+hsv,normals,8.31,1
+cartoon,normals,8.45,1
+sobel_s,normals,8.32,1
+sobel_m,normals,8.49,1
+sobel_l,normals,9.31,1
+superpixels,normals,9.15,1
+rgb,normals,7.95,2
+depth,normals,9.18,2
+edges,normals,8.28,2
+halftone,normals,11.09,2
+semantic seg.,normals,12.25,2
+grayscale,normals,7.96,2
+hsv,normals,7.94,2
+cartoon,normals,8.21,2
+sobel_s,normals,8.04,2
+sobel_m,normals,8.07,2
+sobel_l,normals,8.48,2
+superpixels,normals,8.48,2
+normals,rgb,8.25,1
+depth,rgb,8.43,1
+edges,rgb,6.83,1
+halftone,rgb,6.26,1
+semantic seg.,rgb,16.75,1
+grayscale,rgb,1.12,1
+hsv,rgb,8,1
+cartoon,rgb,1.57,1
+sobel_s,rgb,7.41,1
+sobel_m,rgb,3.87,1
+sobel_l,rgb,4.34,1
+superpixels,rgb,3.12,1
+normals,rgb,,2
+depth,rgb,,2
+edges,rgb,,2
+halftone,rgb,,2
+semantic seg.,rgb,,2
+grayscale,rgb,,2
+hsv,rgb,,2
+cartoon,rgb,,2
+sobel_s,rgb,,2
+sobel_m,rgb,,2
+sobel_l,rgb,,2
+superpixels,rgb,,2
