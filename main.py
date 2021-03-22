@@ -18,7 +18,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 import configparser
 
 
-def build_space_graph(config, silent, valid_shuffle, iter_no=1):
+def build_space_graph(config, silent, iter_no=1):
     if config.has_option('Experts', 'selector_map'):
         selector_map_str = config.get('Experts', 'selector_map').split(",")
         selector_map = [int(token) for token in selector_map_str]
@@ -35,7 +35,6 @@ def build_space_graph(config, silent, valid_shuffle, iter_no=1):
         device,
         iter_no=iter_no,
         silent=silent,
-        valid_shuffle=valid_shuffle,
     )
     return md_graph
 
@@ -340,7 +339,6 @@ def main(argv):
         silent = config.getboolean('Logs', 'silent')
         graph = build_space_graph(config,
                                   silent=silent,
-                                  valid_shuffle=False,
                                   iter_no=iteration_idx)
 
         # Load models
