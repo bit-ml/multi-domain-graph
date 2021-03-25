@@ -5,20 +5,13 @@ from graph.edges.graph_edges import Edge
 
 
 class MultiDomainGraph:
-    def __init__(self,
-                 config,
-                 experts,
-                 device,
-                 iter_no,
-                 silent=False,
-                 valid_shuffle=True):
+    def __init__(self, config, experts, device, iter_no, silent=False):
         super(MultiDomainGraph, self).__init__()
         self.experts = experts
-        self.init_nets(experts, device, silent, config, valid_shuffle, iter_no)
+        self.init_nets(experts, device, silent, config, iter_no)
         print("==================")
 
-    def init_nets(self, all_experts, device, silent, config, valid_shuffle,
-                  iter_no):
+    def init_nets(self, all_experts, device, silent, config, iter_no):
 
         restricted_graph_type = config.getint('GraphStructure',
                                               'restricted_graph_type')
@@ -52,7 +45,7 @@ class MultiDomainGraph:
                         bs_test = 60
                         bs_train = 60
                     else:
-                        bs_test = 25
+                        bs_test = 55
                         bs_train = 40
                     # if expert_j.identifier in ["sem_seg_hrnet"]:
                     #     bs_train = 90
@@ -65,7 +58,6 @@ class MultiDomainGraph:
                                     expert_j,
                                     device,
                                     silent,
-                                    valid_shuffle,
                                     iter_no=iter_no,
                                     bs_train=bs_train,
                                     bs_test=bs_test)

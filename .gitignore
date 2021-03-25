@@ -35,3 +35,4 @@ preprocess_dbs/depths_analysis/*.png
 preprocess_dbs/depths_analysis/logs_*
 preprocess_dbs/depths_analysis/*/*.png
 preprocess_dbs/depths_analysis/*/*.csv
+calitatives/*

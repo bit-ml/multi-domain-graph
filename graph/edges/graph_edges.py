@@ -23,8 +23,8 @@ empty_fcn = (lambda x: x)
 
 
 class Edge:
-    def __init__(self, config, expert1, expert2, device, silent, valid_shuffle,
-                 iter_no, bs_train, bs_test):
+    def __init__(self, config, expert1, expert2, device, silent, iter_no,
+                 bs_train, bs_test):
         super(Edge, self).__init__()
         self.config = config
         self.silent = silent
@@ -120,7 +120,6 @@ class Edge:
         self.init_loaders(bs_train=bs_train * torch.cuda.device_count(),
                           bs_test=bs_test * torch.cuda.device_count(),
                           n_workers=n_workers,
-                          valid_shuffle=valid_shuffle,
                           iter_no=iter_no)
 
         # OPTIMIZATION
@@ -254,8 +253,7 @@ class Edge:
         trainable_params = sum(p.numel() for p in self.net.parameters()) / 1e+6
         print("[Params %.2fM]" % (trainable_params), end=" ")
 
-    def init_loaders(self, bs_train, bs_test, n_workers, valid_shuffle,
-                     iter_no):
+    def init_loaders(self, bs_train, bs_test, n_workers, iter_no):
         # Load train dataset
         train_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
                                      iter_no, 'TRAIN')
@@ -271,7 +269,7 @@ class Edge:
         print("\tValid ds", len(valid_ds), end=" ")
         self.valid_loader = DataLoader(valid_ds,
                                        batch_size=bs_test,
-                                       shuffle=valid_shuffle,
+                                       shuffle=False,
                                        num_workers=n_workers)
         # Load test dataset
         test_ds = ImageLevelDataset(self.expert1, self.expert2, self.config,
@@ -678,9 +676,9 @@ class Edge:
             "L1(ensemble_with_expert, Expert)_valset  L1(ensemble_with_expert, GT)_testset   L1(expert, GT)_testset"
         )
 
-        print("Loss %19s: %30.2f   " % ("Ensemble1Hop", l1_ens_valid),
-              colored("%30.2f " % l1_ens_test, 'green'),
-              colored("%20.2f" % l1_expert_test, "magenta"))
+        print("Loss %19s: %30.3f   " % ("Ensemble1Hop", l1_ens_valid),
+              colored("%30.3f " % l1_ens_test, 'green'),
+              colored("%20.3f" % l1_expert_test, "magenta"))
         print(
             "%25s-------------------------------------------------------------------------------------"
             % (" "))
@@ -701,12 +699,12 @@ class Edge:
                     '1hop_%s/L1_Loss_%s' %
                     (wtag_test, edge.expert1.identifier),
                     l1_per_edge_test[idx_test_edge], 0)
-                print("Loss %19s: %30.2f   %30.2f" %
+                print("Loss %19s: %30.3f   %30.3f" %
                       (edge.expert1.identifier, l1_per_edge_valid[idx_edge],
                        l1_per_edge_test[idx_test_edge]))
                 idx_test_edge = idx_test_edge + 1
             else:
-                print("Loss %19s: %30.2f    %30s" %
+                print("Loss %19s: %30.3f    %30s" %
                       (edge.expert1.identifier, l1_per_edge_valid[idx_edge],
                        '-'))
         print(
@@ -780,6 +778,10 @@ class Edge:
                             save_idxes = np.random.choice(domain1.shape[0],
                                                           size=(3),
                                                           replace=False)
+                        # # save last image
+                        # edge_dir_np = one_hop_pred[-1].data.cpu().numpy()
+                        # np.save("469_edge_direct_%s.npy" % edge.expert2.identifier, edge_dir_np)
+
                         # Show last but one batch edges
                         writer.add_images(
                             '%s/output_%s' % (wtag, edge.expert1.identifier),
@@ -827,6 +829,11 @@ class Edge:
 
                 domain2_1hop_ens = edge.ensemble_filter(
                     domain2_1hop_ens_list_perm)
+
+                # if idx_batch == len(loader) - 1:
+                #     # save last image
+                #     mean_np = domain2_1hop_ens[-1].data.cpu().numpy()
+                #     np.save("469_mean_%s.npy" % edge.expert2.identifier, mean_np)
 
                 edge.log_variance_fct(domain2_1hop_ens_list, edge.var_score,
                                       edge.logs_path, 'test')
