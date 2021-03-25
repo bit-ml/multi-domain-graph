@@ -9,10 +9,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 logs_out_path = r'/data/multi-domain-graph-6/datasets/hypersim/runs'
 
-experts_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim'
-gt_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim'
+experts_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim_v2'
+gt_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim_v2'
 split_name = 'test'
-n_samples = 100
+n_samples = 1000
 
 experts_path = os.path.join(experts_path, split_name)
 gt_path = os.path.join(gt_path, split_name)
@@ -41,13 +41,23 @@ writer = SummaryWriter(
     os.path.join(logs_out_path, split_name + '_' + str(datetime.now())))
 
 for idx in indexes:
+    exps = []
     for exp in all_experts:
         path = os.path.join(experts_path, exp, '%08d.npy' % idx)
         v = torch.from_numpy(np.load(path))
         img_grid = torchvision.utils.make_grid(v[None], 1)
-        writer.add_image('experts/%s' % (exp), img_grid, idx)
+        exps.append(img_grid)
+        #img_grid = torchvision.utils.make_grid(v[None], 1)
+        #writer.add_image('experts/%s' % (exp), img_grid, idx)
+    img_grid = torchvision.utils.make_grid(exps, 7)
+    writer.add_image('experts/%s' % (exp), img_grid, idx)
+    gts = []
     for gt in all_gts:
         path = os.path.join(gt_path, gt, '%08d.npy' % idx)
         v = torch.from_numpy(np.load(path))
         img_grid = torchvision.utils.make_grid(v[None], 1)
-        writer.add_image('gts/%s' % (gt), img_grid, idx)
+        gts.append(img_grid)
+        #img_grid = torchvision.utils.make_grid(v[None], 1)
+        #writer.add_image('gts/%s' % (gt), img_grid, idx)
+    img_grid = torchvision.utils.make_grid(gts, 7)
+    writer.add_image('gts/%s' % (gt), img_grid, idx)

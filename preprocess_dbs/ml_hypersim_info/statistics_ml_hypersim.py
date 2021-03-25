@@ -11,7 +11,81 @@ import numpy as np
 import glob
 from torch.utils.data import DataLoader, Dataset
 
-csv_path = 'metadata_images_split_scene_v1.csv'
+dataset_path = r'/data/multi-domain-graph-6/datasets/hypersim/data'
+
+
+def get_task_split_paths(dataset_path, splits_csv_path, split_name, folder_str,
+                         task_str, ext):
+
+    if split_name == "valid":
+        split_name = "val"
+    train_index = -1
+    if split_name.find('train') != -1:
+        train_index = int(split_name[-1])
+        split_name = 'train'
+
+    df = pd.read_csv(splits_csv_path)
+    df = df[df['included_in_public_release'] == True]
+    df = df[df['split_partition_name'] == split_name]
+
+    n_cameras = 0
+    n_samples = 0
+    paths = []
+    scenes = df['scene_name'].unique()
+    #scenes = scenes[0:60]
+    #scenes = scenes[0:150]
+    scenes = scenes[0:75]
+    for scene in scenes:
+        df_scene = df[df['scene_name'] == scene]
+        cameras = df_scene['camera_name'].unique()
+
+        # select only test
+        if (len(cameras) > 2):
+            #cameras = cameras[0:-1]
+            cameras = cameras[-1:]
+        else:
+            cameras = []
+
+        # select only train
+        '''
+        if (len(cameras) > 2):
+            cameras = cameras[0:-1]
+        '''
+        n_cameras += len(cameras)
+        for camera in cameras:
+            df_camera = df_scene[df_scene['camera_name'] == camera]
+            frames = df_camera['frame_id'].unique()
+
+            n_samples += len(frames)
+            for frame in frames:
+                path = '%s/%s/images/scene_%s_%s/frame.%04d.%s.%s' % (
+                    dataset_path, scene, camera, folder_str, int(frame),
+                    task_str, ext)
+                paths.append(path)
+    print('n cameras %d -- n samples %d' % (n_cameras, n_samples))
+    import pdb
+    pdb.set_trace()
+    if train_index >= 0:
+        n_samples = len(paths)
+        n_set_samples = n_samples // 3
+        first = n_set_samples + (n_samples - 3 * n_set_samples)
+        second = first + n_set_samples
+        third = second + n_set_samples
+        if train_index == 1:
+            paths = paths[0:first]
+        elif train_index == 2:
+            paths = paths[first:second]
+        elif train_index == 3:
+            paths = paths[second:third]
+        else:
+            paths = []
+    return paths
+
+
+csv_path = '/data/multi-domain-graph-6/datasets/hypersim/metadata_images_split_scene_v1_selection.csv'
+get_task_split_paths(dataset_path, csv_path, 'train1', 'final_preview',
+                     'tonemap', 'jpg')
+
 df = pd.read_csv(csv_path)
 df_frames_included = df[df['included_in_public_release'] == True]
 
@@ -22,7 +96,8 @@ df = df_frames_included
 df_train = df[df['split_partition_name'] == 'train']
 df_test = df[df['split_partition_name'] == 'test']
 df_val = df[df['split_partition_name'] == 'val']
-
+import pdb
+pdb.set_trace()
 print('# train frames %d' % len(df_train))
 print('# test frames %d' % len(df_test))
 print('# val frames %d' % len(df_val))
