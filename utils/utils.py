@@ -239,7 +239,6 @@ class ScoreFunctions(nn.Module):
         '''
         bs, n_chs, h, w, n_tasks = data.shape
         distance_maps = []
-
         for i in range(n_tasks - 1):
             distance_map = self.forward(data[..., -1], data[..., i])
             distance_maps.append(distance_map)
@@ -504,6 +503,27 @@ class SimScore_LPIPS(ScoreFunctions):
             return distance
 
 
+class SimScore_LPIPS_per_channel(ScoreFunctions):
+    def __init__(self, n_channels):
+        super(SimScore_LPIPS_per_channel, self).__init__()
+        self.n_channels = n_channels
+        self.lpips_net = lpips.LPIPS(net='squeeze',
+                                     spatial=True,
+                                     verbose=False)
+        self.lpips_net.eval()
+        self.lpips_net.requires_grad_(False)
+        # LPIPS_NETS['lpips_alex'] = lpips.LPIPS(net='alex', spatial=True)
+        # LPIPS_NETS['lpips_squeeze'] = lpips.LPIPS(net='squeeze',
+        #                                           spatial=True)
+    def forward(self, batch1, batch2):
+        n_chn = batch1.shape[1]
+        distance = torch.zeros_like(batch1)
+        for chan in range(n_chn):
+            distance[:, chan:chan + 1] = self.lpips_net.forward(
+                batch1[:, chan:chan + 1], batch2[:, chan:chan + 1])
+        return distance
+
+
 class EnsembleFilter_TwdExpert(torch.nn.Module):
     def __init__(self,
                  n_channels,
@@ -567,6 +587,8 @@ class EnsembleFilter_TwdExpert(torch.nn.Module):
                 sim_model = SimScore_LPIPS(n_channels)
             elif sim_fct == 'dist_mean':
                 sim_model = MeanScoreFunction()
+            elif sim_fct == 'lpips_per_channel':
+                sim_model = SimScore_LPIPS_per_channel(n_channels)
             else:
                 assert (False)
 
