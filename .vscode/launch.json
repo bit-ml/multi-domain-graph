@@ -5,13 +5,16 @@
     "version": "0.2.0",
     "justMyCode": false,
     "configurations": [
-
+    
         {
             "name": "Run file (without args)",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+            // "env": {
+            //     "CUDA_VISIBLE_DEVICES": "0,2,3",
+            // },
         },
         {
             "name": "Generate GOT-10k",
@@ -79,14 +82,28 @@
             ]
         },
         {
-            "name": "custom_config.ini",
+            "name": "eval_iter1",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "z_my_configs/custom_config.ini"
+                "z_my_configs/eval_iter1.ini"
             ]
+        },
+        {
+            "name": "eval_iter2",
+            "type": "python",
+            "justMyCode": false,
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "z_my_configs/eval_iter2.ini"
+            ],
+            // "env": {
+            //     "CUDA_VISIBLE_DEVICES": "0,2,3",
+            // },
         },
     ]
 }
