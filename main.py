@@ -337,9 +337,7 @@ def main(argv):
 
         # Build graph
         silent = config.getboolean('Logs', 'silent')
-        graph = build_space_graph(config,
-                                  silent=silent,
-                                  iter_no=iteration_idx)
+        graph = build_space_graph(config, silent=silent, iter_no=iteration_idx)
 
         # Load models
         start_epoch = config.getint('Edge Models', 'start_epoch')

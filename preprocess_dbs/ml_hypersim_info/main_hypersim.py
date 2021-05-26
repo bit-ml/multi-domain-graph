@@ -59,12 +59,13 @@ VALID_EXPERTS_NAME = [\
     'sobel_small',
     'sobel_medium',
     'sobel_large',
-    'sem_seg_hrnet'
+    'sem_seg_hrnet',
+    'normals_no_alt_xtc'
                       ]
 
 VALID_DOMAINS_NAME = [
     'rgb', 'grayscale', 'hsv', 'halftone_gray', 'depth_n_1', 'normals',
-    'sem_seg'
+    'sem_seg', 'normals_no_alt'
 ]
 
 COMPUTED_GT_DOMAINS = ['grayscale', 'hsv', 'halftone_gray']
@@ -362,6 +363,40 @@ class NormalsDataset(Dataset):
         return len(self.paths)
 
 
+class NormalsDataset_no_alt(Dataset):
+    def __init__(self, dataset_path, splits_csv_path, split_name):
+        super(NormalsDataset_no_alt, self).__init__()
+        self.paths = get_task_split_paths(dataset_path, splits_csv_path,
+                                          split_name, 'geometry_hdf5',
+                                          'normal_cam', 'hdf5')
+
+    def __getitem__(self, index):
+        normal_file = h5py.File(self.paths[index], "r")
+        normal_info = np.array(normal_file.get('dataset')).astype('float32')
+        normal_info = torch.from_numpy(normal_info).permute(2, 0, 1)
+        normal_info = torch.nn.functional.interpolate(
+            normal_info[None], (WORKING_H, WORKING_W))[0]
+
+        nan_mask = normal_info != normal_info
+
+        normal_info[1, :, :] = normal_info[1, :, :] * (-1)
+        normal_info[2, :, :] = normal_info[2, :, :] * (-1)
+
+        #normal_info[
+        #    2, :, :] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
+
+        norm = torch.norm(normal_info, dim=0, keepdim=True)
+        norm[norm == 0] = 1
+        normal_info = normal_info / norm
+
+        normal_info = (normal_info + 1) / 2
+        normal_info[nan_mask] = float("nan")
+        return normal_info, self.paths[index]
+
+    def __len__(self):
+        return len(self.paths)
+
+
 class SemanticSegDataset(Dataset):
     def __init__(self, dataset_path, splits_csv_path, split_name):
         super(SemanticSegDataset, self).__init__()
@@ -392,6 +427,9 @@ def get_expert(exp_name):
     elif exp_name == 'normals_xtc':
         return experts.normals_expert.SurfaceNormalsXTC(
             dataset_name='hypersim', full_expert=True)
+    elif exp_name == 'normals_no_alt_xtc':
+        return experts.normals_expert.SurfaceNormalsXTC(
+            dataset_name='hypersim', full_expert=True, no_alt=True)
     elif exp_name == 'edges_dexined':
         return experts.edges_expert.EdgesModel(full_expert=True)
     elif exp_name == 'cartoon_wb':
@@ -405,7 +443,7 @@ def get_expert(exp_name):
     elif exp_name == 'superpixel_fcn':
         return experts.superpixel_expert.SuperPixel()
     elif exp_name == 'sem_seg_hrnet':
-        import experts.semantic_segmentation_expert
+        #import experts.semantic_segmentation_expert
         return experts.semantic_segmentation_expert.SSegHRNet(
             dataset_name='hypersim', full_expert=True)
 
@@ -416,6 +454,17 @@ def add_normals_process(data):
     data = np.clip(data, 0, 1)
     data = data * 2 - 1
     data[:, 2] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
+    norm_data = np.linalg.norm(data, axis=1, keepdims=True)
+    norm_data[norm_data == 0] = 1
+    data = data / norm_data
+    data = (data + 1) / 2
+    return data
+
+
+def add_normals_no_alt_process(data):
+    data = np.clip(data, 0, 1)
+    data = data * 2 - 1
+    #data[:, 2] = experts.normals_expert.SurfaceNormalsXTC.SOME_THRESHOLD
     norm_data = np.linalg.norm(data, axis=1, keepdims=True)
     norm_data[norm_data == 0] = 1
     data = data / norm_data
@@ -446,6 +495,8 @@ def get_exp_results():
             add_process_fct = depth_exp_trans_fct.apply
         elif exp_name == 'normals_xtc':
             add_process_fct = add_normals_process
+        elif exp_name == 'normals_no_alt_xtc':
+            add_process_fct = add_normals_no_alt_process
         else:
             add_process_fct = lambda x: x
         file_idx = 0
@@ -483,6 +534,8 @@ def get_dataset_type(dom_name):
         return NormalsDataset
     elif dom_name == 'sem_seg':
         return SemanticSegDataset
+    elif dom_name == 'normals_no_alt':
+        return NormalsDataset_no_alt
     return None
 
 

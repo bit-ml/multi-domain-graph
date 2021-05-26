@@ -9,8 +9,11 @@ from torch.utils.tensorboard import SummaryWriter
 
 logs_out_path = r'/data/multi-domain-graph-6/datasets/hypersim/runs'
 
-experts_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim_v2'
-gt_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim_v2'
+#experts_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim_v2'
+#gt_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim_v2'
+experts_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_exp/hypersim'
+gt_path = r'/data/multi-domain-graph-5/datasets/datasets_preproc_gt/hypersim'
+
 split_name = 'test'
 n_samples = 1000
 

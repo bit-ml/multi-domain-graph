@@ -18,7 +18,7 @@ normals_model_path = os.path.join(current_dir_name, 'models/normals_xtc.pth')
 class SurfaceNormalsXTC(BasicExpert):
     SOME_THRESHOLD = 0.
 
-    def __init__(self, dataset_name, full_expert=True):
+    def __init__(self, dataset_name, full_expert=True, no_alt=False):
         '''
             dataset_name: "taskonomy" or "replica"
         '''
@@ -36,6 +36,9 @@ class SurfaceNormalsXTC(BasicExpert):
             self.model.to(device)
 
         self.domain_name = "normals"
+        if no_alt:
+            self.domain_name += '_no_alt'
+
         self.n_final_maps = 3
 
         self.chan_gen_fcn = torch.ones_like
@@ -43,25 +46,30 @@ class SurfaceNormalsXTC(BasicExpert):
 
         self.str_id = "xtc"
         self.identifier = self.domain_name + "_" + self.str_id
+        self.no_alt = no_alt
 
     def apply_expert_batch(self, batch_rgb_frames):
         batch_rgb_frames = batch_rgb_frames.permute(0, 3, 1, 2) / 255.
-        out_maps = self.model(batch_rgb_frames.to(self.device))
+        out_maps = self.model(batch_rgb_frames.to(self.device))[0]
 
-        # 1. CLAMP
-        torch.clamp_(out_maps[:, :2], min=0, max=1)
-        torch.clamp_(out_maps[:, 2], min=0., max=0.5)
+        if not self.no_alt:
+            # 1. CLAMP
+            torch.clamp_(out_maps[:, :2], min=0, max=1)
+            torch.clamp_(out_maps[:, 2], min=0., max=0.5)
 
-        # 2. ALIGN ranges
-        out_maps[:, 2] += 0.5
+            # 2. ALIGN ranges
+            out_maps[:, 2] += 0.5
 
-        # 4. NORMALIZE it
-        out_maps = out_maps * 2 - 1
-        out_maps[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
-        norm_normals_maps = torch.norm(out_maps, dim=1, keepdim=True)
-        norm_normals_maps[norm_normals_maps == 0] = 1
-        out_maps = out_maps / norm_normals_maps
-        out_maps = (out_maps + 1) / 2
+            # 4. NORMALIZE it
+
+            out_maps = out_maps * 2 - 1
+            out_maps[:, 2] = SurfaceNormalsXTC.SOME_THRESHOLD
+            norm_normals_maps = torch.norm(out_maps, dim=1, keepdim=True)
+            norm_normals_maps[norm_normals_maps == 0] = 1
+            out_maps = out_maps / norm_normals_maps
+            out_maps = (out_maps + 1) / 2
+        else:
+            torch.clamp_(out_maps, min=-1, max=1)
 
         out_maps = out_maps.data.cpu().numpy().astype('float32')
 
