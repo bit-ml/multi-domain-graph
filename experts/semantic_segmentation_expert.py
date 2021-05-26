@@ -194,7 +194,19 @@ class SSegHRNet(BasicExpert):
         self.combine_list = [(19, 30, 75, 31), (14, 58), (15, 64),
                              (38, 96, 59, 53), (10, 35, 44)]
         self.to_keep_list = [0, 5, 3, 14, 8, 10, 23, 38, 15, 7, 22, 19]
-
+        # self.to_keep_list = [0, 5, 3, 14, 8, 10, 23, 38, 15, 7, 22, 19]
+        #  0 [                          wall] occ 46.14% (din 100%: 46.14%)
+        #   5 [                       ceiling] occ 16.45% (din 100%: 62.59%)
+        #   3 [                floor;flooring] occ 10.95% (din 100%: 73.55%)
+        #  14 [door;double;door+screen;door;screen] occ 5.00% (din 100%: 78.54%)
+        #   8 [             windowpane;window] occ 3.48% (din 100%: 82.02%)
+        #  10 [cabinet+wardrobe;closet;press+chest;of;drawers;chest;bureau;dresser] occ 3.51% (din 100%: 85.54%)
+        #  23 [             sofa;couch;lounge] occ 1.59% (din 100%: 87.13%)
+        #  38 [railing;rail+escalator;moving;staircase;moving;stairway+stairway;staircase+stairs;steps] occ 1.87% (din 100%: 89.00%)
+        #  15 [table+coffee;table;cocktail;table] occ 1.38% (din 100%: 90.38%)
+        #   7 [                           bed] occ 1.03% (din 100%: 91.41%)
+        #  22 [              painting;picture] occ 0.96% (din 100%: 92.37%)
+        #  19 [chair+armchair+swivel;chair+seat] occ 1.52% (din 100%: 93.88%)
         self.domain_name = "sem_seg"
         self.n_maps = 1
         self.n_final_maps = len(self.to_keep_list)
